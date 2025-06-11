@@ -27,7 +27,7 @@ volumes = volumes[sorted_indices]
 cumulative_abatement = np.cumsum(volumes)
 
 # Create the plot
-fig, ax = plt.subplots(figsize=(12, 6))
+fig, ax = plt.subplots(figsize=(9, 6))
 
 # Create the bars with two colors
 for i, (cost, volume, cum_abate) in enumerate(zip(costs, volumes, cumulative_abatement)):
