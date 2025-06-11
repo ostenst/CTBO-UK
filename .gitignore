@@ -1,8 +1,8 @@
-# Ignore specific files
-CCC-Industry-CCS-H2-User-Guide-Assumptions-Log.pdf
-N-ZIP-Model.xlsb
+# Large files
+*.xlsb
+*.pdf
 
-# Common Python ignores
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -22,4 +22,10 @@ sdist/
 var/
 *.egg-info/
 .installed.cfg
-*.egg 
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo 
