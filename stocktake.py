@@ -7,67 +7,102 @@ print("2) Planned CCS projects (CCSA, 2025)")
 print("3) Advanced CCUS projects within Track-1, Track-2 (BEIS, DESNZ)")
 print("4) The DACCS potential (Middleton, 202X)")
 
-point_sources = pd.read_csv("data/NAEIPointsSources_2022_3.csv")
-
-def get_current_emitters(point_sources, debug=False):
-    """
-    Filter current emitters based on 2022 Carbon Dioxide as Carbon emissions.
-    
-    Args:
-        point_sources: DataFrame containing emission data
-        debug: If True, print debug information
-    
-    Returns:
-        Array of unique PlantIDs that emitted CO2 in 2022
-    """
-    if debug:
-        print(f"Input data shape: {point_sources.shape}")
-        print(f"Available years: {sorted(point_sources['Year'].unique())}")
-        print(f"Available pollutants: {point_sources['Pollutant_Name'].unique()}")
-    
-    # Filter for 2022 Carbon Dioxide as Carbon emissions
-    filtered_data = point_sources[
-        (point_sources['Year'] == 2022) & 
-        (point_sources['Pollutant_Name'] == 'Carbon Dioxide as Carbon')
-    ]
-    
-    if debug:
-        print(f"Filtered data shape: {filtered_data.shape}")
-        print(f"Sample of filtered data:\n{filtered_data[['PlantID', 'Site', ' Emission ']].head()}")
-    
-    current_emitters = filtered_data['PlantID'].unique()
-    
-    if debug:
-        print(f"Unique PlantIDs: {len(current_emitters)}")
-        print(f"Sample PlantIDs: {current_emitters[:10]}")
-    
-    return current_emitters
-
-current_emitters = get_current_emitters(point_sources, debug=False)
-print(f"Found {len(current_emitters)} current emitters (plants with CO2 emissions in 2022)")
-
-# Calculate total CO2 emissions from current emitters
-current_emitters_data = point_sources[
-    (point_sources['Year'] == 2022) & 
-    (point_sources['Pollutant_Name'] == 'Carbon Dioxide as Carbon') &
-    (point_sources['PlantID'].isin(current_emitters))
-]
-
-# Convert emission values to numeric (removing commas and spaces)
-emission_values = current_emitters_data[' Emission '].str.replace(',', '').str.replace(' ', '').astype(float)
-total_co2_emissions = emission_values.sum()
-
-print(f"Total CO2 emissions from current emitters: {total_co2_emissions:,.2f} tonnes")
-
 # Read the pre-filtered CO2 2022 dataset
-point_sources_co2_2022 = pd.read_csv("data/point_sources_CO2_2022.csv")
+# https://naei.energysecurity.gov.uk/data/maps/download-gridded-emissions
+point_sources = pd.read_csv("data/point_sources_CO2_2022.csv")
 
 # Calculate total CO2 emissions from the pre-filtered dataset
-total_co2_emissions_2022 = point_sources_co2_2022['Emission'].sum()
+point_sources['CO2'] = point_sources['Emission'] * 3.66
+total_co2_emissions = point_sources['CO2'].sum()
 
-print(f"Total CO2 emissions from point_sources_CO2_2022 dataset: {total_co2_emissions_2022:,.2f} tonnes")
-print(f"Number of plants in CO2 2022 dataset: {len(point_sources_co2_2022)}")
+print(f"\nTotal CO2 emissions from point sources dataset (2022): {total_co2_emissions:,.2f} tonnes")
+print("====> Note that biogenic CO2 seems to be excluded, as Drax has low CO2 emissions.")
+print(f"Number of plants in dataset (2022): {len(point_sources)}")
+
+# Print unique sectors
+unique_sectors = point_sources['Sector'].unique()
+print(f"Unique sectors in point_sources_CO2_2022: {len(unique_sectors)}")
+print(f"Sectors: {sorted(unique_sectors)}")
+
+# Calculate emissions from specific sectors
+target_sectors = [
+    "Waste collection, treatment & disposal",
+    "Major power producers", 
+    "Minor power producers",
+    "Lime",
+    "Cement",
+    "Iron & steel industries"
+]
+
+print(f"\nEmissions by target sectors:")
+total_target_emissions = 0
+
+for sector in target_sectors:
+    sector_data = point_sources[point_sources['Sector'] == sector]
+    if len(sector_data) > 0:
+        sector_emissions = sector_data['CO2'].sum()
+        total_target_emissions += sector_emissions
+        print(f"{sector}: {sector_emissions:,.2f} tonnes CO2 ({len(sector_data)} plants)")
+    else:
+        print(f"{sector}: No data found")
+
+print(f"\nTotal emissions from target sectors: {total_target_emissions:,.2f} tonnes CO2")
+print(f"Percentage of total emissions: {(total_target_emissions/total_co2_emissions)*100:.1f}%")
+
+# Print the 10 largest emitters
+print(f"\nTop 10 largest CO2 emitters (2022):")
+top_10_emitters = point_sources.nlargest(10, 'CO2')[['PlantID', 'Site', 'Operator', 'Sector', 'CO2']]
+for i, (idx, row) in enumerate(top_10_emitters.iterrows(), 1):
+    print(f"{i:2d}. {row['Site']:<25} | {row['Operator']:<35} | {row['Sector']:<30} | {row['CO2']:>12,.0f} tonnes")
 
 europe = gpd.read_file("data/shapefiles/Europe/Europe_merged.shp").to_crs("EPSG:4326")
+
+# Create a map of UK point sources with CO2 emissions as bubbles
+import matplotlib.pyplot as plt
+
+# Convert point sources to GeoDataFrame
+point_sources_gdf = gpd.GeoDataFrame(
+    point_sources, 
+    geometry=gpd.points_from_xy(point_sources['Easting'], point_sources['Northing'], crs="EPSG:27700")
+).to_crs("EPSG:4326")
+
+# Create the plot
+fig, ax = plt.subplots(1, 1, figsize=(12*0.80, 15*0.80))
+ax.set_aspect(1.90)
+
+# Plot Europe background
+europe.plot(ax=ax, color='lightgray', edgecolor='white', alpha=0.3)
+
+# Plot point sources as bubbles (size based on CO2 emissions)
+scatter = ax.scatter(
+    point_sources_gdf.geometry.x, 
+    point_sources_gdf.geometry.y,
+    s=point_sources_gdf['CO2']/2000,  # Scale down for visibility
+    c=point_sources_gdf['CO2'],
+    cmap='Reds',
+    alpha=0.7,
+    edgecolors='black',
+    linewidth=0.5
+)
+
+# Add colorbar
+cbar = plt.colorbar(scatter, ax=ax, shrink=0.8)
+cbar.set_label('CO2 Emissions (tonnes)', fontsize=12)
+
+# Set title and labels
+ax.set_title('UK Point Source CO2 Emissions (2022)\nBubble size proportional to emissions', 
+             fontsize=14, fontweight='bold')
+ax.set_xlabel('Longitude', fontsize=12)
+ax.set_ylabel('Latitude', fontsize=12)
+
+# Set UK-focused view
+ax.set_xlim(-9, 3)
+ax.set_ylim(49, 62.5)
+
+# Add grid
+ax.grid(True, alpha=0.3)
+
+plt.tight_layout()
+plt.show()
 
 #Set x axis aspect ratio to 1.90
