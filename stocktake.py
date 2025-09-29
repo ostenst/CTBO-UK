@@ -1,5 +1,6 @@
 import pandas as pd
 import geopandas as gpd
+import matplotlib.pyplot as plt
 
 print("This script takes stock on:")
 print("1) UK point source emissions (NAEI, 2022)")
@@ -56,9 +57,6 @@ for i, (idx, row) in enumerate(top_10_emitters.iterrows(), 1):
     print(f"{i:2d}. {row['Site']:<25} | {row['Operator']:<35} | {row['Sector']:<30} | {row['CO2']:>12,.0f} tonnes")
 
 europe = gpd.read_file("data/shapefiles/Europe/Europe_merged.shp").to_crs("EPSG:4326")
-
-# Create a map of UK point sources with CO2 emissions as bubbles
-import matplotlib.pyplot as plt
 
 # Convert point sources to GeoDataFrame
 point_sources_gdf = gpd.GeoDataFrame(
