@@ -2,6 +2,123 @@ import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
 
+def map_all(europe, point_sources_gdf, debug=False):
+    """
+    Create a map showing UK point source CO2 emissions with Europe background.
+    
+    Args:
+        europe: GeoDataFrame containing Europe shapefile data
+        point_sources_gdf: GeoDataFrame containing point source emissions data
+        debug: If True, print function inputs and outputs
+    
+    Returns:
+        tuple: (fig, ax) matplotlib figure and axis objects
+    """
+    if debug:
+        print(f"map_all inputs: europe shape={europe.shape}, point_sources shape={point_sources_gdf.shape}")
+    
+    # Create the plot
+    fig, ax = plt.subplots(1, 1, figsize=(12*0.80, 15*0.80))
+    ax.set_aspect(1.90)
+
+    # Plot Europe background
+    europe.plot(ax=ax, color='lightgray', edgecolor='white', alpha=0.3)
+
+    # Plot point sources as bubbles (size based on CO2 emissions)
+    scatter = ax.scatter(
+        point_sources_gdf.geometry.x, 
+        point_sources_gdf.geometry.y,
+        s=point_sources_gdf['CO2']/2000,  # Scale down for visibility
+        c=point_sources_gdf['CO2'],
+        cmap='Reds',
+        alpha=0.7,
+        edgecolors='black',
+        linewidth=0.5
+    )
+
+    # Add colorbar
+    cbar = plt.colorbar(scatter, ax=ax, shrink=0.8)
+    cbar.set_label('CO2 Emissions (tonnes)', fontsize=12)
+
+    # Set title and labels
+    ax.set_title('UK Point Source CO2 Emissions (2022)\nBubble size proportional to emissions', 
+                 fontsize=14, fontweight='bold')
+    ax.set_xlabel('Longitude', fontsize=12)
+    ax.set_ylabel('Latitude', fontsize=12)
+
+    # Set UK-focused view
+    ax.set_xlim(-9, 3)
+    ax.set_ylim(49, 62.5)
+
+    # Add grid
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    
+    if debug:
+        print(f"map_all output: Created figure with {len(point_sources_gdf)} point sources")
+    
+    return fig, ax
+
+def map_selected(europe, selected_plants_gdf, debug=False):
+    """
+    Create a map showing selected CCSA CCS/CCUS projects with Europe background.
+    
+    Args:
+        europe: GeoDataFrame containing Europe shapefile data
+        selected_plants_gdf: GeoDataFrame containing selected CCS/CCUS projects data
+        debug: If True, print function inputs and outputs
+    
+    Returns:
+        tuple: (fig, ax) matplotlib figure and axis objects
+    """
+    if debug:
+        print(f"map_selected inputs: europe shape={europe.shape}, selected_plants shape={selected_plants_gdf.shape}")
+    
+    # Create the plot
+    fig, ax = plt.subplots(1, 1, figsize=(12*0.80, 15*0.80))
+    ax.set_aspect(1.90)
+
+    # Plot Europe background
+    europe.plot(ax=ax, color='lightgray', edgecolor='white', alpha=0.3)
+
+    # Plot selected plants as bubbles (size based on CO2 emissions)
+    # Convert MtCO2/yr to tonnes for consistency with scaling
+    scatter = ax.scatter(
+        selected_plants_gdf.geometry.x, 
+        selected_plants_gdf.geometry.y,
+        s=selected_plants_gdf['CO2']*1000000/2000,  # Convert Mt to tonnes and scale down
+        c=selected_plants_gdf['CO2'],
+        cmap='Blues',
+        alpha=0.7,
+        edgecolors='black',
+        linewidth=0.5
+    )
+
+    # Add colorbar
+    cbar = plt.colorbar(scatter, ax=ax, shrink=0.8)
+    cbar.set_label('CO2 Capture Capacity (MtCO2/yr)', fontsize=12)
+
+    # Set title and labels
+    ax.set_title('Selected UK CCS/CCUS Projects (2025)\nBubble size proportional to CO2 capture capacity', 
+                 fontsize=14, fontweight='bold')
+    ax.set_xlabel('Longitude', fontsize=12)
+    ax.set_ylabel('Latitude', fontsize=12)
+
+    # Set UK-focused view
+    ax.set_xlim(-9, 3)
+    ax.set_ylim(49, 62.5)
+
+    # Add grid
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    
+    if debug:
+        print(f"map_selected output: Created figure with {len(selected_plants_gdf)} selected projects")
+    
+    return fig, ax
+
 print("This script takes stock on:")
 print("1) UK point source emissions (NAEI, 2022)")
 print("2) Planned CCS projects (CCSA, 2025)")
@@ -64,43 +181,14 @@ point_sources_gdf = gpd.GeoDataFrame(
     geometry=gpd.points_from_xy(point_sources['Easting'], point_sources['Northing'], crs="EPSG:27700")
 ).to_crs("EPSG:4326")
 
-# Create the plot
-fig, ax = plt.subplots(1, 1, figsize=(12*0.80, 15*0.80))
-ax.set_aspect(1.90)
+selected_plants = pd.read_csv("data/ccsa_plants_selected.csv")
+selected_plants_gdf = gpd.GeoDataFrame(
+    selected_plants, 
+    geometry=gpd.points_from_xy(selected_plants['Easting'], selected_plants['Northing'], crs="EPSG:27700")
+).to_crs("EPSG:4326")
 
-# Plot Europe background
-europe.plot(ax=ax, color='lightgray', edgecolor='white', alpha=0.3)
-
-# Plot point sources as bubbles (size based on CO2 emissions)
-scatter = ax.scatter(
-    point_sources_gdf.geometry.x, 
-    point_sources_gdf.geometry.y,
-    s=point_sources_gdf['CO2']/2000,  # Scale down for visibility
-    c=point_sources_gdf['CO2'],
-    cmap='Reds',
-    alpha=0.7,
-    edgecolors='black',
-    linewidth=0.5
-)
-
-# Add colorbar
-cbar = plt.colorbar(scatter, ax=ax, shrink=0.8)
-cbar.set_label('CO2 Emissions (tonnes)', fontsize=12)
-
-# Set title and labels
-ax.set_title('UK Point Source CO2 Emissions (2022)\nBubble size proportional to emissions', 
-             fontsize=14, fontweight='bold')
-ax.set_xlabel('Longitude', fontsize=12)
-ax.set_ylabel('Latitude', fontsize=12)
-
-# Set UK-focused view
-ax.set_xlim(-9, 3)
-ax.set_ylim(49, 62.5)
-
-# Add grid
-ax.grid(True, alpha=0.3)
-
-plt.tight_layout()
+# Create the map
+fig1, ax1 = map_all(europe, point_sources_gdf)
+fig2, ax2 = map_selected(europe, selected_plants_gdf)
 plt.show()
 
-#Set x axis aspect ratio to 1.90
