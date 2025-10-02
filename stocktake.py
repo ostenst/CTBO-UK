@@ -167,15 +167,21 @@ for sector in target_sectors:
 print(f"\nTotal emissions from target sectors: {total_target_emissions:,.2f} tonnes CO2")
 print(f"Percentage of total emissions: {(total_target_emissions/total_co2_emissions)*100:.1f}%")
 
-# Print the 10 largest emitters
-print(f"\nTop 10 largest CO2 emitters (2022):")
-top_10_emitters = point_sources.nlargest(10, 'CO2')[['PlantID', 'Site', 'Operator', 'Sector', 'CO2']]
-for i, (idx, row) in enumerate(top_10_emitters.iterrows(), 1):
+# Print the 50 largest emitters
+print(f"\nTop 50 largest CO2 emitters (2022):")
+top_50_emitters = point_sources.nlargest(50, 'CO2')[['PlantID', 'Site', 'Operator', 'Sector', 'CO2']]
+for i, (idx, row) in enumerate(top_50_emitters.iterrows(), 1):
     print(f"{i:2d}. {row['Site']:<25} | {row['Operator']:<35} | {row['Sector']:<30} | {row['CO2']:>12,.0f} tonnes")
+print(f"Sum of top 50 emitters: {top_50_emitters['CO2'].sum():,.0f} tonnes")
 
+# Remove emitters with less than 100 ktCO2/yr
+point_sources = point_sources[point_sources['CO2'] >= 100000]
+total_co2_emissions = point_sources['CO2'].sum()
+print(f"\nTotal fossil CO2 emissions from point sources dataset (2022) @>100 ktCO2/yr: {total_co2_emissions:,.2f} tonnes")
+
+# Map point sources
 europe = gpd.read_file("data/shapefiles/Europe/Europe_merged.shp").to_crs("EPSG:4326")
 
-# Convert point sources to GeoDataFrame
 point_sources_gdf = gpd.GeoDataFrame(
     point_sources, 
     geometry=gpd.points_from_xy(point_sources['Easting'], point_sources['Northing'], crs="EPSG:27700")
@@ -192,3 +198,21 @@ fig1, ax1 = map_all(europe, point_sources_gdf)
 fig2, ax2 = map_selected(europe, selected_plants_gdf)
 plt.show()
 
+# Estimate CCGT energy balances from NZ Teesside data ... a NEW BUILD!?
+# https://www.ten.com/sites/energies/files/2025-05/net-zero-teesside-case-study.pdf
+# https://www.gevernova.com/gas-power/resources/case-studies/net-zero-teesside 
+# https://iopscience.iop.org/article/10.1088/2515-7620/ad8f99/meta is gas-fired at 840 MW??? Not 740? Or 860 MW capacity?
+# https://www.power-technology.com/projects/net-zero-teesside-nzt-project-uk/?cf-view
+Pfinal = 742  # MW
+mcaptured = 2*10**6 # tCO2/yr which is 95 % of fuel input
+mCO2 = mcaptured/0.95 # tCO2/yr
+mcarbon = mCO2/44*12 # tC/yr from CH4
+cmolar = 12 # kg/kmol
+molar_carbon = mcarbon*1000/cmolar # kmol/yr
+ch4molar = 16 # kg/kmol
+mCH4 = molar_carbon*ch4molar/1000 # tCH4/yr
+
+LHVCH4 = 50 # MJ/kg
+QCH4 = mCH4*1000*LHVCH4 # MJ/yr
+QCH4 = QCH4/3600 # MWh/yr
+# Calculate the FLH from the 1.3Million homes energy delivery???
