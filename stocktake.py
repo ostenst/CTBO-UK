@@ -1,6 +1,7 @@
 import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
+import numpy as np
 
 def map_all(europe, point_sources_gdf, debug=False):
     """
@@ -196,23 +197,123 @@ selected_plants_gdf = gpd.GeoDataFrame(
 # Create the map
 fig1, ax1 = map_all(europe, point_sources_gdf)
 fig2, ax2 = map_selected(europe, selected_plants_gdf)
+# plt.show()
+
+# Characterise refinery stacks
+# https://www.frontiersin.org/journals/chemical-engineering/articles/10.3389/fceng.2022.804163/full
+refinery_stacks = pd.read_csv("data/refinery_stacks.csv")
+
+power_emissions = refinery_stacks[refinery_stacks['Unit'] == 'POW']
+cracker_emissions = refinery_stacks[refinery_stacks['Unit'] == 'FCC']
+distillation_emissions = refinery_stacks[refinery_stacks['Unit'] == 'CDU']
+smr_emissions = refinery_stacks[refinery_stacks['Unit'] == 'SMR']
+total_emissions = refinery_stacks['CO2_emissions[t/hr]'].sum()
+for emissions in [power_emissions, cracker_emissions, distillation_emissions, smr_emissions]:
+    print(" ")
+    print(emissions)
+    print(f"Share of total emissions: {emissions['CO2_emissions[t/hr]'].sum()/total_emissions*100:.1f}%")
+remaining_emissions = total_emissions - power_emissions['CO2_emissions[t/hr]'].sum() - cracker_emissions['CO2_emissions[t/hr]'].sum() - distillation_emissions['CO2_emissions[t/hr]'].sum() - smr_emissions['CO2_emissions[t/hr]'].sum()
+print(f"\nRemaining emissions: {remaining_emissions:,.2f} t/hr")
+print(f"Share of total emissions: {remaining_emissions/total_emissions*100:.1f}%")
+print("=> Remaining emissions are approximately at 8% CO2 concentration and could be captured in 1 clustered stack!")
+
+# Plot slices in a pie chart based on: [emissions, color]
+power_slice = [power_emissions['CO2_emissions[t/hr]'].sum() , (3*25 + 8*54)/(25+54)]
+cracker_slice = [cracker_emissions['CO2_emissions[t/hr]'].sum() , 17]
+distillation_slice = [distillation_emissions['CO2_emissions[t/hr]'].sum() , 11]
+smr_slice = [smr_emissions['CO2_emissions[t/hr]'].sum() , (8*6 + 24*26)/(6+26)]
+remaining_slice = [remaining_emissions , 8]
+
+# Extract emissions and color values
+emissions = [power_slice[0], cracker_slice[0], distillation_slice[0], smr_slice[0], remaining_slice[0]]
+color_values = [power_slice[1], cracker_slice[1], distillation_slice[1], smr_slice[1], remaining_slice[1]]
+labels = ['Power', 'Cracker', 'Distillation', 'SMR', 'Remaining']
+
+# Normalize color values to 0-1 range for magma colormap
+# color_values_normalized = np.array(color_values) / max(color_values)
+color_values_normalized = np.array(color_values) / 50 # Assuming a colorbar up to 50%
+
+# Create the pie chart with colorbar
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 8), gridspec_kw={'width_ratios': [3, 1]})
+colors = plt.cm.magma_r(color_values_normalized)
+
+wedges, texts, autotexts = ax1.pie(emissions, labels=labels, colors=colors, autopct='%1.1f%%', 
+                                   startangle=90, textprops={'fontsize': 12})
+
+# Enhance the appearance
+ax1.set_title('Refinery CO2 Emissions by Unit Type\n(Colored by CO2 Concentration)', 
+              fontsize=16, fontweight='bold', pad=20)
+
+# Make percentage text larger
+for autotext in autotexts:
+    autotext.set_fontsize(14)
+    autotext.set_fontweight('bold')
+
+# Create colorbar
+sm = plt.cm.ScalarMappable(cmap=plt.cm.magma_r, norm=plt.Normalize(vmin=min(color_values), vmax=max(color_values)))
+sm.set_array([])
+cbar = plt.colorbar(sm, cax=ax2, orientation='vertical')
+cbar.set_label('CO2 Concentration (%)', fontsize=14, fontweight='bold')
+cbar.ax.tick_params(labelsize=12)
+
+# Remove the second subplot axis
+ax2.set_xticks([])
+ax2.set_yticks([])
+ax2.spines['top'].set_visible(False)
+ax2.spines['right'].set_visible(False)
+ax2.spines['bottom'].set_visible(False)
+ax2.spines['left'].set_visible(False)
+
+plt.tight_layout()
+# plt.show()
+
+# Characterise steel stacks (Biermann Excess heat-steel Luleå)
+# https://www.sciencedirect.com/science/article/pii/S1750583619303068?casa_token=jTmJHk38ewIAAAAA:U0RaenQ6yhZenVfptMhjr5xnHgEPwkZ0UqtgNI-vgEVVgcxjwp7r2Fe-NWor3A6FhWY4vJsLWA
+# [emissions, color]
+chp_slice = [59.4, 29.6]
+stoves_slice = [22.2, 25.1]
+flaring_slice = [10.0, 25.1] # Assumed from Biermann
+remaining_slice = [(100-chp_slice[0]-stoves_slice[0]-flaring_slice[0]) , 8] # 8% is just assumed from various combustion processes/kilns
+
+# Create steel emissions pie chart
+steel_emissions = [chp_slice[0], stoves_slice[0], flaring_slice[0], remaining_slice[0]]
+steel_color_values = [chp_slice[1], stoves_slice[1], flaring_slice[1], remaining_slice[1]]
+steel_labels = ['CHP', 'Stoves', 'Flaring', 'Remaining']
+
+# Normalize color values to 0-1 range for magma colormap
+steel_color_values_normalized = np.array(steel_color_values) / 50 # Assuming a colorbar up to 50%
+
+# Create the steel pie chart with colorbar
+fig2, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 8), gridspec_kw={'width_ratios': [3, 1]})
+steel_colors = plt.cm.magma_r(steel_color_values_normalized)
+
+wedges, texts, autotexts = ax1.pie(steel_emissions, labels=steel_labels, colors=steel_colors, autopct='%1.1f%%', 
+                                   startangle=90, textprops={'fontsize': 12})
+
+# Enhance the appearance
+ax1.set_title('Steel Plant CO2 Emissions by Unit Type\n(Colored by CO2 Concentration)', 
+              fontsize=16, fontweight='bold', pad=20)
+
+# Make percentage text larger
+for autotext in autotexts:
+    autotext.set_fontsize(14)
+    autotext.set_fontweight('bold')
+
+# Create colorbar
+sm2 = plt.cm.ScalarMappable(cmap=plt.cm.magma_r, norm=plt.Normalize(vmin=min(steel_color_values), vmax=max(steel_color_values)))
+sm2.set_array([])
+cbar2 = plt.colorbar(sm2, cax=ax2, orientation='vertical')
+cbar2.set_label('CO2 Concentration (%)', fontsize=14, fontweight='bold')
+cbar2.ax.tick_params(labelsize=12)
+
+# Remove the second subplot axis
+ax2.set_xticks([])
+ax2.set_yticks([])
+ax2.spines['top'].set_visible(False)
+ax2.spines['right'].set_visible(False)
+ax2.spines['bottom'].set_visible(False)
+ax2.spines['left'].set_visible(False)
+
+plt.tight_layout()
 plt.show()
 
-# Estimate CCGT energy balances from NZ Teesside data ... a NEW BUILD!?
-# https://www.ten.com/sites/energies/files/2025-05/net-zero-teesside-case-study.pdf
-# https://www.gevernova.com/gas-power/resources/case-studies/net-zero-teesside 
-# https://iopscience.iop.org/article/10.1088/2515-7620/ad8f99/meta is gas-fired at 840 MW??? Not 740? Or 860 MW capacity?
-# https://www.power-technology.com/projects/net-zero-teesside-nzt-project-uk/?cf-view
-Pfinal = 742  # MW
-mcaptured = 2*10**6 # tCO2/yr which is 95 % of fuel input
-mCO2 = mcaptured/0.95 # tCO2/yr
-mcarbon = mCO2/44*12 # tC/yr from CH4
-cmolar = 12 # kg/kmol
-molar_carbon = mcarbon*1000/cmolar # kmol/yr
-ch4molar = 16 # kg/kmol
-mCH4 = molar_carbon*ch4molar/1000 # tCH4/yr
-
-LHVCH4 = 50 # MJ/kg
-QCH4 = mCH4*1000*LHVCH4 # MJ/yr
-QCH4 = QCH4/3600 # MWh/yr
-# Calculate the FLH from the 1.3Million homes energy delivery???
