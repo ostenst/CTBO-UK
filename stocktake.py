@@ -168,12 +168,12 @@ for sector in target_sectors:
 print(f"\nTotal emissions from target sectors: {total_target_emissions:,.2f} tonnes CO2")
 print(f"Percentage of total emissions: {(total_target_emissions/total_co2_emissions)*100:.1f}%")
 
-# Print the 50 largest emitters
-print(f"\nTop 50 largest CO2 emitters (2022):")
-top_50_emitters = point_sources.nlargest(50, 'CO2')[['PlantID', 'Site', 'Operator', 'Sector', 'CO2']]
-for i, (idx, row) in enumerate(top_50_emitters.iterrows(), 1):
+# Print the 60 largest emitters
+print(f"\nTop 60 largest CO2 emitters (2022):")
+top_60_emitters = point_sources.nlargest(60, 'CO2')[['PlantID', 'Site', 'Operator', 'Sector', 'CO2']]
+for i, (idx, row) in enumerate(top_60_emitters.iterrows(), 1):
     print(f"{i:2d}. {row['Site']:<25} | {row['Operator']:<35} | {row['Sector']:<30} | {row['CO2']:>12,.0f} tonnes")
-print(f"Sum of top 50 emitters: {top_50_emitters['CO2'].sum():,.0f} tonnes")
+print(f"Sum of top 60 emitters: {top_60_emitters['CO2'].sum():,.0f} tonnes")
 
 # Remove emitters with less than 100 ktCO2/yr
 point_sources = point_sources[point_sources['CO2'] >= 100000]
