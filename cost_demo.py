@@ -133,29 +133,51 @@ c = -0.00332
 n = 0.5291
 m = 0.8391
 
-xCO2 = 0.05 # assume CCGT plants and Pembroke Power Station
-Pinstalled = 2200 # MW [DUKES 5.11]
-emission_factor = 0.204 # tCO2/MWh [NZIP, 2020]
-plant = top_60_emitters[top_60_emitters['Site'] == 'Pembroke Power Station'].iloc[0]
-FLH = plant['CO2'] / (Pinstalled * emission_factor) # [h/y]
+for plant_name, capacity in [['Pembroke Power Station', 2200], ['Rocksavage', 810]]:
+    xCO2 = 0.05 # assume CCGT plants and Pembroke Power Station/Rocksavage Power
+    Pinstalled = capacity # MW [DUKES 5.11]
+    emission_factor = 0.204 # tCO2/MWh [NZIP, 2020]
+    plant = top_60_emitters[top_60_emitters['Site'] == plant_name].iloc[0]
+    FLH = plant['CO2'] / (Pinstalled * emission_factor) # [h/y] = tCO2/yr / (tCO2/h)
+    FLH = 4000000 / (Pinstalled * emission_factor) # [h/y] = tCO2/yr / (tCO2/h)
+    print(f"\nFLH: {FLH} h/y <===== CHECK THE FLH, WEIRD!?")
 
-mCO2 = Pinstalled * emission_factor # [tCO2/h] when at full load
-nCO2 = mCO2*1000 / 44 # [kmolCO2/h]
-n_fluegas = nCO2 / xCO2 # [kmol/h]
-V_fluegas = n_fluegas * 22.4 *10**-3 # [10**3 m3/h]
+    mCO2 = Pinstalled * emission_factor # [tCO2/h] when at full load
+    nCO2 = mCO2*1000 / 44 # [kmolCO2/h]
+    n_fluegas = nCO2 / xCO2 # [kmol/h]
+    V_fluegas = n_fluegas * 22.4 # [Nm3/h]
 
-TEC = a + (b * xCO2**n + c) * V_fluegas**m
+    TEC = a + (b * (xCO2)**n + c) * (V_fluegas/1000)**m # NOTE xCO2 as fraction, not percentage
+    CAPEX = TEC * 5.509 # [MEUR] NETL Methodology
 
-print(f"TEC: {TEC} MEUR")
-CAPEX = TEC * 5.509 # [MEUR] NETL Methodology
+    capture_rate = 0.95 # [0-1]
+    annualized_CAPEX = CAPEX * 0.07 * (1 + 0.07)**25 / ((1 + 0.07)**25 - 1) *10**6# [EUR/y]
+    levelized_CAPEX = annualized_CAPEX / (plant['CO2']*capture_rate) # [EUR/tCO2]
 
-capture_rate = 0.95 # [0-1]
-annualized_CAPEX = CAPEX * 0.035 * (1 + 0.035)**25 / ((1 + 0.035)**25 - 1) *10**6# [EUR/y]
-levelized_CAPEX = annualized_CAPEX / (plant['CO2']*capture_rate) # [EUR/tCO2]
+    # Calculate transport cost for this specific plant
+    pounds_to_EUR = 1.15
+    transport_result = find_nearest_ccs_site(plant, transport_costs, debug=False)
+    transport_cost = transport_result['total_cost_per_t'] * pounds_to_EUR
 
-# Calculate transport cost for this specific plant
-transport_result = find_nearest_ccs_site(plant, transport_costs, debug=False)
-transport_cost = transport_result['total_cost_per_t']
+    print(f"Levelized CAPEX: {levelized_CAPEX} EUR/tCO2")
+    print(f"Levelized CAPEX (FOAK): {1.7553*levelized_CAPEX} EUR/tCO2")
+    print(f"Transport cost: {transport_cost} EUR/tCO2")
 
-print(f"Levelized CAPEX: {levelized_CAPEX} EUR/tCO2")
-print(f"Transport cost: {transport_cost} £/tCO2")
+    # Estimate energy OPEX (CCGT)
+    eta_P = 0.49 # [MWel/MWfuel] total efficiency from DUKES data
+    Qfuel = Pinstalled / eta_P # [MWfuel]
+    Pgas = Qfuel * 0.35 # [MW] Harvey GT lecture, and about 10% are lost as <120C flue gas heat
+    Qsteam = Qfuel * 0.51 # [MW] 
+    Prankine = Pinstalled - Pgas
+    eta_steam = Prankine/Qsteam # [-]
+
+    Qreb = 3.5 * mCO2*1000/3600 # [MW]
+    Plost = Qreb * eta_steam # [MW]
+    Prankine = Prankine - Plost # [MW]
+
+    Plost = Plost * FLH # [MWh/y]
+    OPEXE = Plost * 80*pounds_to_EUR # [EUR/y] assumed electricity price
+    OPEXE = OPEXE / (plant['CO2']*capture_rate) # [EUR/tCO2]
+    print(f"OPEXE: {OPEXE} EUR/tCO2")
+    print(f"Total cost: {levelized_CAPEX + transport_cost + OPEXE} EUR/tCO2")
+
