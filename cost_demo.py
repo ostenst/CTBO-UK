@@ -126,6 +126,9 @@ for idx, plant in top_60_emitters.iterrows():
     result = find_nearest_ccs_site(plant, transport_costs, discount_rate=0.035, lifetime=25, debug=False)
     plant['transport_cost'] = result['total_cost_per_t'] # [£/tCO2]
 
+# Create DataFrame with only power producers from top 60 emitters
+power_producers = top_60_emitters[(top_60_emitters['Sector'] == 'Major power producers') | (top_60_emitters['Sector'] == 'Minor power producers')].copy()
+
 # Explore CAPEX relationships [Kim & Léonard, 2025]
 # TEC = a + (b * xCO2**n + c) * V**m [MEUR, 2023] - note that this is not valid for CCGT if xCO2<5%, or if mCO2>1250 kt/y
 a = 2.1673
@@ -134,16 +137,64 @@ c = -0.00332
 n = 0.5291
 m = 0.8391
 
-for plant_name, capacity in [['Pembroke Power Station', 2200], ['Rocksavage', 810]]:
-    xCO2 = 0.05 # assume CCGT plants and Pembroke Power Station/Rocksavage Power
-    Pinstalled = capacity # MW [DUKES 5.11]
+# Manual capacity data for specific plants
+capacity_data = {
+    'Pembroke Power Station': 2200,
+    'Staythorpe Power Station': 1828,
+    'Didcot B': 1450,
+    'West Burton B CCGT Power Station': 1332,
+    'Saltend': 1200,
+    'Immingham': 1252, # "VPI" in DUKES 5.11 data
+    'Marchwood  Power  Station': 898,
+    'Carrington CCGT': 884, 
+    'Seabank': 1234,
+    'Grain CCGT': 1517,
+    'South Humber': 1365, # "EP SHB LTD" in data
+    'Spalding': 950,
+    'Connahs Quay Power Station': 1380,
+    'Peterhead Power Station': 1180,
+    'Keadby': 735,
+    'Langage Energy Centre': 905,
+    'Kilroot': 700, # Missing in DUKES 5.11 data, taken from Google
+    'Ballylumford': 616,
+    'Damhead Creek Power Station': 805,
+    'Little Barford': 735,
+    'Enfield Power Station': 408,
+    'Coolkeeragh': 413,
+    'Medway': 755,
+    'Kings Lynn Power Station': 395,
+    'Shoreham Power Station': 420,
+    'Great Yarmouth Power Station': 420,
+    'Cottam Development Centre': 455,
+    'Coryton': 800,
+    'Rye House': 715,
+    'Rocksavage': 810,
+}
+
+# Calculate costs for all power producers with capacity data
+print(f"\n" + "="*100)
+print("CCS COST ANALYSIS FOR POWER PRODUCERS")
+print("="*100)
+
+# Initialize results storage
+results = []
+
+for plant_name, capacity in capacity_data.items():
+    # Find the plant in the power producers
+    plant_mask = power_producers['Site'] == plant_name
+    if not plant_mask.any():
+        print(f"Plant not found: {plant_name}")
+        continue
+    
+    plant = power_producers[plant_mask].iloc[0]
+    
+    # Calculate costs using the same methodology
+    xCO2 = 0.05 # assume CCGT plants
+    Pinstalled = capacity # MW
     eta_P = 0.49 # [MWel/MWfuel] total efficiency from DUKES data
     Qfuel = Pinstalled / eta_P # [MWfuel]
     emission_factor = 0.204 # tCO2/MWhfuel [NZIP, 2020]
-    plant = top_60_emitters[top_60_emitters['Site'] == plant_name].iloc[0]
     FLH = plant['CO2'] / (Qfuel * emission_factor) # [h/y] = tCO2/yr / (tCO2/h)
-    print(f"\nAnnual CO2: {plant['CO2']} tCO2/yr")
-    print(f"FLH: {FLH} h/y")
 
     mCO2 = Qfuel * emission_factor # [tCO2/h] when at full load
     nCO2 = mCO2*1000 / 44 # [kmolCO2/h]
@@ -156,19 +207,14 @@ for plant_name, capacity in [['Pembroke Power Station', 2200], ['Rocksavage', 81
     capture_rate = 0.95 # [0-1]
     annualized_CAPEX = CAPEX * 0.07 * (1 + 0.07)**25 / ((1 + 0.07)**25 - 1) *10**6# [EUR/y]
     levelized_CAPEX = annualized_CAPEX / (plant['CO2']*capture_rate) # [EUR/tCO2]
+    levelized_CAPEX_FOAK = 1.7553 * levelized_CAPEX # [EUR/tCO2]
 
-    # Calculate transport cost for this specific plant
+    # Calculate transport cost
     pounds_to_EUR = 1.15
     transport_result = find_nearest_ccs_site(plant, transport_costs, debug=False)
     transport_cost = transport_result['total_cost_per_t'] * pounds_to_EUR
 
-    print(f"Levelized CAPEX: {levelized_CAPEX} EUR/tCO2")
-    print(f"Levelized CAPEX (FOAK): {1.7553*levelized_CAPEX} EUR/tCO2")
-    print(f"Transport cost: {transport_cost} EUR/tCO2")
-
     # Estimate energy OPEX (CCGT)
-    eta_P = 0.49 # [MWel/MWfuel] total efficiency from DUKES data
-    Qfuel = Pinstalled / eta_P # [MWfuel]
     Pgas = Qfuel * 0.35 # [MW] Harvey GT lecture, and about 10% are lost as <120C flue gas heat
     Qsteam = Qfuel * 0.51 # [MW] 
     Prankine = Pinstalled - Pgas
@@ -181,6 +227,60 @@ for plant_name, capacity in [['Pembroke Power Station', 2200], ['Rocksavage', 81
     Plost = Plost * FLH # [MWh/y]
     OPEXE = Plost * 80*pounds_to_EUR # [EUR/y] assumed electricity price
     OPEXE = OPEXE / (plant['CO2']*capture_rate) # [EUR/tCO2]
-    print(f"OPEXE: {OPEXE} EUR/tCO2")
-    print(f"Total cost: {levelized_CAPEX + transport_cost + OPEXE} EUR/tCO2")
+    
+    total_cost_foak = levelized_CAPEX_FOAK + transport_cost + OPEXE
+    total_cost_noak = levelized_CAPEX + transport_cost + OPEXE
+    
+    # Store results
+    results.append({
+        'Plant': plant_name,
+        'Capacity_MW': capacity,
+        'CO2_kt_y': plant['CO2']/1000,
+        'FLH_h': FLH,
+        'CAPEX_FOAK': levelized_CAPEX_FOAK,
+        'CAPEX_NOAK': levelized_CAPEX,
+        'Transport_EUR_tCO2': transport_cost,
+        'OPEX_EUR_tCO2': OPEXE,
+        'Total_FOAK': total_cost_foak,
+        'Total_NOAK': total_cost_noak
+    })
 
+# Create and display results table
+if results:
+    print(f"{'Plant Name':<30} | {'Cap':<6} | {'CO2':<8} | {'FLH':<6} | {'FOAK':<8} | {'NOAK':<8} | {'Transport':<9} | {'OPEX':<8} | {'TotalFOAK':<9} | {'TotalNOAK':<9}")
+    print(f"{'':<30} | {'MW':<6} | {'kt/y':<8} | {'h/y':<6} | {'EUR/tCO2':<8} | {'EUR/tCO2':<8} | {'EUR/tCO2':<9} | {'EUR/tCO2':<8} | {'EUR/tCO2':<9} | {'EUR/tCO2':<9}")
+    print("-" * 120)
+    
+    for result in results:
+        print(f"{result['Plant']:<30} | {result['Capacity_MW']:>6.0f} | {result['CO2_kt_y']:>8.1f} | {result['FLH_h']:>6.0f} | {result['CAPEX_FOAK']:>8.1f} | {result['CAPEX_NOAK']:>8.1f} | {result['Transport_EUR_tCO2']:>9.1f} | {result['OPEX_EUR_tCO2']:>8.1f} | {result['Total_FOAK']:>9.1f} | {result['Total_NOAK']:>9.1f}")
+    
+    # Summary statistics
+    print("-" * 120)
+    avg_capture_foak = np.mean([r['CAPEX_FOAK'] for r in results])
+    avg_capture_noak = np.mean([r['CAPEX_NOAK'] for r in results])
+    avg_transport = np.mean([r['Transport_EUR_tCO2'] for r in results])
+    avg_opex = np.mean([r['OPEX_EUR_tCO2'] for r in results])
+    avg_total_foak = np.mean([r['Total_FOAK'] for r in results])
+    avg_total_noak = np.mean([r['Total_NOAK'] for r in results])
+    
+    print(f"{'AVERAGE':<30} | {'':<6} | {'':<8} | {'':<6} | {avg_capture_foak:>8.1f} | {avg_capture_noak:>8.1f} | {avg_transport:>9.1f} | {avg_opex:>8.1f} | {avg_total_foak:>9.1f} | {avg_total_noak:>9.1f}")
+    
+    print(f"\nSummary:")
+    print(f"Number of plants analyzed: {len(results)}")
+    print(f"Total capacity: {sum([r['Capacity_MW'] for r in results]):,.0f} MW")
+    print(f"Total CO2 emissions: {sum([r['CO2_kt_y'] for r in results]):,.1f} ktCO2/y")
+    print(f"Average total CCS cost (FOAK): {avg_total_foak:.1f} EUR/tCO2")
+    print(f"Average total CCS cost (NOAK): {avg_total_noak:.1f} EUR/tCO2")
+    print(f"Cost range (FOAK): {min([r['Total_FOAK'] for r in results]):.1f} - {max([r['Total_FOAK'] for r in results]):.1f} EUR/tCO2")
+    print(f"Cost range (NOAK): {min([r['Total_NOAK'] for r in results]):.1f} - {max([r['Total_NOAK'] for r in results]):.1f} EUR/tCO2")
+    
+    # Save results to CSV
+    import pandas as pd
+    results_df = pd.DataFrame(results)
+    results_df.to_csv('ccs_cost_analysis_results.csv', index=False)
+    print(f"\nResults saved to: ccs_cost_analysis_results.csv")
+
+print(f"\nPower producers in top 60 emitters:")
+print(f"Number of plants: {len(power_producers)}")
+print(f"Total CO2 emissions: {power_producers['CO2'].sum():,.0f} tCO2/yr")
+print(f"Percentage of top 60: {power_producers['CO2'].sum() / top_60_emitters['CO2'].sum() * 100:.1f}%")
