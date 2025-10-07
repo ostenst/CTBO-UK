@@ -8,6 +8,7 @@ m = 0.8391
 # xCO2 [-]
 # V_fluegas [10**3 Nm3/h]
 
+# Values taken from Danish Energy Agency: technology_data_for_carbon_capture_transport_and_storage_0
 dam     = {"name":"dam", "mCO2": 135, "xCO2": 0.13}
 nova    = {"name":"nova", "mCO2": 200, "xCO2": 0.13}
 shand   = {"name":"shand", "mCO2": 272, "xCO2": 0.13}
