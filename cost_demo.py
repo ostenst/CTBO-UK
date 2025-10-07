@@ -2,6 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
+# Check this list also: https://ember-energy.org/latest-insights/the-largest-emitters-in-the-uk-annual-review/
 print("This script calculates the costs of: ")
 print("1) CCGT - Pembroke Power Station")
 print("2) CCGT - Rocksavage Power")
@@ -136,13 +137,15 @@ m = 0.8391
 for plant_name, capacity in [['Pembroke Power Station', 2200], ['Rocksavage', 810]]:
     xCO2 = 0.05 # assume CCGT plants and Pembroke Power Station/Rocksavage Power
     Pinstalled = capacity # MW [DUKES 5.11]
-    emission_factor = 0.204 # tCO2/MWh [NZIP, 2020]
+    eta_P = 0.49 # [MWel/MWfuel] total efficiency from DUKES data
+    Qfuel = Pinstalled / eta_P # [MWfuel]
+    emission_factor = 0.204 # tCO2/MWhfuel [NZIP, 2020]
     plant = top_60_emitters[top_60_emitters['Site'] == plant_name].iloc[0]
-    FLH = plant['CO2'] / (Pinstalled * emission_factor) # [h/y] = tCO2/yr / (tCO2/h)
-    FLH = 4000000 / (Pinstalled * emission_factor) # [h/y] = tCO2/yr / (tCO2/h)
-    print(f"\nFLH: {FLH} h/y <===== CHECK THE FLH, WEIRD!?")
+    FLH = plant['CO2'] / (Qfuel * emission_factor) # [h/y] = tCO2/yr / (tCO2/h)
+    print(f"\nAnnual CO2: {plant['CO2']} tCO2/yr")
+    print(f"FLH: {FLH} h/y")
 
-    mCO2 = Pinstalled * emission_factor # [tCO2/h] when at full load
+    mCO2 = Qfuel * emission_factor # [tCO2/h] when at full load
     nCO2 = mCO2*1000 / 44 # [kmolCO2/h]
     n_fluegas = nCO2 / xCO2 # [kmol/h]
     V_fluegas = n_fluegas * 22.4 # [Nm3/h]
