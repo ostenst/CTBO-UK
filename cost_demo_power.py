@@ -3,19 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Check this list also: https://ember-energy.org/latest-insights/the-largest-emitters-in-the-uk-annual-review/
-print("This script calculates the costs of: ")
-print("1) CCGT - Pembroke Power Station")
-print("2) CCGT - Rocksavage Power")
-print("3) Refinery - Fawley")
-print("4) Refinery - Lindsey")
-print("5) Cement - Hope")
-print("6) Cement - Cauldon")
-print("7) Steel - Scunthorpe")
-print("8) Petrochemical - Billingham")
-print("9) Petrochemical - Grangemouth")
-print("10) W2E - Runcorn")
-print("11) W2E - Dudley")
-print("12) Biopower - Drax")
+print("This script calculates the costs of CCGT power plants")
 
 def find_nearest_ccs_site(emitter_plant, transport_costs_df, discount_rate=0.035, lifetime=25, debug=False):
     """
@@ -196,52 +184,26 @@ for plant_name, capacity in capacity_data.items():
     emission_factor = 0.204 # tCO2/MWhfuel [NZIP, 2020]
     FLH = plant['CO2'] / (Qfuel * emission_factor) # [h/y] = tCO2/yr / (tCO2/h)
 
-    mCO2 = Qfuel * emission_factor # [tCO2/h] when at full load
+    mCO2 = Qfuel * emission_factor * 0.95 # [tCO2/h] when at full load
     nCO2 = mCO2*1000 / 44 # [kmolCO2/h]
     n_fluegas = nCO2 / xCO2 # [kmol/h]
     V_fluegas = n_fluegas * 22.4 # [Nm3/h]
 
     n_largest_absorbers = int( (V_fluegas/1000) // 1613) # The volume limit from [Kim & Leonard, 2025] Table A2
     remaining_V_fluegas = (V_fluegas/1000) % 1613 # [10**3 Nm3/h]
-    print("Plant name: ", plant_name, " needs ", n_largest_absorbers, " largest absorbers and has remaining V_fluegas of ", remaining_V_fluegas, " [10**3 Nm3/h]")
 
     CAPEX = 0
     for i in range(n_largest_absorbers):
         V_fluegas = 1613 # Add the largest absorbers if needed
-        print(round(V_fluegas/22.4 * xCO2 * 44 /1000 * FLH, 0), "ktCO2/y") #ktCO2/y NOTE: We are within the KIM range! Its good :)
         TEC = a + (b * (xCO2)**n + c) * (V_fluegas)**m # NOTE xCO2 as fraction, not percentage
         CAPEX += TEC
-        print(" - Adding TEC of LARGE absorber", TEC, " [MEUR]")
     if remaining_V_fluegas > 0:
         TEC = a + (b * (xCO2)**n + c) * (remaining_V_fluegas)**m 
         CAPEX += TEC
-        print(" - Adding TEC of remaining absorber", TEC, " [MEUR]")
-    CAPEX = TEC * 5.509 # [MEUR] NETL Methodology
-
-
-    # n_largest_absorbers = int( (mCO2*FLH/1000) // 1250) # The mass flow limit from [Kim & Leonard, 2025] Table A1
-    # remaining_mCO2 = (mCO2*FLH/1000) % 1250 # [ktCO2/y]
-
-    # CAPEX = 0
-    # for i in range(n_largest_absorbers):
-    #     mCO2 = 1250 *1000/FLH # [tCO2/h] For each largest absorber
-    #     nCO2 = mCO2*1000 / 44 # [kmolCO2/h]
-    #     n_fluegas = nCO2 / xCO2 # [kmol/h]
-    #     V_fluegas = n_fluegas * 22.4 # [Nm3/h]
-    #     TEC = a + (b * (xCO2)**n + c) * (V_fluegas/1000)**m # NOTE xCO2 as fraction, not percentage
-    #     print(" - Adding TEC of LARGE absorber", TEC, " [MEUR]")
-    #     print("------- STRANGELY, we get different absorber sizes... because we have different FLH values! SHould i interpret Kim based on Nm3/s or ktCO2/y?")
-    #     print(" Maybe Nm3/s makes more sense, since thats how the Aspen models operate mainly!")
-    #     CAPEX += TEC
-    # if remaining_mCO2 > 0:
-    #     remaining_mCO2 = remaining_mCO2 *1000/FLH # [tCO2/h]
-    #     nCO2 = remaining_mCO2*1000 / 44 # [kmolCO2/h]
-    #     n_fluegas = nCO2 / xCO2 # [kmol/h]
-    #     V_fluegas = n_fluegas * 22.4 # [Nm3/h]
-    #     TEC = a + (b * (xCO2)**n + c) * (V_fluegas/1000)**m 
-    #     print(" - Adding TEC of ", TEC, " [MEUR]")
-    #     CAPEX += TEC
-    # CAPEX = TEC * 5.509 # [MEUR] NETL Methodology
+    CAPEX = CAPEX * 5.509 # [MEUR] NETL Methodology
+    CEPCI_2025 = 930
+    CEPCI_2023 = 798.7
+    CAPEX = CAPEX * CEPCI_2025 / CEPCI_2023
 
     capture_rate = 0.95 # [0-1]
     annualized_CAPEX = CAPEX * 0.07 * (1 + 0.07)**25 / ((1 + 0.07)**25 - 1) *10**6# [EUR/y]
@@ -252,6 +214,7 @@ for plant_name, capacity in capacity_data.items():
     pounds_to_EUR = 1.15
     transport_result = find_nearest_ccs_site(plant, transport_costs, debug=False)
     transport_cost = transport_result['total_cost_per_t'] * pounds_to_EUR
+    transport_cost = transport_cost * CEPCI_2025 / CEPCI_2023
 
     # Estimate energy OPEX (CCGT)
     Pgas = Qfuel * 0.35 # [MW] Harvey GT lecture, and about 10% are lost as <120C flue gas heat
