@@ -184,7 +184,7 @@ for plant_name, capacity in capacity_data.items():
     emission_factor = 0.204 # tCO2/MWhfuel [NZIP, 2020]
     FLH = plant['CO2'] / (Qfuel * emission_factor) # [h/y] = tCO2/yr / (tCO2/h)
 
-    mCO2 = Qfuel * emission_factor * 0.95 # [tCO2/h] when at full load
+    mCO2 = Qfuel * emission_factor # [tCO2/h] when at full load
     nCO2 = mCO2*1000 / 44 # [kmolCO2/h]
     n_fluegas = nCO2 / xCO2 # [kmol/h]
     V_fluegas = n_fluegas * 22.4 # [Nm3/h]
