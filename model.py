@@ -379,8 +379,17 @@ if results:
     
     # Create the plot
     plt.figure(figsize=(12, 8))
-    plt.plot(results_df['cumulative_captured_CO2'], results_df['total_4OAK'], 
-             'o-', linewidth=2, markersize=6, color='blue', alpha=0.7)
+    
+    # Create step function data for horizontal lines (like macc.py)
+    x_steps = []
+    y_steps = []
+    
+    for i in range(len(results_df) - 1):
+        # Each plant is a horizontal line from current to next cumulative capacity
+        x_steps.extend([results_df['cumulative_captured_CO2'].iloc[i], results_df['cumulative_captured_CO2'].iloc[i+1]])
+        y_steps.extend([results_df['total_4OAK'].iloc[i+1], results_df['total_4OAK'].iloc[i+1]])  # Use the cost of the current plant
+    
+    plt.plot(x_steps, y_steps, 'b-', linewidth=3, color='blue', alpha=0.7)
     
     # Add labels and title
     plt.xlabel('Cumulative Captured CO2 (ktCO2/yr)', fontsize=14)
@@ -419,8 +428,17 @@ if results:
     results_df_foak['cumulative_captured_CO2_foak'] = results_df_foak['captured_CO2'].cumsum()
     
     plt.figure(figsize=(12, 8))
-    plt.plot(results_df_foak['cumulative_captured_CO2_foak'], results_df_foak['total_FOAK'], 
-             's-', linewidth=2, markersize=6, color='red', alpha=0.7)
+    
+    # Create step function data for horizontal lines (like macc.py)
+    x_steps_foak = []
+    y_steps_foak = []
+    
+    for i in range(len(results_df_foak) - 1):
+        # Each plant is a horizontal line from current to next cumulative capacity
+        x_steps_foak.extend([results_df_foak['cumulative_captured_CO2_foak'].iloc[i], results_df_foak['cumulative_captured_CO2_foak'].iloc[i+1]])
+        y_steps_foak.extend([results_df_foak['total_FOAK'].iloc[i+1], results_df_foak['total_FOAK'].iloc[i+1]])  # Use the cost of the current plant
+    
+    plt.plot(x_steps_foak, y_steps_foak, 'r-', linewidth=3, color='red', alpha=0.7)
     
     # Add labels and title
     plt.xlabel('Cumulative Captured CO2 (ktCO2/yr)', fontsize=14)
@@ -464,6 +482,7 @@ if results:
     print(f"Total CO2 emissions: {sum([r['annual_CO2'] for r in results]):,.1f} ktCO2/y")
     print(f"Total captured CO2: {sum([r['captured_CO2'] for r in results]):,.1f} ktCO2/y")
 
+print(len(results))
 # Assume CO2 emissions based on DESNZ projections and CCC scenario
 # https://assets.publishing.service.gov.uk/media/6604460f91a320001a82b0fd/uk-greenhouse-gas-emissions-provisional-figures-statistical-release-2023.pdf
 # https://assets.publishing.service.gov.uk/media/675c0ca798302e574b915336/eep-report-2023-2050.pdf
