@@ -98,12 +98,15 @@ FLH = Drax_CO2 / (Qfuel * emission_factor) # [h/y] = tCO2/yr / (tCO2/h)
 xCO2 = 0.13 # [-] NOTE: I guessed this
 
 mCO2 = Drax_CO2 / FLH # [tCO2/h]
+print("DRAX CO2", mCO2)
 nCO2 = mCO2*1000 / 44 # [kmolCO2/h]
 n_fluegas = nCO2 / xCO2 # [kmol/h]
 V_fluegas = n_fluegas * 22.4 # [Nm3/h]
+print("V_fluegas", V_fluegas)
 
 n_largest_absorbers = int( (V_fluegas/1000) // 1613) # The volume limit from [Kim & Leonard, 2025] Table A2
 remaining_V_fluegas = (V_fluegas/1000) % 1613 # [10**3 Nm3/h]
+print("n_largest_absorbers", n_largest_absorbers)
 
 CAPEX = 0
 for i in range(n_largest_absorbers):
