@@ -123,12 +123,15 @@ def levelize_MEUR(CAPEX, annual_CO2, capture_rate=0.95, discount_rate=0.07, life
     levelized_CAPEX = annualized_CAPEX / (annual_CO2*capture_rate) # [EUR/tCO2]
     return levelized_CAPEX
     
-def energy_supply(mCO2, capture_rate, FLH, qreb, qsteam, qelc, qchp, csteam, elc_eff, cbio, celc, evaporation_enthalpy=2257):
+def energy_supply(mCO2, capture_rate, FLH, qreb, pcompr, qsteam, qelc, qchp, csteam, elc_eff, cbio, celc, emission_factor, evaporation_enthalpy=2257):
                 # Estimate energy penalty
-                mCO2_captured = mCO2 * capture_rate # [tCO2/h] 
-                mCO2_residual = mCO2 * (1-capture_rate) # [tCO2/h] 
+                mCO2f_captured = mCO2 * capture_rate # [tCO2/h] 
+                mCO2f_residual = mCO2 * (1-capture_rate) # [tCO2/h] 
 
-                Qreb = qreb * mCO2_captured*1000/3600 # [MW]
+                Qreb = qreb * mCO2f_captured*1000/3600 # [MW]
+                Pcompr = pcompr * mCO2f_captured*1000/3600 # [MW]
+
+                # Assuming heat demand is covered by these fractions
                 Qsteam = qsteam * Qreb # [MW]
                 Qelc = qelc * Qreb # [MW]
                 Qchp = qchp * Qreb # [MW]
@@ -140,19 +143,25 @@ def energy_supply(mCO2, capture_rate, FLH, qreb, qsteam, qelc, qchp, csteam, elc
                 OPEX_steam = OPEX_steam / (annual_CO2*capture_rate) # [EUR/tCO2]
 
                 # Electricity OPEX
-                Pelec = Qelc * elc_eff * FLH # [MWh/y]
+                Pelec = (Qelc * elc_eff + Pcompr)* FLH # [MWh/y]
                 OPEX_elec = celc * Pelec # [EUR/y]
                 OPEX_elec = OPEX_elec / (annual_CO2*capture_rate) # [EUR/tCO2]
 
-                # Biomass CHP OPEX (no CAPEX currently, and the CO2 is not captured)
-                Qchp = Qchp * FLH # [MWh/y]
-                OPEX_chp = cbio * Qchp # [EUR/y]
+                # Biomass CHP OPEX (simplify: all CHP goes to heat, but we capture the self-generated CO2) 
+                Qfuel_tot = Qchp / (1 - capture_rate*emission_factor*(qreb/3600*1000)) # Set up this equation for the heat part, where Qfuel_heat_tot=qchp*Qreb+Qselfcapture
+                mCO2bio_captured = Qfuel_tot*emission_factor*capture_rate # [tCO2/h]
+                
+                Qfuel_tot = Qfuel_tot * FLH # [MWh/y]
+                OPEX_chp = cbio * Qfuel_tot # [EUR/y]
                 OPEX_chp = OPEX_chp / (annual_CO2*capture_rate) # [EUR/tCO2]
+                print("OPEXchp=",OPEX_chp)
+
+                print("mCO2bio_captured=",mCO2bio_captured)
+                print("mCO2f_captured=",mCO2f_captured)
+                print("mCO2bio_captured/mCO2f_captured=",mCO2bio_captured/mCO2f_captured)
 
                 OPEXE = OPEX_steam + OPEX_elec + OPEX_chp
-                CAPEX_CHP = 0
-                biogenic_fraction = 0.1
-                return mCO2_captured, biogenic_fraction, mCO2_residual, OPEXE, CAPEX_CHP
+                return mCO2f_captured, mCO2bio_captured, mCO2f_residual, OPEXE, Qfuel_tot # Includes biogenic captured CO2 and Qchp for CHPCAPEX
 
 # Prepare plant data
 pounds_to_EUR = 1.15
@@ -190,7 +199,8 @@ discount_rate = 0.07 # [-]
 lifetime = 25 # [y]
 gas_eff = 0.35 # [-] Harvey GT lecture, and about 10% are lost as <120C flue gas heat
 steam_eff = 0.51 # [-]
-qreb = 3.5 # [MJ/kg]
+qreb = 3.5 # [MJ/kgCO2]
+pcompr = 0.37 # [MJ/kgCO2] power compression penalty from Tharun plant and system paper
 celc = 80 # [EUR/MWh]
 
 power_capacities = pd.read_csv("data/power_capacities_clean.csv")
@@ -202,7 +212,7 @@ for idx, plant in power_producers.iterrows():
     # Estimate CAPEX from CO2 flow [tCO2/yr] and concentration [%]
     Pinstalled = plant['Capacity [MW]'] # [MWel]
     Qfuel = Pinstalled / eta_P # [MWf]
-    mCO2 = Qfuel * emission_factor # [tCO2/h]
+    mCO2 = Qfuel * emission_factor # [tCO2/h] 
     FLH = plant['CO2'] / mCO2 # [h/y] 
 
     CAPEX = approximate_CAPEX(mCO2, xCO2, CEPCI_2025, CEPCI_2023=798.7, capture_rate=0.90, NETL=5.509) # [MEUR] note the capture rate inconsistency
@@ -219,20 +229,21 @@ for idx, plant in power_producers.iterrows():
     Prankine = Pinstalled - Pgas
     eta_steam = Prankine/Qsteam # [-]
 
-    Qreb = qreb * mCO2_captured*1000/3600 # [MW]
+    Qreb = qreb * mCO2_captured*1000/3600 # [MW] 
     Plost = Qreb * eta_steam # [MW]
     Prankine = Prankine - Plost # [MW]
 
     Plost = Plost * FLH # [MWh/y]
     OPEXE = Plost * celc # [EUR/y] 
     OPEXE = OPEXE / (mCO2_captured*FLH) # [EUR/tCO2]
+    OPEXE += pcompr * 1000/3600*celc # [MJ/kgCO2 => MWh/tCO2 => EUR/tCO2] power compression penalty from Tharun plant and system paper
 
     results.append({
         'site-stack': plant['Site'] + '-' + 'CCGT',
         'annual_CO2': plant['CO2']/1000, # [ktCO2/yr]
-        'captured_CO2': mCO2_captured*FLH/1000, # [ktCO2/yr]
-        'biogenic_fraction': 0, # [-] 
-        'residual_CO2': mCO2_residual*FLH/1000, # [ktCO2/yr] count only fossil residuals
+        'captured_CO2f': mCO2_captured*FLH/1000, # [ktCO2/yr]
+        'captured_CO2bio': 0, # [ktCO2/yr] 
+        'residual_CO2f': mCO2_residual*FLH/1000, # [ktCO2/yr] count only fossil residuals
         'FLH': FLH, # [h/y]
         'CAPEX_4OAK': CAPEX_4OAK, # [EUR/tCO2]
         'CAPEX_FOAK': CAPEX_FOAK, # [EUR/tCO2]
@@ -251,6 +262,7 @@ csteam = 4.1 # [EUR/tsteam @130C] [Ali]
 evaporation_enthalpy = 2257 # [MJ/tsteam]
 elc_eff = 0.33 # [-] efficiency of electrified reboiler
 cbio = 65 # [EUR/MWh biomass]
+emission_factor_bio = 0.3318 # tCO2/MWhfuel biomass [NZIP, 2020]
 
 refineries = largest_plants[(largest_plants['Sector'] == 'Processing & distribution of petroleum products')].copy()
 scunthorpe_stacks = largest_plants[largest_plants['Site'].str.startswith('Scunthorpe', na=False)].copy()
@@ -283,19 +295,20 @@ for idx, plant in industrial_plants.iterrows():
             xCO2 = stack_data[1]  # [-]
             mCO2 = annual_CO2 / FLH  # [tCO2/h]
 
+            mCO2f_captured, mCO2bio_captured, mCO2f_residual, OPEXE, Qfuel_tot = energy_supply(mCO2, capture_rate, FLH, qreb, pcompr, qsteam, qelc, qchp, csteam, elc_eff, cbio, celc, emission_factor_bio,evaporation_enthalpy=2257)
+            mCO2 = mCO2f_captured + mCO2bio_captured
+
             CAPEX = approximate_CAPEX(mCO2, xCO2, CEPCI_2025, CEPCI_2023=798.7, capture_rate=0.90, NETL=5.509) # [MEUR] note the capture rate inconsistency
             levelized_CAPEX = levelize_MEUR(CAPEX, annual_CO2, capture_rate=capture_rate, discount_rate=discount_rate, lifetime=lifetime) # [EUR/tCO2]
             CAPEX_4OAK = levelized_CAPEX # [EUR/tCO2]
             CAPEX_FOAK = FOAK * CAPEX_4OAK # [EUR/tCO2]
 
-            mCO2_captured, biogenic_fraction, mCO2_residual, OPEXE, CAPEX_CHP = energy_supply(mCO2, capture_rate, FLH, qreb, qsteam, qelc, qchp, csteam, elc_eff, cbio, celc, evaporation_enthalpy=2257)
-            
             results.append({
                 'site-stack': plant['Site'] + '-' + stack_name,
                 'annual_CO2': annual_CO2/1000, # [ktCO2/yr]
-                'captured_CO2': mCO2_captured*FLH/1000, # [ktCO2/yr]
-                'biogenic_fraction': biogenic_fraction, # [-] 
-                'residual_CO2': mCO2_residual*FLH/1000, # [ktCO2/yr] count only fossil residuals
+                'captured_CO2f': mCO2f_captured*FLH/1000, # [ktCO2/yr]
+                'captured_CO2bio': mCO2bio_captured*FLH/1000, # [ktCO2/yr] 
+                'residual_CO2f': mCO2f_residual*FLH/1000, # [ktCO2/yr] count only fossil residuals
                 'FLH': FLH, # [h/y]
                 'CAPEX_4OAK': CAPEX_4OAK, # [EUR/tCO2]
                 'CAPEX_FOAK': CAPEX_FOAK, # [EUR/tCO2]
@@ -320,19 +333,20 @@ for idx, plant in industrial_plants.iterrows():
             xCO2 = 0.15  
         mCO2 = annual_CO2 / FLH  # [tCO2/h]
         
+        mCO2f_captured, mCO2bio_captured, mCO2f_residual, OPEXE, Qfuel_tot = energy_supply(mCO2, capture_rate, FLH, qreb, pcompr, qsteam, qelc, qchp, csteam, elc_eff, cbio, celc, emission_factor_bio,evaporation_enthalpy=2257)
+        mCO2 = mCO2f_captured + mCO2bio_captured
+
         CAPEX = approximate_CAPEX(mCO2, xCO2, CEPCI_2025, CEPCI_2023=798.7, capture_rate=0.90, NETL=5.509) # [MEUR] note the capture rate inconsistency
         levelized_CAPEX = levelize_MEUR(CAPEX, annual_CO2, capture_rate=capture_rate, discount_rate=discount_rate, lifetime=lifetime) # [EUR/tCO2]
         CAPEX_4OAK = levelized_CAPEX # [EUR/tCO2]
         CAPEX_FOAK = FOAK * CAPEX_4OAK # [EUR/tCO2]
-
-        mCO2_captured, biogenic_fraction, mCO2_residual, OPEXE, CAPEX_CHP = energy_supply(mCO2, capture_rate, FLH, qreb, qsteam, qelc, qchp, csteam, elc_eff, cbio, celc, evaporation_enthalpy=2257)
-            
+ 
         results.append({
             'site-stack': plant['Site'] + '-' + stack_name,
             'annual_CO2': annual_CO2/1000, # [ktCO2/yr]
-            'captured_CO2': mCO2_captured*FLH/1000, # [ktCO2/yr]
-            'biogenic_fraction': biogenic_fraction, # [-] 
-            'residual_CO2': mCO2_residual*FLH/1000, # [ktCO2/yr] count only fossil residuals
+            'captured_CO2f': mCO2f_captured*FLH/1000, # [ktCO2/yr]
+            'captured_CO2bio': mCO2bio_captured*FLH/1000, # [ktCO2/yr] 
+            'residual_CO2f': mCO2f_residual*FLH/1000, # [ktCO2/yr] count only fossil residuals
             'FLH': FLH, # [h/y]
             'CAPEX_4OAK': CAPEX_4OAK, # [EUR/tCO2]
             'CAPEX_FOAK': CAPEX_FOAK, # [EUR/tCO2]
@@ -347,19 +361,20 @@ for idx, plant in industrial_plants.iterrows():
         xCO2 = 0.20  # [-]
         mCO2 = annual_CO2 / FLH  # [tCO2/h]
         
+        mCO2f_captured, mCO2bio_captured, mCO2f_residual, OPEXE, Qfuel_tot = energy_supply(mCO2, capture_rate, FLH, qreb, pcompr, qsteam, qelc, qchp, csteam, elc_eff, cbio, celc, emission_factor_bio,evaporation_enthalpy=2257)
+        mCO2 = mCO2f_captured + mCO2bio_captured
+
         CAPEX = approximate_CAPEX(mCO2, xCO2, CEPCI_2025, CEPCI_2023=798.7, capture_rate=0.90, NETL=5.509) # [MEUR] note the capture rate inconsistency
         levelized_CAPEX = levelize_MEUR(CAPEX, annual_CO2, capture_rate=capture_rate, discount_rate=discount_rate, lifetime=lifetime) # [EUR/tCO2]
         CAPEX_4OAK = levelized_CAPEX # [EUR/tCO2]
         CAPEX_FOAK = FOAK * CAPEX_4OAK # [EUR/tCO2]
         
-        mCO2_captured, biogenic_fraction, mCO2_residual, OPEXE, CAPEX_CHP = energy_supply(mCO2, capture_rate, FLH, qreb, qsteam, qelc, qchp, csteam, elc_eff, cbio, celc, evaporation_enthalpy=2257)
-
         results.append({
             'site-stack': plant['Site'] + '-' + 'cement',
             'annual_CO2': annual_CO2/1000, # [ktCO2/yr]
-            'captured_CO2': mCO2_captured*FLH/1000, # [ktCO2/yr]
-            'biogenic_fraction': biogenic_fraction, # [-] 
-            'residual_CO2': mCO2_residual*FLH/1000, # [ktCO2/yr] count only fossil residuals
+            'captured_CO2f': mCO2f_captured*FLH/1000, # [ktCO2/yr]
+            'captured_CO2bio': mCO2bio_captured*FLH/1000, # [ktCO2/yr] 
+            'residual_CO2f': mCO2f_residual*FLH/1000, # [ktCO2/yr] count only fossil residuals
             'FLH': FLH, # [h/y]
             'CAPEX_4OAK': CAPEX_4OAK, # [EUR/tCO2]
             'CAPEX_FOAK': CAPEX_FOAK, # [EUR/tCO2]
@@ -397,8 +412,8 @@ for idx, plant in w2e_plants.iterrows():
     cost_steam = csteam / evaporation_enthalpy # [EUR/MJ]
     Qsteam = Qreb * FLH * 3600 # [MJ/y] assuming all is covered by recovered steam
     OPEX_steam = cost_steam * Qsteam # [EUR/y]        
-    OPEX_steam = OPEX_steam / (plant['CO2']*capture_rate) # [EUR/tCO2]
-    OPEXE = OPEX_steam
+    OPEXE = OPEX_steam / (plant['CO2']*capture_rate) # [EUR/tCO2]
+    OPEXE += pcompr * 1000/3600*celc # [MJ/kgCO2 => MWh/tCO2 => EUR/tCO2] power compression penalty from Tharun plant and system paper
 
     # Dummy transport costs
     transport_cost = 30 # [EUR/tCO2] NOTE: must calculate later using geographic distance
@@ -407,9 +422,9 @@ for idx, plant in w2e_plants.iterrows():
     results.append({
         'site-stack': plant['Name'] + '-' + 'W2E',
         'annual_CO2': plant['CO2']/1000, # [ktCO2/yr]
-        'captured_CO2': mCO2*capture_rate*FLH/1000, # [ktCO2/yr]
-        'biogenic_fraction': (1-fossil), # [-] 
-        'residual_CO2': mCO2*(1-capture_rate)*fossil*FLH/1000, # [ktCO2/yr] count only fossil residuals
+        'captured_CO2f': mCO2*capture_rate*FLH/1000 * fossil, # [ktCO2/yr]
+        'captured_CO2bio': mCO2*capture_rate*FLH/1000 * (1-fossil), # [ktCO2/yr] 
+        'residual_CO2f': mCO2*(1-capture_rate)*fossil*FLH/1000, # [ktCO2/yr] count only fossil residuals
         'FLH': FLH, # [h/y]
         'CAPEX_4OAK': CAPEX_4OAK, # [EUR/tCO2]
         'CAPEX_FOAK': CAPEX_FOAK, # [EUR/tCO2]
@@ -424,7 +439,6 @@ Drax_CO2 = 11500000 # [tCO2/yr]
 Pinstalled = 2580 # [MW]
 eta_P = 33/(1-0.24) # ~44% efficiency before a CCS retrofit, which leads to 33%
 Qfuel = Pinstalled / (eta_P/100) # [MWfuel]
-emission_factor = 0.3318 # tCO2/MWhfuel [NZIP, 2020]
 FLH = Drax_CO2 / (Qfuel * emission_factor) # [h/y] = tCO2/yr / (tCO2/h)
 
 # CAPEX
@@ -440,6 +454,7 @@ profit_baseline = Qfuel * eta_P/100 * FLH * celc # [EUR/y]
 profit_BECCS = Qfuel * eta_P/100*(1-0.24) * FLH * celc  # [EUR/y]
 difference = profit_baseline - profit_BECCS # [EUR/y]
 OPEXE = difference / (Drax_CO2*capture_rate) # [EUR/tCO2]
+OPEXE += pcompr * 1000/3600*celc # [MJ/kgCO2 => MWh/tCO2 => EUR/tCO2] power compression penalty from Tharun plant and system paper
 
 # Dummy transport costs
 transport_cost = 30 # [EUR/tCO2] NOTE: must calculate later using geographic distance
@@ -448,9 +463,9 @@ transport_cost = transport_cost * CEPCI_2025 / CEPCI_2023
 results.append({
     'site-stack': 'Drax-BECCS',
     'annual_CO2': Drax_CO2/1000, # [ktCO2/yr]
-    'captured_CO2': mCO2*capture_rate*FLH/1000, # [ktCO2/yr]
-    'biogenic_fraction': 1, # [-] 
-    'residual_CO2': 0, # [ktCO2/yr] count only fossil residuals
+    'captured_CO2f': 0, # [ktCO2/yr]
+    'captured_CO2bio': mCO2*capture_rate*FLH/1000, # [ktCO2/yr] 
+    'residual_CO2f': 0, # [ktCO2/yr] count only fossil residuals
     'FLH': FLH, # [h/y]
     'CAPEX_4OAK': CAPEX_4OAK, # [EUR/tCO2]
     'CAPEX_FOAK': CAPEX_FOAK, # [EUR/tCO2]
@@ -460,7 +475,7 @@ results.append({
     'total_FOAK': CAPEX_FOAK+OPEXE+transport_cost, # [EUR/tCO2]
 })
 
-# For every item in results, add 44 SEK/tCO2 for amine makeup to the total_4OAK and total_FOAK
+# For every item in results, add 44 SEK/tCO2 for amine makeup to the total_4OAK and total_FOAK. Assumption from Ramboll.
 for result in results:
     result['total_4OAK'] += 44 / 10.96 # [SEK/tCO2] to [EUR/tCO2]
     result['total_FOAK'] += 44 / 10.96
@@ -474,16 +489,16 @@ if results:
     results_df = results_df.sort_values('total_4OAK')
     
     # Calculate cumulative captured CO2
-    results_df['cumulative_captured_CO2'] = results_df['captured_CO2'].cumsum()
+    results_df['cumulative_captured_CO2f'] = results_df['captured_CO2f'].cumsum()
 
     # Save MACC curve data to CSV files
     macc_4oak_df = pd.DataFrame({
         'site-stack': results_df['site-stack'],
         'ktCO2_yr_baseline': results_df['annual_CO2'],
-        'ktCO2_yr_captured': results_df['captured_CO2'],
-        'ktCO2_yr_cumulative': results_df['cumulative_captured_CO2'],
-        'biogenic_fraction': results_df['biogenic_fraction'],
-        'ktCO2_yr_residual': results_df['residual_CO2'],
+        'ktCO2_yr_captured': results_df['captured_CO2f'],
+        'ktCO2_yr_cumulative': results_df['cumulative_captured_CO2f'],
+        'ktCO2_yr_bio': results_df['captured_CO2bio'],
+        'ktCO2_yr_residual': results_df['residual_CO2f'],
         'EUR/tCO2': results_df['total_4OAK']
     })
     macc_4oak_df.to_csv('macc_4oak.csv', index=False)
@@ -497,7 +512,7 @@ if results:
     
     for i in range(len(results_df) - 1):
         # Each plant is a horizontal line from current to next cumulative capacity
-        x_steps.extend([results_df['cumulative_captured_CO2'].iloc[i], results_df['cumulative_captured_CO2'].iloc[i+1]])
+        x_steps.extend([results_df['cumulative_captured_CO2f'].iloc[i], results_df['cumulative_captured_CO2f'].iloc[i+1]])
         y_steps.extend([results_df['total_4OAK'].iloc[i+1], results_df['total_4OAK'].iloc[i+1]])  # Use the cost of the current plant
     
     plt.plot(x_steps, y_steps, 'b-', linewidth=3, color='blue', alpha=0.7)
@@ -515,7 +530,7 @@ if results:
     plt.gca().xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:.0f}'))
     
     # Add some statistics
-    total_captured = results_df['cumulative_captured_CO2'].iloc[-1]
+    total_captured = results_df['cumulative_captured_CO2f'].iloc[-1]
     avg_cost = results_df['total_4OAK'].mean()
     min_cost = results_df['total_4OAK'].min()
     max_cost = results_df['total_4OAK'].max()
@@ -536,15 +551,15 @@ if results:
     # Create FOAK MACC curve
     # Sort by FOAK cost for proper MACC ordering
     results_df_foak = results_df.sort_values('total_FOAK').copy()
-    results_df_foak['cumulative_captured_CO2_foak'] = results_df_foak['captured_CO2'].cumsum()
+    results_df_foak['cumulative_captured_CO2f_foak'] = results_df_foak['captured_CO2f'].cumsum()
 
     macc_foak_df = pd.DataFrame({
         'site-stack': results_df_foak['site-stack'],
         'ktCO2_yr_baseline': results_df_foak['annual_CO2'],
-        'ktCO2_yr_captured': results_df_foak['captured_CO2'],
-        'ktCO2_yr_cumulative': results_df_foak['cumulative_captured_CO2_foak'],
-        'biogenic_fraction': results_df_foak['biogenic_fraction'],
-        'ktCO2_yr_residual': results_df_foak['residual_CO2'],
+        'ktCO2_yr_captured': results_df_foak['captured_CO2f'],
+        'ktCO2_yr_cumulative': results_df_foak['cumulative_captured_CO2f_foak'],
+        'ktCO2_yr_bio': results_df_foak['captured_CO2bio'],
+        'ktCO2_yr_residual': results_df_foak['residual_CO2f'],
         'EUR/tCO2': results_df_foak['total_FOAK']
     })
     macc_foak_df.to_csv('macc_foak.csv', index=False)
@@ -557,7 +572,7 @@ if results:
     
     for i in range(len(results_df_foak) - 1):
         # Each plant is a horizontal line from current to next cumulative capacity
-        x_steps_foak.extend([results_df_foak['cumulative_captured_CO2_foak'].iloc[i], results_df_foak['cumulative_captured_CO2_foak'].iloc[i+1]])
+        x_steps_foak.extend([results_df_foak['cumulative_captured_CO2f_foak'].iloc[i], results_df_foak['cumulative_captured_CO2f_foak'].iloc[i+1]])
         y_steps_foak.extend([results_df_foak['total_FOAK'].iloc[i+1], results_df_foak['total_FOAK'].iloc[i+1]])  # Use the cost of the current plant
     
     plt.plot(x_steps_foak, y_steps_foak, 'r-', linewidth=3, color='red', alpha=0.7)
@@ -575,7 +590,7 @@ if results:
     plt.gca().xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:.0f}'))
     
     # Add FOAK statistics
-    total_captured_foak = results_df_foak['cumulative_captured_CO2_foak'].iloc[-1]
+    total_captured_foak = results_df_foak['cumulative_captured_CO2f_foak'].iloc[-1]
     avg_cost_foak = results_df_foak['total_FOAK'].mean()
     min_cost_foak = results_df_foak['total_FOAK'].min()
     max_cost_foak = results_df_foak['total_FOAK'].max()
@@ -595,14 +610,14 @@ if results:
 
 # Create and display results table
 if results:
-    print(f"{'Site-Stack':<40} | {'annual_CO2':<8} | {'captured_CO2':<8} | {'biogenic_fraction':<8} | {'residual_CO2':<8} | {'FLH':<6} | {'CAPEX_4OAK':<8} | {'CAPEX_FOAK':<8} | {'OPEXE':<8} | {'transtorage':<8} | {'total_4OAK':<8} | {'total_FOAK':<8}")
+    print(f"{'Site-Stack':<40} | {'annual_CO2':<8} | {'captured_CO2f':<8} | {'captured_CO2bio':<8} | {'residual_CO2f':<8} | {'FLH':<6} | {'CAPEX_4OAK':<8} | {'CAPEX_FOAK':<8} | {'OPEXE':<8} | {'transtorage':<8} | {'total_4OAK':<8} | {'total_FOAK':<8}")
     print(f"{'':<40} | {'ktCO2/yr':<8} | {'ktCO2/yr':<8} | {' - ':<8} | {'ktCO2/yr':<8} | {'h/y':<6} | {'EUR/tCO2':<8} | {'EUR/tCO2':<8} | {'EUR/tCO2':<8} | {'EUR/tCO2':<8} | {'EUR/tCO2':<8} | {'EUR/tCO2':<8}")
     print("-" * 150)
     for result in results:
-        print(f"{result['site-stack']:<40} | {result['annual_CO2']:>8.1f} | {result['captured_CO2']:>8.1f} | {result['biogenic_fraction']:>8.1f} | {result['residual_CO2']:>8.1f} | {result['FLH']:>6.0f} | {result['CAPEX_4OAK']:>8.1f} | {result['CAPEX_FOAK']:>8.1f} | {result['OPEXE']:>8.1f} | {result['transtorage']:>8.1f} | {result['total_4OAK']:>8.1f} | {result['total_FOAK']:>8.1f}")
+        print(f"{result['site-stack']:<40} | {result['annual_CO2']:>8.1f} | {result['captured_CO2f']:>8.1f} | {result['captured_CO2bio']:>8.1f} | {result['residual_CO2f']:>8.1f} | {result['FLH']:>6.0f} | {result['CAPEX_4OAK']:>8.1f} | {result['CAPEX_FOAK']:>8.1f} | {result['OPEXE']:>8.1f} | {result['transtorage']:>8.1f} | {result['total_4OAK']:>8.1f} | {result['total_FOAK']:>8.1f}")
     print("-" * 150)
     print(f"Total CO2 emissions: {sum([r['annual_CO2'] for r in results]):,.1f} ktCO2/y")
-    print(f"Total captured CO2: {sum([r['captured_CO2'] for r in results]):,.1f} ktCO2/y")
+    print(f"Total captured CO2: {sum([r['captured_CO2f'] for r in results]):,.1f} ktCO2/y")
 
 print(len(results))
 # Assume CO2 emissions based on DESNZ projections and CCC scenario
@@ -619,3 +634,6 @@ plt.show()
 print("TODO: Move the Grangemouth Power Station from the refineries to the power sector")
 print("TODO: Remove the duplicate Fawley refinery (maybe also move to power sector?)")
 print("TODO: Also capture the CO2 from biomass CHP - add to captured volumes and CAPEX!")
+
+print("\n Should probably NOT capture the extra bio CO2 from industries - its complicated and increases costs... MAYBE add it as an uncertainty lever later!")
+print("Deconflicting Fossil Fuel Abatement, Industrial Competitiveness, and Consumer Costs through a UK Carbon Takeback Obligation")
