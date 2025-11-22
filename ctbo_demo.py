@@ -17,6 +17,7 @@ macc_foak["invested"] = [False] * len(macc_foak)
 print(macc_4oak.head())
 print(macc_foak.head())
 
+plt.figure(figsize=(10, 6))
 plt.plot(macc_4oak['ktCO2_yr_cumulative'], macc_4oak['EUR/tCO2'], color='blue')
 plt.plot(macc_foak['ktCO2_yr_cumulative'], macc_foak['EUR/tCO2'], color='red')
 plt.xlabel('Cumulative Captured CO2 (ktCO2/yr)')
@@ -41,10 +42,10 @@ coal = 17 # [MtCO2/yr]
 oil = 140 # [MtCO2/yr]
 gas = 127 # [MtCO2/yr]
 carbon = (coal + oil + gas)*1000 # [ktCO2/yr]
-print("Total carbon emissions in 2023", round(carbon, 0), "ktCO2/yr")
-point_sources = np.sum(macc_4oak['ktCO2_yr_baseline']) # [ktCO2/yr]
+print("Total fossil emissions in 2023", round(carbon, 0), "ktCO2/yr")
+point_sources = np.sum(macc_4oak['ktCO2f_yr_baseline']) # [ktCO2/yr]
 diffuse = carbon - point_sources # [ktCO2/yr] remaining emissions
-print("Diffuse emissions in 2023:", round(diffuse, 0), "ktCO2/yr")
+print("Diffuse fossil emissions in 2023:", round(diffuse, 0), "ktCO2/yr")
 
 # Decrease diffuse from start_fraction to end_fraction by target_year
 start_year = 2025
@@ -65,7 +66,7 @@ diffuse_df = pd.DataFrame({
     'diffuse_ktCO2_yr': diffuse_values
 })
 
-print("\nDiffuse Emissions by Year:")
+print("\nDiffuse fossil emissions by year:")
 print(diffuse_df)
 
 # Calculate ETS trajectories
@@ -120,23 +121,24 @@ for year in years:
         if not plant['invested'] and plant['EUR/tCO2'] < ets_price:
             macc_foak.loc[idx, 'invested'] = True
             macc_foak.loc[idx, 'year_invested'] = year
-            print(f"// Incentivize plant {plant['site-stack']} in {year} and capture {plant['ktCO2_yr_captured']} ktCO2/yr since ({plant['EUR/tCO2']} < {ets_price}) EUR/tCO2")
+            print(f"// Incentivize plant {plant['site-stack']} in {year} and capture {plant['ktCO2f_yr_captured']} ktCO2f/yr and {plant['ktCO2bio_yr_captured']} ktCO2bio/yr since ({plant['EUR/tCO2']} < {ets_price}) EUR/tCO2")
         
     # Summarize emissions: baseline from non-invested plants + residuals from invested plants
-    baseline_emissions = macc_foak['ktCO2_yr_baseline'].where(~macc_foak['invested'], 0)
-    residual_emissions = macc_foak['ktCO2_yr_residual'].where(macc_foak['invested'], 0)
+    baseline_emissions = macc_foak['ktCO2f_yr_baseline'].where(~macc_foak['invested'], 0)
+    residual_emissions = macc_foak['ktCO2f_yr_residual'].where(macc_foak['invested'], 0)
     plant_emissions = baseline_emissions.sum() + residual_emissions.sum()
     diffuse_emissions = diffuse_dict[year]  # Get diffuse emissions for this year
     total_emissions = plant_emissions + diffuse_emissions
-    print(f"Total emissions in {year}: {total_emissions:.1f} ktCO2/yr (baseline: {baseline_emissions.sum():.1f}, residual: {residual_emissions.sum():.1f}, diffuse: {diffuse_emissions:.1f})")
+    print(f"Total fossil emissions in {year}: {total_emissions:.1f} ktCO2f/yr (baseline: {baseline_emissions.sum():.1f}, residual: {residual_emissions.sum():.1f}, diffuse: {diffuse_emissions:.1f})")
 
     # Get the CTBO fraction for this year
-    supplied_CO2 = macc_foak['ktCO2_yr_baseline'].sum() + diffuse_emissions # [ktCO2/yr]
+    supplied_CO2 = macc_foak['ktCO2f_yr_baseline'].sum() + diffuse_emissions # [ktCO2/yr]
     ctbo_fraction = ctbo_dict[year]/100
     ctbo_mandate = supplied_CO2 * ctbo_fraction
 
-    point_capacity = macc_foak['ktCO2_yr_captured'].where(macc_foak['invested'], 0)
-    point_capacity = point_capacity.sum()
+    point_fossil_capacity = macc_foak['ktCO2f_yr_captured'].where(macc_foak['invested'], 0)
+    point_bio_capacity = macc_foak['ktCO2bio_yr_captured'].where(macc_foak['invested'], 0)
+    point_capacity = point_fossil_capacity.sum() + point_bio_capacity.sum()
     print(f"Storage capacity in {year} is:  {point_capacity:.1f} ktCO2/yr")
 
     if CTBO:
@@ -149,8 +151,8 @@ for year in years:
             if not plant['invested']:
                 macc_foak.loc[i, 'invested'] = True
                 macc_foak.loc[i, 'year_invested'] = year
-                print(f"// Mandate plant {plant['site-stack']} in {year} and capture {plant['ktCO2_yr_captured']} ktCO2/yr with a cost of {plant['EUR/tCO2']} EUR/tCO2")
-                point_capacity = point_capacity + plant['ktCO2_yr_captured'] # NOTE: represents point source storage capacity
+                print(f"// Mandate plant {plant['site-stack']} in {year} and capture {plant['ktCO2f_yr_captured']} ktCO2f/yr and {plant['ktCO2bio_yr_captured']} ktCO2bio/yr with a cost of {plant['EUR/tCO2']} EUR/tCO2")
+                point_capacity = point_capacity + plant['ktCO2f_yr_captured'] + plant['ktCO2bio_yr_captured'] # NOTE: represents point source storage capacity
                 missing_capacity = ctbo_mandate - point_capacity
             i += 1
         
@@ -172,7 +174,7 @@ for year in years:
             marginal_cost = 450 # DACCS becomes marginal technology
             CSU_cost = (marginal_cost - ets_price) 
             print(f"===>Adding DACCS capacity which adds to CTBO costs")
-            CTBO_cost = CSU_cost * (point_capacity + DACCS_capacity) # [EUR/tCO2 * ktCO2/yr = kEUR/yr] #NOTE I think this gets added twice in the pure DACCS cases...
+            CTBO_cost = CSU_cost * (point_capacity + DACCS_capacity) # [EUR/tCO2 * ktCO2/yr = kEUR/yr] 
 
         CTBO_cost_lev = CTBO_cost / supplied_CO2 # [EUR/tCO2] 
 

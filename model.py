@@ -123,7 +123,7 @@ def levelize_MEUR(CAPEX, annual_CO2, capture_rate=0.95, discount_rate=0.07, life
     levelized_CAPEX = annualized_CAPEX / (annual_CO2*capture_rate) # [EUR/tCO2]
     return levelized_CAPEX
     
-def energy_supply(mCO2, capture_rate, FLH, qreb, pcompr, qsteam, qelc, qchp, csteam, elc_eff, cbio, celc, emission_factor, evaporation_enthalpy=2257):
+def energy_supply(mCO2, capture_rate, FLH, qreb, pcompr, qsteam, qelc, qchp, csteam, elc_eff, cbio, celc, emission_factor, evaporation_enthalpy=2257, maximize_beccs=False):
                 # Estimate energy penalty
                 mCO2f_captured = mCO2 * capture_rate # [tCO2/h] 
                 mCO2f_residual = mCO2 * (1-capture_rate) # [tCO2/h] 
@@ -148,20 +148,18 @@ def energy_supply(mCO2, capture_rate, FLH, qreb, pcompr, qsteam, qelc, qchp, cst
                 OPEX_elec = OPEX_elec / (annual_CO2*capture_rate) # [EUR/tCO2]
 
                 # Biomass CHP OPEX (simplify: all CHP goes to heat, but we capture the self-generated CO2) 
-                Qfuel_tot = Qchp / (1 - capture_rate*emission_factor*(qreb/3600*1000)) # Set up this equation for the heat part, where Qfuel_heat_tot=qchp*Qreb+Qselfcapture
-                mCO2bio_captured = Qfuel_tot*emission_factor*capture_rate # [tCO2/h]
-                
-                Qfuel_tot = Qfuel_tot * FLH # [MWh/y]
-                OPEX_chp = cbio * Qfuel_tot # [EUR/y]
+                if maximize_beccs:
+                    Qfuel = Qchp / (1 - capture_rate*emission_factor*(qreb/3600*1000)) # Set up this equation for the heat part, where Qfuel_heat_tot=qchp*Qreb+Qselfcapture
+                    OPEX_chp = cbio * Qfuel * FLH # [EUR/y]
+                    mCO2bio_captured = Qfuel*emission_factor*capture_rate # [tCO2/h]
+                else:
+                    Qfuel = Qchp # [MW]
+                    OPEX_chp = cbio * Qfuel * FLH # [EUR/y]
+                    mCO2bio_captured = 0
                 OPEX_chp = OPEX_chp / (annual_CO2*capture_rate) # [EUR/tCO2]
-                print("OPEXchp=",OPEX_chp)
-
-                print("mCO2bio_captured=",mCO2bio_captured)
-                print("mCO2f_captured=",mCO2f_captured)
-                print("mCO2bio_captured/mCO2f_captured=",mCO2bio_captured/mCO2f_captured)
 
                 OPEXE = OPEX_steam + OPEX_elec + OPEX_chp
-                return mCO2f_captured, mCO2bio_captured, mCO2f_residual, OPEXE, Qfuel_tot # Includes biogenic captured CO2 and Qchp for CHPCAPEX
+                return mCO2f_captured, mCO2bio_captured, mCO2f_residual, OPEXE, Qfuel # Includes biogenic captured CO2 and Qchp for CHPCAPEX
 
 # Prepare plant data
 pounds_to_EUR = 1.15
@@ -241,6 +239,7 @@ for idx, plant in power_producers.iterrows():
     results.append({
         'site-stack': plant['Site'] + '-' + 'CCGT',
         'annual_CO2': plant['CO2']/1000, # [ktCO2/yr]
+        'biogenic': 0, # [-] fraction of baseline
         'captured_CO2f': mCO2_captured*FLH/1000, # [ktCO2/yr]
         'captured_CO2bio': 0, # [ktCO2/yr] 
         'residual_CO2f': mCO2_residual*FLH/1000, # [ktCO2/yr] count only fossil residuals
@@ -295,10 +294,10 @@ for idx, plant in industrial_plants.iterrows():
             xCO2 = stack_data[1]  # [-]
             mCO2 = annual_CO2 / FLH  # [tCO2/h]
 
-            mCO2f_captured, mCO2bio_captured, mCO2f_residual, OPEXE, Qfuel_tot = energy_supply(mCO2, capture_rate, FLH, qreb, pcompr, qsteam, qelc, qchp, csteam, elc_eff, cbio, celc, emission_factor_bio,evaporation_enthalpy=2257)
+            mCO2f_captured, mCO2bio_captured, mCO2f_residual, OPEXE, Qfuel_tot = energy_supply(mCO2, capture_rate, FLH, qreb, pcompr, qsteam, qelc, qchp, csteam, elc_eff, cbio, celc, emission_factor_bio, evaporation_enthalpy=2257)
             mCO2 = mCO2f_captured + mCO2bio_captured
 
-            CAPEX = approximate_CAPEX(mCO2, xCO2, CEPCI_2025, CEPCI_2023=798.7, capture_rate=0.90, NETL=5.509) # [MEUR] note the capture rate inconsistency
+            CAPEX = approximate_CAPEX(mCO2, xCO2, CEPCI_2025, CEPCI_2023=798.7, capture_rate=0.90, NETL=5.509) # [MEUR] NOTE the capture rate/CO2%(if biomass chp) inconsistency
             levelized_CAPEX = levelize_MEUR(CAPEX, annual_CO2, capture_rate=capture_rate, discount_rate=discount_rate, lifetime=lifetime) # [EUR/tCO2]
             CAPEX_4OAK = levelized_CAPEX # [EUR/tCO2]
             CAPEX_FOAK = FOAK * CAPEX_4OAK # [EUR/tCO2]
@@ -306,6 +305,7 @@ for idx, plant in industrial_plants.iterrows():
             results.append({
                 'site-stack': plant['Site'] + '-' + stack_name,
                 'annual_CO2': annual_CO2/1000, # [ktCO2/yr]
+                'biogenic': 0, # [-] fraction of baseline
                 'captured_CO2f': mCO2f_captured*FLH/1000, # [ktCO2/yr]
                 'captured_CO2bio': mCO2bio_captured*FLH/1000, # [ktCO2/yr] 
                 'residual_CO2f': mCO2f_residual*FLH/1000, # [ktCO2/yr] count only fossil residuals
@@ -344,6 +344,7 @@ for idx, plant in industrial_plants.iterrows():
         results.append({
             'site-stack': plant['Site'] + '-' + stack_name,
             'annual_CO2': annual_CO2/1000, # [ktCO2/yr]
+            'biogenic': 0, # [-] fraction of baseline
             'captured_CO2f': mCO2f_captured*FLH/1000, # [ktCO2/yr]
             'captured_CO2bio': mCO2bio_captured*FLH/1000, # [ktCO2/yr] 
             'residual_CO2f': mCO2f_residual*FLH/1000, # [ktCO2/yr] count only fossil residuals
@@ -372,6 +373,7 @@ for idx, plant in industrial_plants.iterrows():
         results.append({
             'site-stack': plant['Site'] + '-' + 'cement',
             'annual_CO2': annual_CO2/1000, # [ktCO2/yr]
+            'biogenic': 0, # [-] fraction of baseline
             'captured_CO2f': mCO2f_captured*FLH/1000, # [ktCO2/yr]
             'captured_CO2bio': mCO2bio_captured*FLH/1000, # [ktCO2/yr] 
             'residual_CO2f': mCO2f_residual*FLH/1000, # [ktCO2/yr] count only fossil residuals
@@ -422,6 +424,7 @@ for idx, plant in w2e_plants.iterrows():
     results.append({
         'site-stack': plant['Name'] + '-' + 'W2E',
         'annual_CO2': plant['CO2']/1000, # [ktCO2/yr]
+        'biogenic': (1-fossil), # [-] fraction of baseline
         'captured_CO2f': mCO2*capture_rate*FLH/1000 * fossil, # [ktCO2/yr]
         'captured_CO2bio': mCO2*capture_rate*FLH/1000 * (1-fossil), # [ktCO2/yr] 
         'residual_CO2f': mCO2*(1-capture_rate)*fossil*FLH/1000, # [ktCO2/yr] count only fossil residuals
@@ -463,6 +466,7 @@ transport_cost = transport_cost * CEPCI_2025 / CEPCI_2023
 results.append({
     'site-stack': 'Drax-BECCS',
     'annual_CO2': Drax_CO2/1000, # [ktCO2/yr]
+    'biogenic': 1, # [-] fraction of baseline
     'captured_CO2f': 0, # [ktCO2/yr]
     'captured_CO2bio': mCO2*capture_rate*FLH/1000, # [ktCO2/yr] 
     'residual_CO2f': 0, # [ktCO2/yr] count only fossil residuals
@@ -489,16 +493,18 @@ if results:
     results_df = results_df.sort_values('total_4OAK')
     
     # Calculate cumulative captured CO2
-    results_df['cumulative_captured_CO2f'] = results_df['captured_CO2f'].cumsum()
+    results_df['captured_total'] = results_df['captured_CO2f'] + results_df['captured_CO2bio']
+    results_df['cumulative_captured'] = results_df['captured_total'].cumsum()
 
     # Save MACC curve data to CSV files
     macc_4oak_df = pd.DataFrame({
         'site-stack': results_df['site-stack'],
-        'ktCO2_yr_baseline': results_df['annual_CO2'],
-        'ktCO2_yr_captured': results_df['captured_CO2f'],
-        'ktCO2_yr_cumulative': results_df['cumulative_captured_CO2f'],
-        'ktCO2_yr_bio': results_df['captured_CO2bio'],
-        'ktCO2_yr_residual': results_df['residual_CO2f'],
+        'ktCO2f_yr_baseline': results_df['annual_CO2']*(1-results_df['biogenic']),
+        'ktCO2bio_yr_baseline': results_df['annual_CO2']*results_df['biogenic'],
+        'ktCO2f_yr_captured': results_df['captured_CO2f'],
+        'ktCO2bio_yr_captured': results_df['captured_CO2bio'],
+        'ktCO2_yr_cumulative': results_df['cumulative_captured'],
+        'ktCO2f_yr_residual': results_df['residual_CO2f'],
         'EUR/tCO2': results_df['total_4OAK']
     })
     macc_4oak_df.to_csv('macc_4oak.csv', index=False)
@@ -512,7 +518,7 @@ if results:
     
     for i in range(len(results_df) - 1):
         # Each plant is a horizontal line from current to next cumulative capacity
-        x_steps.extend([results_df['cumulative_captured_CO2f'].iloc[i], results_df['cumulative_captured_CO2f'].iloc[i+1]])
+        x_steps.extend([results_df['cumulative_captured'].iloc[i], results_df['cumulative_captured'].iloc[i+1]])
         y_steps.extend([results_df['total_4OAK'].iloc[i+1], results_df['total_4OAK'].iloc[i+1]])  # Use the cost of the current plant
     
     plt.plot(x_steps, y_steps, 'b-', linewidth=3, color='blue', alpha=0.7)
@@ -530,7 +536,7 @@ if results:
     plt.gca().xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:.0f}'))
     
     # Add some statistics
-    total_captured = results_df['cumulative_captured_CO2f'].iloc[-1]
+    total_captured = results_df['cumulative_captured'].iloc[-1]
     avg_cost = results_df['total_4OAK'].mean()
     min_cost = results_df['total_4OAK'].min()
     max_cost = results_df['total_4OAK'].max()
@@ -551,15 +557,16 @@ if results:
     # Create FOAK MACC curve
     # Sort by FOAK cost for proper MACC ordering
     results_df_foak = results_df.sort_values('total_FOAK').copy()
-    results_df_foak['cumulative_captured_CO2f_foak'] = results_df_foak['captured_CO2f'].cumsum()
+    results_df_foak['cumulative_captured'] = results_df_foak['captured_total'].cumsum()
 
     macc_foak_df = pd.DataFrame({
         'site-stack': results_df_foak['site-stack'],
-        'ktCO2_yr_baseline': results_df_foak['annual_CO2'],
-        'ktCO2_yr_captured': results_df_foak['captured_CO2f'],
-        'ktCO2_yr_cumulative': results_df_foak['cumulative_captured_CO2f_foak'],
-        'ktCO2_yr_bio': results_df_foak['captured_CO2bio'],
-        'ktCO2_yr_residual': results_df_foak['residual_CO2f'],
+        'ktCO2f_yr_baseline': results_df_foak['annual_CO2']*(1-results_df_foak['biogenic']),
+        'ktCO2bio_yr_baseline': results_df_foak['annual_CO2']*results_df_foak['biogenic'],
+        'ktCO2f_yr_captured': results_df_foak['captured_CO2f'],
+        'ktCO2bio_yr_captured': results_df_foak['captured_CO2bio'],
+        'ktCO2_yr_cumulative': results_df_foak['cumulative_captured'],
+        'ktCO2f_yr_residual': results_df_foak['residual_CO2f'],
         'EUR/tCO2': results_df_foak['total_FOAK']
     })
     macc_foak_df.to_csv('macc_foak.csv', index=False)
@@ -572,7 +579,7 @@ if results:
     
     for i in range(len(results_df_foak) - 1):
         # Each plant is a horizontal line from current to next cumulative capacity
-        x_steps_foak.extend([results_df_foak['cumulative_captured_CO2f_foak'].iloc[i], results_df_foak['cumulative_captured_CO2f_foak'].iloc[i+1]])
+        x_steps_foak.extend([results_df_foak['cumulative_captured'].iloc[i], results_df_foak['cumulative_captured'].iloc[i+1]])
         y_steps_foak.extend([results_df_foak['total_FOAK'].iloc[i+1], results_df_foak['total_FOAK'].iloc[i+1]])  # Use the cost of the current plant
     
     plt.plot(x_steps_foak, y_steps_foak, 'r-', linewidth=3, color='red', alpha=0.7)
@@ -590,7 +597,7 @@ if results:
     plt.gca().xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:.0f}'))
     
     # Add FOAK statistics
-    total_captured_foak = results_df_foak['cumulative_captured_CO2f_foak'].iloc[-1]
+    total_captured_foak = results_df_foak['cumulative_captured'].iloc[-1]
     avg_cost_foak = results_df_foak['total_FOAK'].mean()
     min_cost_foak = results_df_foak['total_FOAK'].min()
     max_cost_foak = results_df_foak['total_FOAK'].max()
