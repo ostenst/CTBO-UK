@@ -37,11 +37,14 @@ ctbo = pd.DataFrame({
     'ctbo_fraction': ctbo_fraction
 })
 
-# CO2 emissions from IEA UK 2023 data
+
+# CO2 emissions from IEA UK 2023 data. Adjust emissions from site-stacks that end with "-cement"
+cement_emissions = macc_4oak[macc_4oak['site-stack'].str.endswith('-cement')]['ktCO2f_yr_baseline'].sum()
+print("Cement emissions: ", cement_emissions, "ktCO2/yr")
 coal = 17 # [MtCO2/yr]
 oil = 140 # [MtCO2/yr]
 gas = 127 # [MtCO2/yr]
-carbon = (coal + oil + gas)*1000 # [ktCO2/yr]
+carbon = (coal + oil + gas)*1000 + cement_emissions # [ktCO2/yr]
 print("Total fossil emissions in 2023", round(carbon, 0), "ktCO2/yr")
 point_sources = np.sum(macc_4oak['ktCO2f_yr_baseline']) # [ktCO2/yr]
 diffuse = carbon - point_sources # [ktCO2/yr] remaining emissions
@@ -189,6 +192,16 @@ for year in years:
     CTBO_cost_lev_vec.append(CTBO_cost_lev)
     KPI.append(CSU_cost / ets_price)
 
+    if year == 2050:
+        print("2050 supplied CO2: ", supplied_CO2)
+        print("2050 total emissions: ", total_emissions)
+        print("2050 residual emissions: ", residual_emissions.sum())
+        print("2050 ctbo mandate: ", ctbo_mandate)
+        print("2050 point capacity: ", point_capacity)
+        print("2050 point fossil capacity: ", point_fossil_capacity.sum())
+        print("2050 point bio capacity: ", point_bio_capacity.sum())
+        print("2050 DACCS capacity: ", DACCS_capacity)
+
 # Plot results
 plt.figure(figsize=(10, 6))
 plt.plot(years, supplied_CO2_vec, label='Supplied CO2', linewidth=2)
@@ -236,4 +249,4 @@ plt.title('Price Ratio and CTBO Costs Over Time', fontsize=14)
 fig.tight_layout()
 plt.show()
 
-
+print("BUG: CSU costs act weirdly - are negative? - when ETS prices change drastically")

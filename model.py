@@ -176,6 +176,17 @@ for i, (idx, row) in enumerate(largest_plants.iterrows(), 1):
 print("Sum of all point-source fossil emitters: ", round(CO2_fossil*10**-6, 1), " MtCO2/yr")
 print("Sum of top 60 fossil emitters: ", round(largest_plants['CO2'].sum()*10**-6, 1), " MtCO2/yr")
 
+# Move Grangemouth Power Station from petroleum to power sector
+largest_plants.loc[largest_plants['Site'] == 'Grangemouth Power Station', 'Sector'] = 'Major power producers'
+
+# There are two entries called "Fawley Refinery" - add them together
+fawley_mask = largest_plants['Site'] == 'Fawley Refinery'
+if fawley_mask.sum() > 1:  # If there are duplicates
+    fawley_total_co2 = largest_plants.loc[fawley_mask, 'CO2'].sum()
+    first_fawley_idx = largest_plants[fawley_mask].index[0]
+    largest_plants = largest_plants[~fawley_mask | (largest_plants.index == first_fawley_idx)].copy()
+    largest_plants.loc[first_fawley_idx, 'CO2'] = fawley_total_co2
+
 # Calculate transport costs for all top 60 fossil emitters
 transport_costs = pd.read_csv("data/nzip_balanced_scenario_results.csv", encoding='latin-1')
 transport_costs = transport_costs[transport_costs["CO2 Pipeline/Trucking?"] != "No CCS"] 
@@ -624,7 +635,7 @@ if results:
         print(f"{result['site-stack']:<40} | {result['annual_CO2']:>8.1f} | {result['captured_CO2f']:>8.1f} | {result['captured_CO2bio']:>8.1f} | {result['residual_CO2f']:>8.1f} | {result['FLH']:>6.0f} | {result['CAPEX_4OAK']:>8.1f} | {result['CAPEX_FOAK']:>8.1f} | {result['OPEXE']:>8.1f} | {result['transtorage']:>8.1f} | {result['total_4OAK']:>8.1f} | {result['total_FOAK']:>8.1f}")
     print("-" * 150)
     print(f"Total CO2 emissions: {sum([r['annual_CO2'] for r in results]):,.1f} ktCO2/y")
-    print(f"Total captured CO2: {sum([r['captured_CO2f'] for r in results]):,.1f} ktCO2/y")
+    print(f"Total captured CO2f: {sum([r['captured_CO2f'] for r in results]):,.1f} ktCO2/y")
 
 print(len(results))
 # Assume CO2 emissions based on DESNZ projections and CCC scenario
@@ -638,9 +649,6 @@ CO2_2023 = 300 # [MtCO2/yr]
 CO2_plants = 1 # [MtCO2/yr]
 plt.show()
 
-print("TODO: Move the Grangemouth Power Station from the refineries to the power sector")
-print("TODO: Remove the duplicate Fawley refinery (maybe also move to power sector?)")
 print("TODO: Also capture the CO2 from biomass CHP - add to captured volumes and CAPEX!")
-
 print("\n Should probably NOT capture the extra bio CO2 from industries - its complicated and increases costs... MAYBE add it as an uncertainty lever later!")
 print("Deconflicting Fossil Fuel Abatement, Industrial Competitiveness, and Consumer Costs through a UK Carbon Takeback Obligation")
