@@ -92,19 +92,35 @@ ets_df = pd.DataFrame({
 print("\nETS Prices by Year:")
 print(ets_df)
 
+# Project liquid DACCS costs using linear interpolation
+DACCS_2025 = 323 # [pounds/tCO2] 247->152 is alternative
+DACCS_2050 = 281 # [pounds/tCO2] [CCC Assessing the Feasibility for Large-scale DACCS]
+
+DACCS = np.where(
+    years <= 2050,
+    DACCS_2025 + (years - 2025) * ((DACCS_2050 - DACCS_2025) / (2050 - 2025)),
+    DACCS_2050  # Stay at 2050 price after 2050
+)
+DACCS_df = pd.DataFrame({
+    'year': years,
+    'DACCS_cost': DACCS * pounds_to_EUR
+})
+
 # ------- Simulate CTBO per year -------
 # Simplified analysis: assuming all CO2 is fossil (pessimistic, it will overestimate CTBO capacities), only for the macc_foak plants
 # Create dictionaries for efficient lookups
 ets_dict = ets_df.set_index('year')['ets'].to_dict()
 diffuse_dict = diffuse_df.set_index('year')['diffuse_ktCO2_yr'].to_dict()
 ctbo_dict = ctbo.set_index('year')['ctbo_fraction'].to_dict()
+DACCS_dict = DACCS_df.set_index('year')['DACCS_cost'].to_dict()
 
 # Initialize vectors to store results
 supplied_CO2_vec = []
 total_emissions_vec = []
 ctbo_mandate_vec = []
-point_capacity_vec = []
+fCCS_capacity_vec = []
 DACCS_capacity_vec = []
+BECCS_capacity_vec = []
 marginal_plant_vec = []
 CSU_costs_vec = []
 CTBO_cost_lev_vec = []
@@ -132,17 +148,15 @@ for year in years:
     plant_emissions = baseline_emissions.sum() + residual_emissions.sum()
     diffuse_emissions = diffuse_dict[year]  # Get diffuse emissions for this year
     total_emissions = plant_emissions + diffuse_emissions
-    print(f"Total fossil emissions in {year}: {total_emissions:.1f} ktCO2f/yr (baseline: {baseline_emissions.sum():.1f}, residual: {residual_emissions.sum():.1f}, diffuse: {diffuse_emissions:.1f})")
 
     # Get the CTBO fraction for this year
     supplied_CO2 = macc_foak['ktCO2f_yr_baseline'].sum() + diffuse_emissions # [ktCO2/yr]
     ctbo_fraction = ctbo_dict[year]/100
     ctbo_mandate = supplied_CO2 * ctbo_fraction
 
-    point_fossil_capacity = macc_foak['ktCO2f_yr_captured'].where(macc_foak['invested'], 0)
-    point_bio_capacity = macc_foak['ktCO2bio_yr_captured'].where(macc_foak['invested'], 0)
-    point_capacity = point_fossil_capacity.sum() + point_bio_capacity.sum()
-    print(f"Storage capacity in {year} is:  {point_capacity:.1f} ktCO2/yr")
+    point_fossil_capacity = macc_foak['ktCO2f_yr_captured'].where(macc_foak['invested'], 0).sum()
+    point_bio_capacity = macc_foak['ktCO2bio_yr_captured'].where(macc_foak['invested'], 0).sum()
+    point_capacity = point_fossil_capacity + point_bio_capacity
 
     if CTBO:
         missing_capacity = ctbo_mandate - point_capacity
@@ -154,8 +168,9 @@ for year in years:
             if not plant['invested']:
                 macc_foak.loc[i, 'invested'] = True
                 macc_foak.loc[i, 'year_invested'] = year
-                print(f"// Mandate plant {plant['site-stack']} in {year} and capture {plant['ktCO2f_yr_captured']} ktCO2f/yr and {plant['ktCO2bio_yr_captured']} ktCO2bio/yr with a cost of {plant['EUR/tCO2']} EUR/tCO2")
-                point_capacity = point_capacity + plant['ktCO2f_yr_captured'] + plant['ktCO2bio_yr_captured'] # NOTE: represents point source storage capacity
+                point_fossil_capacity += plant['ktCO2f_yr_captured']
+                point_bio_capacity += plant['ktCO2bio_yr_captured']
+                point_capacity += plant['ktCO2f_yr_captured'] + plant['ktCO2bio_yr_captured']
                 missing_capacity = ctbo_mandate - point_capacity
             i += 1
         
@@ -165,18 +180,13 @@ for year in years:
             marginal_plant = macc_foak.iloc[i-1]
             marginal_cost = marginal_plant['EUR/tCO2']
             CSU_cost = (marginal_plant['EUR/tCO2'] - ets_price) # NOTE: represents point source CSU costs
-            print(f"// Marginal plant in year {year} is {marginal_plant['site-stack']} at a cost of {marginal_plant['EUR/tCO2']} EUR/tCO2 => CSU cost: {CSU_cost} EUR/tCO2")
             CTBO_cost = CSU_cost * point_capacity # [EUR/tCO2 * ktCO2/yr = kEUR/yr]
-
-            if i == len(macc_foak):
-                print("===>All point sources have invested")
 
         # If still missing capacity, add DACCS backstop technology
         if missing_capacity > 0:
             DACCS_capacity = missing_capacity
-            marginal_cost = 450 # DACCS becomes marginal technology
+            marginal_cost = DACCS_dict[year] # DACCS becomes marginal technology
             CSU_cost = (marginal_cost - ets_price) 
-            print(f"===>Adding DACCS capacity which adds to CTBO costs")
             CTBO_cost = CSU_cost * (point_capacity + DACCS_capacity) # [EUR/tCO2 * ktCO2/yr = kEUR/yr] 
 
         CTBO_cost_lev = CTBO_cost / supplied_CO2 # [EUR/tCO2] 
@@ -185,8 +195,9 @@ for year in years:
     supplied_CO2_vec.append(supplied_CO2)
     total_emissions_vec.append(total_emissions)
     ctbo_mandate_vec.append(ctbo_mandate)
-    point_capacity_vec.append(point_capacity)
+    fCCS_capacity_vec.append(point_capacity-point_bio_capacity)
     DACCS_capacity_vec.append(DACCS_capacity)
+    BECCS_capacity_vec.append(point_bio_capacity)
     marginal_plant_vec.append(marginal_cost)
     CSU_costs_vec.append(CSU_cost)
     CTBO_cost_lev_vec.append(CTBO_cost_lev)
@@ -194,21 +205,23 @@ for year in years:
 
     if year == 2050:
         print("2050 supplied CO2: ", supplied_CO2)
-        print("2050 total emissions: ", total_emissions)
-        print("2050 residual emissions: ", residual_emissions.sum())
-        print("2050 ctbo mandate: ", ctbo_mandate)
+        print("2050 total fossil emissions=supplied CO2f-captured CO2f: ", total_emissions)
+        print(supplied_CO2 - point_fossil_capacity.sum())
         print("2050 point capacity: ", point_capacity)
         print("2050 point fossil capacity: ", point_fossil_capacity.sum())
         print("2050 point bio capacity: ", point_bio_capacity.sum())
         print("2050 DACCS capacity: ", DACCS_capacity)
+        print("2050 CDR capacity:", DACCS_capacity + point_bio_capacity.sum())
+        print((DACCS_capacity + point_bio_capacity.sum()) - total_emissions)
 
 # Plot results
 plt.figure(figsize=(10, 6))
-plt.plot(years, supplied_CO2_vec, label='Supplied CO2', linewidth=2)
-plt.plot(years, total_emissions_vec, label='Emitted CO2', linewidth=2)
-plt.plot(years, ctbo_mandate_vec, label='CTBO Mandate', linewidth=2)
-plt.plot(years, point_capacity_vec, label='Storage Capacity', linewidth=2)
-plt.plot(years, DACCS_capacity_vec, label='DACCS Capacity', linewidth=2)
+plt.plot(years, supplied_CO2_vec, label='Supplied CO2', linewidth=2, color='black')
+plt.plot(years, total_emissions_vec, label='Emitted CO2', linewidth=2, color='darkgreen')
+plt.plot(years, ctbo_mandate_vec, label='CTBO Mandate', linewidth=2, color='black', linestyle='--')
+plt.plot(years, fCCS_capacity_vec, label='Fossil CCS Capacity', linewidth=2, color='gray')
+plt.plot(years, DACCS_capacity_vec, label='DACCS Capacity', linewidth=2, color='lightgreen')
+plt.plot(years, BECCS_capacity_vec, label='BECCS Capacity', linewidth=2, color='green')
 plt.xlabel('Year', fontsize=12)
 plt.ylabel('ktCO2/yr', fontsize=12)
 plt.title('Emissions, CTBO Mandate, and Storage Capacity Over Time', fontsize=14)
@@ -250,3 +263,4 @@ fig.tight_layout()
 plt.show()
 
 print("BUG: CSU costs act weirdly - are negative? - when ETS prices change drastically")
+print("TODO: cheap scenarios are currently broken - need to investigate")
