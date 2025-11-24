@@ -9,7 +9,7 @@ FOAK = True                    # True: First-of-a-kind costs, False: Nth-of-a-ki
 CTBO_ENABLED = True            # Enable CTBO mandate
 ETS_HIGH = False               # True: High ETS trajectory (85->154 £/tCO2), False: Low (49->74 £/tCO2)
 DACCS_EXPENSIVE = True         # True: Expensive DACCS (323->281 £/tCO2), False: Cheap (247->152 £/tCO2)
-VERBOSE = False                # Print detailed investment decisions
+VERBOSE = True                # Print detailed investment decisions
 SAVE_PLANT_DATA = True        # Save plant-level results to CSV
 
 # Time parameters
@@ -159,9 +159,10 @@ for i, year in enumerate(years):
                     print(f"Year {year}: Mandate {plant['site-stack']} (cost: {plant['EUR/tCO2']:.0f} EUR/tCO2)")
             j += 1
         
-        # Calculate costs
-        if j > 0:
-            marginal_plant = macc.iloc[j-1]
+        # Calculate costs based on marginal plant in current installed capacity
+        invested_plants = macc[macc['invested']]
+        if len(invested_plants) > 0:
+            marginal_plant = invested_plants.loc[invested_plants['EUR/tCO2'].idxmax()]
             marginal_cost = marginal_plant['EUR/tCO2']
             CSU_cost = max(0, marginal_cost - ets_price)
             CTBO_cost = CSU_cost * point_capacity
@@ -503,3 +504,4 @@ if SAVE_PLANT_DATA and len(plant_df) > 0:
     print(f"Plant NPV data saved to 'ctbo_plant_npv.csv'")
 
 print("\nAnalysis complete!")
+print("TODO: (1) Manually count the CTBO-square-MACC area calculation (2) Check NPV calculations (3) CHECK DR LOGIC (4) Tidy up (5) Implement uncertainty?")
