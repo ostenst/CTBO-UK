@@ -122,7 +122,7 @@ for i, year in enumerate(years):
     plant_emissions = baseline_emissions + residual_emissions
     total_emissions = plant_emissions + diffuse
     
-    supplied_CO2 = macc['ktCO2f_yr_baseline'].sum() + diffuse
+    supplied_CO2 = macc['ktCO2f_yr_baseline'].sum() + diffuse # [ktCO2/yr] NOTE includes cement
     ctbo_mandate = supplied_CO2 * ctbo_fraction[i] / 100
     
     point_fossil_capacity = macc['ktCO2f_yr_captured'].where(macc['invested'], 0).sum()
@@ -192,33 +192,56 @@ for i, year in enumerate(years):
     
     # Calculate plant-level costs and profits
     for idx, plant in macc.iterrows():
+        # Calculate diluted cost (same for invested and non-invested plants)
+        if plant['site-stack'].endswith('W2E') or plant['site-stack'].endswith('BECCS'):
+            csu_diluted_cost = 0  # Biogenic sources don't pay CTBO on emissions
+        elif plant['site-stack'].endswith('cement'):
+            csu_diluted_cost = CTBO_cost_lev * (1 - 0.63)  # Only 37% from fossil fuels (rest is calcination)
+        else:
+            csu_diluted_cost = CTBO_cost_lev  # Pay CTBO on all fossil fuel use
+        
+        # Set values based on investment status
         if plant['invested']:
-            csu_diluted_cost = CTBO_cost_lev # [EUR/tCO2f] per CSU, the actor takes on the CTBO_cost_lev when buying fossil fuels
-            
-            print("BUG: must incurr fossil costs EVERY YEAR, no matter if invested. Also, remove fossil costs for W2E plants")
-            # Store plant-level results
-            plant_results.append({
-                'year': year,
-                'ETS_price': ets_price,
-                'CSU_cost': CSU_cost,
+            investment_year = plant['year_invested']
+            CO2_captured_fossil = plant['ktCO2f_yr_captured'] # [ktCO2/yr]
+            CO2_captured_bio = plant['ktCO2bio_yr_captured'] # [ktCO2/yr]
+            csu_gross_profit = CSU_cost # [EUR/tCO2f]
+            ctbo_fossil_profit = CSU_cost * CO2_captured_fossil # [kEUR/yr]
+            ctbo_gross_profit = CSU_cost * (CO2_captured_fossil + CO2_captured_bio) # [kEUR/yr]
+        else:
+            investment_year = None
+            CO2_captured_fossil = 0
+            CO2_captured_bio = 0
+            csu_gross_profit = 0
+            ctbo_fossil_profit = 0
+            ctbo_gross_profit = 0
+        
+        # Calculate derived values
+        ctbo_diluted_cost = csu_diluted_cost * plant['ktCO2f_yr_baseline']
+        ctbo_net_profit = ctbo_gross_profit - ctbo_diluted_cost
+        
+        # Store plant-level results
+        plant_results.append({
+            'year': year,
+            'ETS_price': ets_price,
+            'CSU_cost': CSU_cost,
+            'investment_year': investment_year,
 
-                'investment_year': plant['year_invested'],
-                'plant': plant['site-stack'],
-                'CO2_captured_fossil': plant['ktCO2f_yr_captured'], # [ktCO2/yr]
-                'CO2_captured_bio': plant['ktCO2bio_yr_captured'], # [ktCO2/yr]
-                'CCS_cost': plant['EUR/tCO2'], # [EUR/tCO2]
-                'marginal_plant': marginal_cost == plant['EUR/tCO2'],
+            'plant': plant['site-stack'],
+            'CO2_captured_fossil': CO2_captured_fossil,
+            'CO2_captured_bio': CO2_captured_bio,
+            'CCS_cost': plant['EUR/tCO2'],
+            'marginal_plant': marginal_cost == plant['EUR/tCO2'],
 
-                'csu_diluted_cost': csu_diluted_cost, # [EUR/tCO2f]
-                'csu_gross_profit': CSU_cost, # [EUR/tCO2f]
-                'csu_net_profit': CSU_cost - csu_diluted_cost, # [EUR/tCO2f]
-                'csu_bio_profit': CSU_cost, # [EUR/tCO2bio]
-
-                'ctbo_diluted_cost': csu_diluted_cost * plant['ktCO2f_yr_baseline'], # [kEUR/yr]
-                'ctbo_fossil_profit': CSU_cost * plant['ktCO2f_yr_captured'], # [kEUR/yr]
-                'ctbo_gross_profit': CSU_cost * (plant['ktCO2f_yr_captured'] + plant['ktCO2bio_yr_captured']), # [kEUR/yr]
-                'ctbo_net_profit': CSU_cost * (plant['ktCO2f_yr_captured'] + plant['ktCO2bio_yr_captured']) - csu_diluted_cost * plant['ktCO2f_yr_baseline'], # [kEUR/yr]
-            })
+            'csu_diluted_cost': csu_diluted_cost,
+            'csu_gross_profit': csu_gross_profit,
+            'csu_net_profit': csu_gross_profit - csu_diluted_cost,
+            'csu_bio_profit': csu_gross_profit,
+            'ctbo_diluted_cost': ctbo_diluted_cost,
+            'ctbo_fossil_profit': ctbo_fossil_profit,
+            'ctbo_gross_profit': ctbo_gross_profit,
+            'ctbo_net_profit': ctbo_net_profit
+        })
 
 print(f"\n2050 Aggregate Results:")
 idx_2050 = np.where(years == 2050)[0][0]
@@ -300,7 +323,12 @@ if len(plant_df) > 0:
     plant_npv = []
     for plant_name in plant_df['plant'].unique():
         plant_data = plant_df[plant_df['plant'] == plant_name].copy()
-        investment_year = plant_data['investment_year'].iloc[0]
+        # Get investment year (use max to skip None values from non-invested years)
+        investment_year = plant_data['investment_year'].max()
+        
+        # Skip plants that never invested
+        if pd.isna(investment_year):
+            continue
         
         # Calculate discount factors from base year
         base_year = investment_year if USE_INVESTMENT_YEAR_AS_BASE else START_YEAR
@@ -325,13 +353,17 @@ if len(plant_df) > 0:
     
     plant_npv_df = pd.DataFrame(plant_npv)
     
-    # Print annual summaries
-    plant_2030 = plant_df[plant_df['year'] == 2030]
-    plant_2040 = plant_df[plant_df['year'] == 2040]
-    plant_2050 = plant_df[plant_df['year'] == 2050]
-    print(f"\n  Total plant (fossil net) profits in 2030: {plant_2030['ctbo_fossil_profit'].sum()-plant_2030['ctbo_diluted_cost'].sum()*0.95:.0f} kEUR/yr")
-    print(f"  Total plant (fossil net) profits in 2040: {plant_2040['ctbo_fossil_profit'].sum()-plant_2040['ctbo_diluted_cost'].sum()*0.95:.0f} kEUR/yr")
-    print(f"  Total plant (fossil net) profits in 2050: {plant_2050['ctbo_fossil_profit'].sum()-plant_2050['ctbo_diluted_cost'].sum()*0.95:.0f} kEUR/yr")
+    total_plants = plant_df['plant'].nunique()
+    print(f"  Plants that invested: {len(plant_npv_df)} out of {total_plants}")
+    
+    # Print annual summaries (CCGT plants only)
+    ccgt_plants = plant_df[plant_df['plant'].str.endswith('CCGT')]
+    plant_2030 = ccgt_plants[ccgt_plants['year'] == 2030]
+    plant_2040 = ccgt_plants[ccgt_plants['year'] == 2040]
+    plant_2050 = ccgt_plants[ccgt_plants['year'] == 2050]
+    print(f"\n  Total CCGT plant (fossil net) profits in 2030: {plant_2030['ctbo_diluted_cost'].sum() - plant_2030['ctbo_fossil_profit'].sum() + plant_2030['ctbo_net_profit'].sum():.0f} kEUR/yr")
+    print(f"  Total CCGT plant (fossil net) profits in 2040: {plant_2040['ctbo_diluted_cost'].sum() - plant_2040['ctbo_fossil_profit'].sum() + plant_2040['ctbo_net_profit'].sum():.0f} kEUR/yr")
+    print(f"  Total CCGT plant (fossil net) profits in 2050: {plant_2050['ctbo_diluted_cost'].sum() - plant_2050['ctbo_fossil_profit'].sum() + plant_2050['ctbo_net_profit'].sum():.0f} kEUR/yr")
     
     # Print NPV summaries
     base_description = "investment year" if USE_INVESTMENT_YEAR_AS_BASE else f"{START_YEAR}"
@@ -341,8 +373,8 @@ if len(plant_df) > 0:
     print(f"    Total NPV fossil profit (all plants): {plant_npv_df['NPV_fossil_profit'].sum():.0f} kEUR")
     
     # Top 10 and bottom 10 plants by NPV net profit
-    # Merge with plant_df to get CO2 capture data (take first occurrence of each plant)
-    plant_co2_data = plant_df.groupby('plant').first()[['CO2_captured_fossil', 'CO2_captured_bio']].reset_index()
+    # Merge with plant_df to get CO2 capture data (use max to get non-zero invested values)
+    plant_co2_data = plant_df.groupby('plant')[['CO2_captured_fossil', 'CO2_captured_bio']].max().reset_index()
     plant_npv_with_co2 = plant_npv_df.merge(plant_co2_data, on='plant', how='left')
     
     top_10 = plant_npv_with_co2.nlargest(10, 'NPV_net_profit')
