@@ -1,34 +1,34 @@
-﻿No.,Permit name,Name,Location,Operator,Capacity permit [ktpa],Capacity 2023 [ktpa]
-1,Runcorn EfW Facility,Runcorn,Halton,Viridor,1100,951
-2,Riverside Resource Recovery Facility,Riverside,Bexley,Cory,850,790
-3,Tees Valley - EfW Facility,Tees Valley,Stockton-on-Tees,Suez,756,703
-4,Ferrybridge Multifuel 1,Ferrybridge FM1,Wakefield,enfinium,725,659
-47,Ferrybridge Multifuel 2,Ferrybridge FM2,Wakefield,enfinium,725,655
-51,Kemsley Park EfW,Kemsley,Kent,enfinium,657,566
-5,Edmonton EcoPark,Edmonton,Enfield,LondonEnergy (P),620,484
-55,Rookery South ERF,Rookery South C,Bedfordshire,Encyclis,585,590
-6,Allington Waste Management Facility,Allington,Kent,FCC,560,468
-9,Wilton 11 EfW,Wilton 11,Middlesborough,Suez,500,413
-8,Lakeside EfW,Lakeside,Slough,Lakeside,468,413
-12,Severnside Energy Recovery Centre,Severnside,S. Gloucestershire,Suez,467,401
-7,SELCHP ERF,SELCHP,Lewisham,Veolia,464,391
-11,Tyseley ERF,Tyseley,Birmingham,Veolia,441,363
-10,Cardiff Energy Recovery Facility,Trident Park,Cardiff,Viridor,425,411
-54,Severn Road RRC,Avonmouth,Bristol,Viridor,377,391
-59,Newhurst ERF,Newhurst,Leicestershire,Encyclis,350,298
-45,Beddington Energy Recovery Facility,Beddington Lane,Croydon,Viridor,347,331
-13,Greatmoor EfW,Greatmoor,Buckinghamshire,FCC,345,276
-14,Staffordshire ERF,Four Ashes,Staffordshire,Veolia,340,331
-15,Ardley EfW Facility,Ardley,Oxfordshire,Viridor,378,340
-43,Dunbar Energy Recovery Facility,Dunbar,East Lothian,Viridor,390,356
-41,Allerton Waste Recovery Park,Allerton Park,North Yorkshire,Thalia,320,271
-16,CSWDC Waste to Energy Plant,Coventry,Coventry,CSWDC (P),315,292
-58,Hull Energy Works ,Energy Works ACT,Hull,Evero,315,31
-17,SUEZ Suffolk - EfW Facility,Great Blakenham,Suffolk,Suez,295,295
-18,Devonport EfW CHP Facility,Devonport,Plymouth,MVV,275,257
-60,Hooton Park Sustainable Energy,Hooton Park ACT,Merseyside,Cogen,260,82
-20,Sheffield ERF,Sheffield,Sheffield,Veolia,245,231
-21,Newhaven ERF,Newhaven,East Sussex,Veolia,242,212
+﻿No.,Permit name,Name,Location,Operator,Capacity permit [ktpa],Capacity 2023 [ktpa], Latitude, Longitude
+1,Runcorn EfW Facility,Runcorn,Halton,Viridor,1100,951, 53.329067, -2.758472
+2,Riverside Resource Recovery Facility,Riverside,Bexley,Cory,850,790, 51.505735, 0.154770
+3,Tees Valley - EfW Facility,Tees Valley,Stockton-on-Tees,Suez,756,703, 54.595654, -1.257639
+4,Ferrybridge Multifuel 1,Ferrybridge FM1,Wakefield,enfinium,725,659, 53.719365, -1.287615
+47,Ferrybridge Multifuel 2,Ferrybridge FM2,Wakefield,enfinium,725,655, 53.719365, -1.287615
+51,Kemsley Park EfW,Kemsley,Kent,enfinium,657,566, 51.366744, 0.758076
+5,Edmonton EcoPark,Edmonton,Enfield,LondonEnergy (P),620,484, 51.613387, -0.039917
+55,Rookery South ERF,Rookery South C,Bedfordshire,Encyclis,585,590, 52.059275, -0.522980
+6,Allington Waste Management Facility,Allington,Kent,FCC,560,468, 51.292797, 0.494085
+9,Wilton 11 EfW,Wilton 11,Middlesborough,Suez,500,413, 54.587267, -1.128620
+8,Lakeside EfW,Lakeside,Slough,Lakeside,468,413, 51.484106, -0.506603
+12,Severnside Energy Recovery Centre,Severnside,S. Gloucestershire,Suez,467,401, 51.541435, -2.669496
+7,SELCHP ERF,SELCHP,Lewisham,Veolia,464,391, 51.485384, -0.046080
+11,Tyseley ERF,Tyseley,Birmingham,Veolia,441,363, 52.460134, -1.843213
+10,Cardiff Energy Recovery Facility,Trident Park,Cardiff,Viridor,425,411, 51.470048, -3.150368
+54,Severn Road RRC,Avonmouth,Bristol,Viridor,377,391, 51.532093, -2.669222
+59,Newhurst ERF,Newhurst,Leicestershire,Encyclis,350,298, 52.758430, -1.276610
+45,Beddington Energy Recovery Facility,Beddington Lane,Croydon,Viridor,347,331, 51.385852, -0.143323
+13,Greatmoor EfW,Greatmoor,Buckinghamshire,FCC,345,276, 51.895800, -0.976672
+14,Staffordshire ERF,Four Ashes,Staffordshire,Veolia,340,331, 52.672989, -2.116001
+15,Ardley EfW Facility,Ardley,Oxfordshire,Viridor,378,340, 51.923004, -1.214435
+43,Dunbar Energy Recovery Facility,Dunbar,East Lothian,Viridor,390,356, 55.975055, -2.464255
+41,Allerton Waste Recovery Park,Allerton Park,North Yorkshire,Thalia,320,271, 54.034603, -1.382335
+16,CSWDC Waste to Energy Plant,Coventry,Coventry,CSWDC (P),315,292, 52.396146, -1.492423
+58,Hull Energy Works ,Energy Works ACT,Hull,Evero,315,31, 53.754664, -0.327248
+17,SUEZ Suffolk - EfW Facility,Great Blakenham,Suffolk,Suez,295,295, 52.105101, 1.099744
+18,Devonport EfW CHP Facility,Devonport,Plymouth,MVV,275,257, 50.395227, -4.180192
+60,Hooton Park Sustainable Energy,Hooton Park ACT,Merseyside,Cogen,260,82, 53.313391, -2.942070
+20,Sheffield ERF,Sheffield,Sheffield,Veolia,245,231, 53.386759, -1.448888
+21,Newhaven ERF,Newhaven,East Sussex,Veolia,242,212, 50.801991, 0.049797
 19,Cornwall Energy Recovery Centre,Cornwall,Cornwall,Suez,240,239
 25,EnviRecover EfW Facility,Hartlebury,Worcestershire,FCC (Severn),230,210
 22,Integra South West ERF,Marchwood,Southampton,Veolia,220,209
