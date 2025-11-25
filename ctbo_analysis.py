@@ -23,8 +23,8 @@ ctbo_fraction = t**2  # [%]
 
 # Diffuse emissions reduction
 DIFFUSE_START_FRACTION = 1.0   # 100% of diffuse emissions in START_YEAR
-DIFFUSE_END_FRACTION = 0.50    # 50% of diffuse emissions by 2050
-DIFFUSE_TARGET_YEAR = 2050
+DIFFUSE_END_FRACTION = 0.45    # 55% of diffuse emissions by 2050
+DIFFUSE_TARGET_YEAR = 2055
 
 # Financial parameters
 DISCOUNT_RATE = 0.035          # Real discount rate for NPV calculations [3.5%]
@@ -281,31 +281,6 @@ diesel_increase_pct = (diesel_increase_abs / diesel_price) * 100  # [%]
 petrol_increase_pct = (petrol_increase_abs / petrol_price) * 100  # [%]
 gas_increase_pct = (gas_increase_abs / gas_price) * 100  # [%]
 
-# Plot fuel price increases
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
-
-# Absolute increases
-ax1.plot(years, diesel_increase_abs, label='Diesel', linewidth=2, color='darkblue')
-ax1.plot(years, petrol_increase_abs, label='Petrol', linewidth=2, color='orange')
-ax1.plot(years, gas_increase_abs, label='Gas', linewidth=2, color='green')
-ax1.set_xlabel('Year', fontsize=12)
-ax1.set_ylabel('Absolute Price Increase (pence)', fontsize=12)
-ax1.set_title('CTBO Impact on Consumer Fuel Prices: Absolute Increase', fontsize=14)
-ax1.legend(fontsize=11)
-ax1.grid(True)
-
-# Percentage increases
-ax2.plot(years, diesel_increase_pct, label='Diesel', linewidth=2, color='darkblue')
-ax2.plot(years, petrol_increase_pct, label='Petrol', linewidth=2, color='orange')
-ax2.plot(years, gas_increase_pct, label='Gas', linewidth=2, color='green')
-ax2.set_xlabel('Year', fontsize=12)
-ax2.set_ylabel('Percentage Price Increase (%)', fontsize=12)
-ax2.set_title('CTBO Impact on Consumer Fuel Prices: Percentage Increase', fontsize=14)
-ax2.legend(fontsize=11)
-ax2.grid(True)
-
-plt.tight_layout()
-
 print(f"\n2050 Consumer Fuel Price Impacts:")
 print(f"  Diesel:  +{diesel_increase_abs[idx_2050]:.2f} pence/litre (+{diesel_increase_pct[idx_2050]:.1f}%)")
 print(f"  Petrol:  +{petrol_increase_abs[idx_2050]:.2f} pence/litre (+{petrol_increase_pct[idx_2050]:.1f}%)")
@@ -388,66 +363,21 @@ if len(plant_df) > 0:
     print(f"\n  Bottom 10 plants by NPV net profit:")
     for idx, row in bottom_10.iterrows():
         print(f"    {row['plant'][:45]:45s} | NPV: {row['NPV_net_profit']:8,.0f} kEUR | Invested: {row['investment_year']:.0f} | CO2f: {row['CO2_captured_fossil']:5.0f} | CO2bio: {row['CO2_captured_bio']:5.0f} ktCO2/yr")
-    
-    # Plot CSU profits for top 10 plants
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
-    
-    top_10_plants = top_10['plant'].tolist()
-    for plant_name in top_10_plants:
-        plant_data = plant_df[plant_df['plant'] == plant_name]
-        ax1.plot(plant_data['year'], plant_data['csu_gross_profit'], label=plant_name[:30], linewidth=2)
-        ax2.plot(plant_data['year'], plant_data['csu_net_profit'], label=plant_name[:30], linewidth=2)
-    
-    ax1.set_xlabel('Year', fontsize=12)
-    ax1.set_ylabel('CSU Gross Profit (EUR/tCO2)', fontsize=12)
-    ax1.set_title('Top 10 Plants: CSU Gross Profit Over Time', fontsize=14)
-    ax1.legend(fontsize=9, loc='best')
-    ax1.grid(True)
-    
-    ax2.set_xlabel('Year', fontsize=12)
-    ax2.set_ylabel('CSU Net Profit (EUR/tCO2)', fontsize=12)
-    ax2.set_title('Top 10 Plants: CSU Net Profit Over Time', fontsize=14)
-    ax2.legend(fontsize=9, loc='best')
-    ax2.grid(True)
-    
-    plt.tight_layout()
-    
-    # Plot CTBO profits for top 10 plants (excluding Drax-BECCS)
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
-    
-    top_10_plants_no_drax = [p for p in top_10_plants if 'Drax-BECCS' not in p]
-    for plant_name in top_10_plants_no_drax:
-        plant_data = plant_df[plant_df['plant'] == plant_name]
-        ax1.plot(plant_data['year'], plant_data['ctbo_gross_profit'], label=plant_name[:30], linewidth=2)
-        ax2.plot(plant_data['year'], plant_data['ctbo_net_profit'], label=plant_name[:30], linewidth=2)
-    
-    ax1.set_xlabel('Year', fontsize=12)
-    ax1.set_ylabel('CTBO Gross Profit (kEUR/yr)', fontsize=12)
-    ax1.set_title('Top 10 Plants (excl. Drax): CTBO Gross Profit Over Time', fontsize=14)
-    ax1.legend(fontsize=9, loc='best')
-    ax1.grid(True)
-    
-    ax2.set_xlabel('Year', fontsize=12)
-    ax2.set_ylabel('CTBO Net Profit (kEUR/yr)', fontsize=12)
-    ax2.set_title('Top 10 Plants (excl. Drax): CTBO Net Profit Over Time', fontsize=14)
-    ax2.legend(fontsize=9, loc='best')
-    ax2.grid(True)
-    
-    plt.tight_layout()
 
 
 # ==================== PLOTS ====================
 
 # Plot 1: MACC curves
 plt.figure(figsize=(10, 6))
-plt.plot(macc_4oak['ktCO2_yr_cumulative'], macc_4oak['EUR/tCO2'], color='blue', label='4OAK')
-plt.plot(macc_foak['ktCO2_yr_cumulative'], macc_foak['EUR/tCO2'], color='red', label='FOAK')
+plt.plot(macc_4oak['ktCO2_yr_cumulative'], macc_4oak['EUR/tCO2'], color='green', label='4th-of-a-kind costs')
+plt.plot(macc_foak['ktCO2_yr_cumulative'], macc_foak['EUR/tCO2'], color='red', label='First-of-a-kind costs')
 plt.xlabel('Cumulative Captured CO2 (ktCO2/yr)', fontsize=12)
 plt.ylabel('Marginal Abatement Cost (EUR/tCO2)', fontsize=12)
-plt.title('Marginal Abatement Cost Curve', fontsize=14)
+plt.title('MACC of point source CCS (fossil + biogenic)', fontsize=14)
 plt.legend(fontsize=11)
 plt.grid(True)
 plt.tight_layout()
+plt.savefig('1_maccs.png', dpi=300)
 
 # Plot 2: Emissions and capacities
 plt.figure(figsize=(10, 6))
@@ -457,44 +387,199 @@ plt.plot(years, ctbo_mandate_vec, label='CTBO Mandate', linewidth=2, color='blac
 plt.plot(years, fCCS_capacity_vec, label='Fossil CCS', linewidth=2, color='gray')
 plt.plot(years, BECCS_capacity_vec, label='BECCS', linewidth=2, color='green')
 plt.plot(years, DACCS_capacity_vec, label='DACCS', linewidth=2, color='lightgreen')
+if first_DACCS_year is not None:
+    daccs_idx = np.where(years == first_DACCS_year)[0][0]
+    plt.plot(first_DACCS_year, DACCS_capacity_vec[daccs_idx], 'o', markersize=6, color='lightgreen')
+    plt.plot([], [], 'o', markersize=6, color='lightgreen', label='Year when DACCS is marginal')
 plt.xlabel('Year', fontsize=12)
 plt.ylabel('ktCO2/yr', fontsize=12)
-plt.title('Emissions and Storage Capacity Over Time', fontsize=14)
+plt.title('UK Carbon Balances (CTBO Mandate=Fossil CCS+BECCS+DACCS)', fontsize=14)
 plt.legend(fontsize=11)
 plt.grid(True)
 plt.tight_layout()
+plt.savefig('2_carbon_balances.png', dpi=300)
 
 # Plot 3: Costs
 plt.figure(figsize=(10, 6))
-plt.plot(years, ets_prices, label='ETS Price', linewidth=2)
-plt.plot(years, marginal_cost_vec, label='Marginal Cost', linewidth=2)
-plt.plot(years, CSU_cost_vec, label='CSU Cost', linewidth=2)
-plt.plot(years, CTBO_cost_lev_vec, label='CTBO Cost (levelized)', linewidth=2)
+plt.plot(years, ets_prices, label='ETS Price', linewidth=2, color='yellow')
+plt.plot(years, marginal_cost_vec, label='Marginal CCS Cost', linewidth=2, color='red')
+plt.plot(years, CSU_cost_vec, label='CSU Cost', linewidth=2, color='orange')
+plt.plot(years, CTBO_cost_lev_vec, label='CTBO Cost (levelized)', linewidth=2, color='black')
+
+# Add markers at first DACCS year
+if first_DACCS_year is not None:
+    daccs_idx = np.where(years == first_DACCS_year)[0][0]
+    plt.plot(first_DACCS_year, ets_prices[daccs_idx], 'o', markersize=6, color='yellow')
+    plt.plot(first_DACCS_year, marginal_cost_vec[daccs_idx], 'o', markersize=6, color='red')
+    plt.plot(first_DACCS_year, CSU_cost_vec[daccs_idx], 'o', markersize=6, color='orange')
+    plt.plot(first_DACCS_year, CTBO_cost_lev_vec[daccs_idx], 'o', markersize=6, color='black')
+    plt.plot([], [], 'o', markersize=6, color='gray', label='Year when DACCS is marginal')
 plt.xlabel('Year', fontsize=12)
 plt.ylabel('EUR/tCO2', fontsize=12)
-plt.title('Price Trajectories Over Time', fontsize=14)
+plt.title('CSU cost = Marginal CCS Cost - ETS Price', fontsize=14)
 plt.legend(fontsize=11)
 plt.grid(True)
 plt.tight_layout()
+plt.savefig('3_costs.png', dpi=300)
 
 # Plot 4: KPI and CTBO costs
 fig, ax1 = plt.subplots(figsize=(10, 6))
 KPI = np.array(CSU_cost_vec) / ets_prices
 ax1.plot(years, KPI, color='blue', label='CSU/ETS Ratio', linewidth=2)
+
+# Add marker at first DACCS year
+if first_DACCS_year is not None:
+    daccs_idx = np.where(years == first_DACCS_year)[0][0]
+    ax1.plot(first_DACCS_year, KPI[daccs_idx], 'o', markersize=6, color='blue')
+    ax1.plot([], [], 'o', markersize=6, color='gray', label='Year when DACCS is marginal')
+
 ax1.set_xlabel('Year', fontsize=12)
 ax1.set_ylabel('CSU/ETS Price Ratio', color='blue', fontsize=12)
 ax1.tick_params(axis='y', labelcolor='blue')
 ax1.grid(True)
 
 ax2 = ax1.twinx()
-ax2.plot(years, CTBO_cost_lev_vec, color='red', label='CTBO Cost', linewidth=2)
-ax2.set_ylabel('CTBO Cost (EUR/tCO2)', color='red', fontsize=12)
-ax2.tick_params(axis='y', labelcolor='red')
+ax2.plot(years, CTBO_cost_lev_vec, color='yellow', label='CTBO Cost', linewidth=2)
+
+# Add marker at first DACCS year
+if first_DACCS_year is not None:
+    ax2.plot(first_DACCS_year, CTBO_cost_lev_vec[daccs_idx], 'o', markersize=6, color='yellow')
+ax2.plot([], [], 'o', markersize=6, color='yellow', label='Year when DACCS is marginal')
+ax2.set_ylabel('CTBO Cost (EUR/tCO2)', color='yellow', fontsize=12)
+ax2.tick_params(axis='y', labelcolor='yellow')
 
 plt.title('CSU/ETS Ratio and CTBO Costs Over Time', fontsize=14)
 fig.tight_layout()
 
-plt.show()
+# Plot 5: Consumer fuel price increases
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+
+# Absolute increases
+ax1.plot(years, diesel_increase_abs, label='Diesel', linewidth=2, color='darkblue')
+ax1.plot(years, petrol_increase_abs, label='Petrol', linewidth=2, color='orange')
+ax1.plot(years, gas_increase_abs, label='Gas', linewidth=2, color='red')
+
+# Add markers at first DACCS year
+if first_DACCS_year is not None:
+    daccs_idx = np.where(years == first_DACCS_year)[0][0]
+    ax1.plot(first_DACCS_year, diesel_increase_abs[daccs_idx], 'o', markersize=6, color='darkblue')
+    ax1.plot(first_DACCS_year, petrol_increase_abs[daccs_idx], 'o', markersize=6, color='orange')
+    ax1.plot(first_DACCS_year, gas_increase_abs[daccs_idx], 'o', markersize=6, color='red')
+    # Add legend entry for DACCS marker
+    ax1.plot([], [], 'o', markersize=6, color='gray', label='Year when DACCS is marginal')
+
+ax1.set_xlabel('Year', fontsize=12)
+ax1.set_ylabel('Price Increase (pence per litre/therm)', fontsize=12)
+ax1.legend(fontsize=11)
+ax1.grid(True)
+
+# Percentage increases
+ax2.plot(years, diesel_increase_pct, label='Diesel', linewidth=2, color='darkblue')
+ax2.plot(years, petrol_increase_pct, label='Petrol', linewidth=2, color='orange')
+ax2.plot(years, gas_increase_pct, label='Gas', linewidth=2, color='red')
+
+# Add markers at first DACCS year
+if first_DACCS_year is not None:
+    ax2.plot(first_DACCS_year, diesel_increase_pct[daccs_idx], 'o', markersize=6, color='darkblue')
+    ax2.plot(first_DACCS_year, petrol_increase_pct[daccs_idx], 'o', markersize=6, color='orange')
+    ax2.plot(first_DACCS_year, gas_increase_pct[daccs_idx], 'o', markersize=6, color='red')
+    # Add legend entry for DACCS marker
+    ax2.plot([], [], 'o', markersize=6, color='gray', label='Year when DACCS is marginal')
+
+ax2.set_xlabel('Year', fontsize=12)
+ax2.set_ylabel('Price Increase (%)', fontsize=12)
+ax2.legend(fontsize=11)
+ax2.grid(True)
+
+plt.tight_layout()
+plt.savefig('4_price_increases.png', dpi=300)
+
+# Plot 5: Plant-level profits for selected plants
+if len(plant_df) > 0:
+    selected_plants = [{"Pembroke Power Station-CCGT": "black"}, {"Runcorn-W2E": "green"}, {"Hope Cement Works-cement": "red"}, {"Medway-CCGT": "gray"}]
+    
+    # Plot 5: CSU profits for selected plants
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+    
+    for plant_dict in selected_plants:
+        plant_name, color = list(plant_dict.items())[0]
+        plant_data = plant_df[plant_df['plant'] == plant_name]
+        if len(plant_data) > 0:
+            line1 = ax1.plot(plant_data['year'], plant_data['csu_gross_profit'], label=plant_name, linewidth=2, color=color)
+            line2 = ax2.plot(plant_data['year'], plant_data['csu_net_profit'], label=plant_name, linewidth=2, color=color)
+            
+            # Add square marker at plant's investment year
+            investment_year = plant_data['investment_year'].max()
+            if not pd.isna(investment_year) and investment_year in plant_data['year'].values:
+                invest_data = plant_data[plant_data['year'] == investment_year].iloc[0]
+                ax1.plot(investment_year, invest_data['csu_gross_profit'], 's', markersize=6, color=color)
+                ax2.plot(investment_year, invest_data['csu_net_profit'], 's', markersize=6, color=color)
+            
+            # Add circular marker at first DACCS year if it exists in this plant's data
+            if first_DACCS_year is not None and first_DACCS_year in plant_data['year'].values:
+                daccs_data = plant_data[plant_data['year'] == first_DACCS_year].iloc[0]
+                ax1.plot(first_DACCS_year, daccs_data['csu_gross_profit'], 'o', markersize=6, color=color)
+                ax2.plot(first_DACCS_year, daccs_data['csu_net_profit'], 'o', markersize=6, color=color)
+    ax1.plot([], [], 'o', markersize=6, color='black', label='Year when DACCS is marginal')
+    ax1.plot([], [], 's', markersize=6, color='black', label='Year when individual plant invested')
+    ax1.set_xlabel('Year', fontsize=12)
+    ax1.set_ylabel('CSU Gross Profit (EUR/tCO2)', fontsize=12)
+    # ax1.set_title('Selected Plants: CSU Gross Profit Over Time', fontsize=14)
+    ax1.legend(fontsize=9, loc='best')
+    ax1.grid(True)
+    
+    ax2.set_xlabel('Year', fontsize=12)
+    ax2.plot([], [], 'o', markersize=6, color='black', label='Year when DACCS is marginal')
+    ax2.plot([], [], 's', markersize=6, color='black', label='Year when individual plant invested')
+    ax2.set_ylabel('CSU Net Profit (EUR/tCO2)', fontsize=12)
+    # ax2.set_title('Selected Plants: CSU Net Profit Over Time', fontsize=14)
+    ax2.legend(fontsize=9, loc='best')
+    ax2.grid(True)
+    
+    plt.tight_layout()
+    
+    # Plot 5: CTBO profits for selected plants
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+    
+    for plant_dict in selected_plants:
+        plant_name, color = list(plant_dict.items())[0]
+        plant_data = plant_df[plant_df['plant'] == plant_name]
+        if len(plant_data) > 0:
+            line1 = ax1.plot(plant_data['year'], plant_data['ctbo_gross_profit'], label=plant_name, linewidth=2, color=color)
+            line2 = ax2.plot(plant_data['year'], plant_data['ctbo_net_profit'], label=plant_name, linewidth=2, color=color)
+            
+            # Add square marker at plant's investment year
+            investment_year = plant_data['investment_year'].max()
+            if not pd.isna(investment_year) and investment_year in plant_data['year'].values:
+                invest_data = plant_data[plant_data['year'] == investment_year].iloc[0]
+                ax1.plot(investment_year, invest_data['ctbo_gross_profit'], 's', markersize=6, color=color)
+                ax2.plot(investment_year, invest_data['ctbo_net_profit'], 's', markersize=6, color=color)
+            
+            # Add circular marker at first DACCS year if it exists in this plant's data
+            if first_DACCS_year is not None and first_DACCS_year in plant_data['year'].values:
+                daccs_data = plant_data[plant_data['year'] == first_DACCS_year].iloc[0]
+                ax1.plot(first_DACCS_year, daccs_data['ctbo_gross_profit'], 'o', markersize=6, color=color)
+                ax2.plot(first_DACCS_year, daccs_data['ctbo_net_profit'], 'o', markersize=6, color=color)
+    
+    ax1.set_xlabel('Year', fontsize=12)
+    ax1.set_ylabel('Plant profits (gross) from selling CO2 (kEUR/yr)', fontsize=12)
+    ax1.plot([], [], 'o', markersize=6, color='black', label='Year when DACCS is marginal')
+    ax1.plot([], [], 's', markersize=6, color='black', label='Year when individual plant invested')
+
+    # ax1.set_title('Selected Plants: CTBO Gross Profit Over Time', fontsize=14)
+    ax1.legend(fontsize=9, loc='best')
+    ax1.grid(True)
+    
+    ax2.set_xlabel('Year', fontsize=12)
+    ax2.set_ylabel('Plant profits (net) from selling CO2 (kEUR/yr)', fontsize=12)
+    ax2.plot([], [], 'o', markersize=6, color='black', label='Year when DACCS is marginal')
+    ax2.plot([], [], 's', markersize=6, color='black', label='Year when individual plant invested')
+    # ax2.set_title('Selected Plants: CTBO Net Profit Over Time', fontsize=14)
+    ax2.legend(fontsize=9, loc='best')
+    ax2.grid(True)
+    plt.tight_layout()
+    plt.savefig('5_profits.png', dpi=300)
+
 
 # Save plant-level data if requested
 if SAVE_PLANT_DATA and len(plant_df) > 0:
@@ -505,3 +590,4 @@ if SAVE_PLANT_DATA and len(plant_df) > 0:
 
 print("\nAnalysis complete!")
 print("TODO: (1) Manually count the CTBO-square-MACC area calculation (2) Check NPV calculations (3) CHECK DR LOGIC (4) Tidy up (5) Implement uncertainty?")
+plt.show()
