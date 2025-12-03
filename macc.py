@@ -910,7 +910,7 @@ ax.text(0.02, 0.98, stats_text,
         fontsize=12)
 
 plt.tight_layout()
-plt.savefig('map_ccs_distances.png', dpi=400, bbox_inches='tight')
+plt.savefig('map_distances.png', dpi=400, bbox_inches='tight')
 print(f"\nMap saved as 'map_ccs_distances.png'")
 
 plt.show()

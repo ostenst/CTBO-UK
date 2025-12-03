@@ -1,8 +1,22 @@
+"""
+Carbon Takeback Obligation (CTBO) Policy Simulation
+
+This script simulates the implementation of a CTBO policy in the UK energy system,
+analyzing the deployment of CCS, BECCS, and DACCS technologies over time and their
+economic impacts on plants and consumers.
+
+Author: Oscar Stenstrom
+Date: 2025
+"""
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-# ==================== INPUT PARAMETERS ====================
+
+# ============================================================================
+# CONFIGURATION AND CONSTANTS
+# ============================================================================
 
 # Scenario selection
 FOAK = False                    # True: First-of-a-kind costs, False: 4th-of-a-kind costs
@@ -17,69 +31,111 @@ START_YEAR = 2025
 END_YEAR = 2055
 years = np.arange(START_YEAR, END_YEAR + 1)
 
-# CTBO trajectory: ctbo_fraction = t^2 where t increases by 2 every 5 years
-t = (years - START_YEAR) * 2/5
-ctbo_fraction = t**2  # [%]
+# Baseline emissions (2025)
+baseline_emissions = {
+    'coal': 17,    # [MtCO2/yr]
+    'oil': 140,    # [MtCO2/yr]
+    'gas': 127     # [MtCO2/yr]
+}
 
-# Diffuse emissions reduction
+# Diffuse emissions reduction trajectory
 DIFFUSE_START_FRACTION = 1.0   # 100% of diffuse emissions in START_YEAR
-DIFFUSE_END_FRACTION = 0.40    # % of diffuse emissions that remain in 2055
+DIFFUSE_END_FRACTION = 0.40    # 40% of diffuse emissions remain in 2055
 DIFFUSE_TARGET_YEAR = 2055
 
 # Financial parameters
 DISCOUNT_RATE = 0.035          # Real discount rate for NPV calculations [3.5%]
-USE_INVESTMENT_YEAR_AS_BASE = False  # True: NPV from each plant's investment year, False: NPV from START_YEAR
-
-# Price trajectories (in £/tCO2, real 2024 prices)
+USE_INVESTMENT_YEAR_AS_BASE = False  # NPV base: False=START_YEAR, True=investment year
 pounds_to_EUR = 1.15
-ets_df = pd.read_csv('data/ETS.csv')
-ets_df.columns = ets_df.columns.str.strip()  # Remove leading/trailing spaces
-ets_df.set_index('Year', inplace=True)
 
-# DACCS cost trajectories
+# Fuel assumptions for consumer cost analysis
+fuels = {
+    'diesel': {
+        'emission_factor': 2.628,  # [kgCO2/litre]
+        'price': 143.97  # [pence/litre]
+    },
+    'petrol': {
+        'emission_factor': 2.339,  # [kgCO2/litre]
+        'price': 135.07  # [pence/litre]
+    },
+    'gas': {
+        'emission_factor': 0.2039 * 29.3,  # [kgCO2/thrm] (1 thrm = 29.3 kWh)
+        'price': 80  # [pence/thrm]
+    }
+}
+
+# DACCS cost trajectories (£/tCO2)
 if DACCS_EXPENSIVE:
     DACCS_2025, DACCS_2050 = 323, 281
 else:
     DACCS_2025, DACCS_2050 = 247, 152
 
-# ==================== LOAD DATA ====================
+# ETS scenario column mapping
+ets_column_map = {
+    "High": "High Sensitivity - Low Fossil Fuel Prices and High Economic Growth (2024 GBP)",
+    "Medium": "Net Zero Strategy Aligned (2024 GBP)",
+    "Low": "Low Sensitivity - High Fossil Fuel Prices and Low Economic Growth (2024 GBP)"
+}
 
+
+# ============================================================================
+# LOAD DATA AND CALCULATE BASELINES
+# ============================================================================
+
+print("\n" + "="*80)
+print("LOADING DATA")
+print("="*80)
+
+# Load MACC data
 macc_4oak = pd.read_csv('macc_4oak.csv')
 macc_foak = pd.read_csv('macc_foak.csv')
 macc_4oak['invested'] = False
 macc_foak['invested'] = False
 macc = macc_foak if FOAK else macc_4oak
 
+print(f"Using {'FOAK' if FOAK else '4OAK'} cost scenario")
+print(f"ETS scenario: {ETS}")
+print(f"DACCS cost: {'Expensive' if DACCS_EXPENSIVE else 'Cheap'}")
+
 # Calculate baseline emissions
 cement_emissions = macc_4oak[macc_4oak['site-stack'].str.endswith('-cement')]['ktCO2f_yr_baseline'].sum()
-total_emissions_2023 = (17 + 140 + 127) * 1000 + cement_emissions  # [ktCO2/yr]
+total_emissions_2023 = (baseline_emissions['coal'] + baseline_emissions['oil'] + 
+                        baseline_emissions['gas']) * 1000 + cement_emissions
 point_sources = macc_4oak['ktCO2f_yr_baseline'].sum()
 diffuse_baseline = total_emissions_2023 - point_sources
 
-print(f"Total fossil emissions (2023): {total_emissions_2023:.0f} ktCO2/yr")
+print(f"\nTotal fossil emissions (2025): {total_emissions_2023:.0f} ktCO2/yr")
 print(f"  Point sources: {point_sources:.0f} ktCO2/yr")
 print(f"  Diffuse: {diffuse_baseline:.0f} ktCO2/yr")
 
-# ==================== CREATE TRAJECTORIES ====================
+
+# ============================================================================
+# CREATE TRAJECTORIES
+# ============================================================================
+
+print("\n" + "="*80)
+print("CREATING TRAJECTORIES")
+print("="*80)
+
+# CTBO mandate trajectory: quadratic growth
+t = (years - START_YEAR) * 2/5
+ctbo_fraction = t**2  # [%]
 
 # Diffuse emissions trajectory
 diffuse_fraction = np.where(
     years <= DIFFUSE_TARGET_YEAR,
-    DIFFUSE_START_FRACTION - (years - START_YEAR) * ((DIFFUSE_START_FRACTION - DIFFUSE_END_FRACTION) / (DIFFUSE_TARGET_YEAR - START_YEAR)),
+    DIFFUSE_START_FRACTION - (years - START_YEAR) * ((DIFFUSE_START_FRACTION - DIFFUSE_END_FRACTION) / 
+                                                      (DIFFUSE_TARGET_YEAR - START_YEAR)),
     DIFFUSE_END_FRACTION
 )
 diffuse_emissions = diffuse_baseline * diffuse_fraction
 
-# ETS price trajectory (convert to EUR/tCO2)
-# Map ETS scenario to CSV column name
-ets_column_map = {
-    "High": "High Sensitivity - Low Fossil Fuel Prices and High Economic Growth (2024 GBP)",
-    "Medium": "Net Zero Strategy Aligned (2024 GBP)",
-    "Low": "Low Sensitivity - High Fossil Fuel Prices and Low Economic Growth (2024 GBP)"
-}
+# ETS price trajectory
+ets_df = pd.read_csv('data/ETS.csv')
+ets_df.columns = ets_df.columns.str.strip()
+ets_df.set_index('Year', inplace=True)
 ets_column = ets_column_map[ETS]
 
-# Get prices for our years (use 2050 value for years beyond 2050)
 ets_prices = []
 for year in years:
     if year in ets_df.index:
@@ -88,14 +144,26 @@ for year in years:
         ets_prices.append(ets_df.loc[2050, ets_column] * pounds_to_EUR)
 ets_prices = np.array(ets_prices)
 
-# DACCS cost trajectory (convert to EUR/tCO2)
+# DACCS cost trajectory
 DACCS_costs = np.where(
     years <= 2050,
     DACCS_2025 + (years - START_YEAR) * ((DACCS_2050 - DACCS_2025) / (2050 - START_YEAR)),
     DACCS_2050
 ) * pounds_to_EUR
 
-# ==================== SIMULATION ====================
+print(f"CTBO mandate in 2050: {ctbo_fraction[np.where(years == 2050)[0][0]]:.0f}%")
+print(f"Diffuse emissions in 2050: {diffuse_emissions[np.where(years == 2050)[0][0]]:.0f} ktCO2/yr")
+print(f"ETS price in 2050: {ets_prices[np.where(years == 2050)[0][0]]:.1f} EUR/tCO2")
+print(f"DACCS cost in 2050: {DACCS_costs[np.where(years == 2050)[0][0]]:.1f} EUR/tCO2")
+
+
+# ============================================================================
+# SIMULATION
+# ============================================================================
+
+print("\n" + "="*80)
+print("RUNNING SIMULATION")
+print("="*80)
 
 # Initialize result vectors
 supplied_CO2_vec = []
@@ -109,11 +177,10 @@ CSU_cost_vec = []
 CTBO_cost_lev_vec = []
 
 # Initialize plant-level results storage
-plant_results = []  # List of dicts: {year, plant_name, cost, profit, revenue, ...}
-
-# Track when DACCS is first needed
+plant_results = []
 first_DACCS_year = None
 
+# Main simulation loop
 for i, year in enumerate(years):
     ets_price = ets_prices[i]
     DACCS_cost = DACCS_costs[i]
@@ -125,15 +192,16 @@ for i, year in enumerate(years):
             macc.loc[idx, 'invested'] = True
             macc.loc[idx, 'year_invested'] = year
             if VERBOSE:
-                print(f"Year {year}: Voluntary investment in {plant['site-stack']} (cost: {plant['EUR/tCO2']:.0f} < ETS: {ets_price:.0f} EUR/tCO2)")
+                print(f"Year {year}: Voluntary investment in {plant['site-stack']} "
+                      f"(cost: {plant['EUR/tCO2']:.0f} < ETS: {ets_price:.0f} EUR/tCO2)")
     
     # Calculate current emissions and capacities
-    baseline_emissions = macc['ktCO2f_yr_baseline'].where(~macc['invested'], 0).sum()
+    baseline_emissions_current = macc['ktCO2f_yr_baseline'].where(~macc['invested'], 0).sum()
     residual_emissions = macc['ktCO2f_yr_residual'].where(macc['invested'], 0).sum()
-    plant_emissions = baseline_emissions + residual_emissions
+    plant_emissions = baseline_emissions_current + residual_emissions
     total_emissions = plant_emissions + diffuse
     
-    supplied_CO2 = macc['ktCO2f_yr_baseline'].sum() + diffuse # [ktCO2/yr] NOTE includes cement
+    supplied_CO2 = macc['ktCO2f_yr_baseline'].sum() + diffuse
     ctbo_mandate = supplied_CO2 * ctbo_fraction[i] / 100
     
     point_fossil_capacity = macc['ktCO2f_yr_captured'].where(macc['invested'], 0).sum()
@@ -156,7 +224,8 @@ for i, year in enumerate(years):
             if not plant['invested']:
                 if plant['EUR/tCO2'] > DACCS_cost:
                     if VERBOSE:
-                        print(f"Year {year}: Switching to DACCS (cost: {DACCS_cost:.0f} < plant: {plant['EUR/tCO2']:.0f} EUR/tCO2)")
+                        print(f"Year {year}: Switching to DACCS "
+                              f"(cost: {DACCS_cost:.0f} < plant: {plant['EUR/tCO2']:.0f} EUR/tCO2)")
                     break
                 
                 macc.loc[j, 'invested'] = True
@@ -170,7 +239,7 @@ for i, year in enumerate(years):
                     print(f"Year {year}: Mandate {plant['site-stack']} (cost: {plant['EUR/tCO2']:.0f} EUR/tCO2)")
             j += 1
         
-        # Calculate costs based on marginal plant in current installed capacity
+        # Calculate costs based on marginal plant
         invested_plants = macc[macc['invested']]
         if len(invested_plants) > 0:
             marginal_plant = invested_plants.loc[invested_plants['EUR/tCO2'].idxmax()]
@@ -185,7 +254,6 @@ for i, year in enumerate(years):
             CSU_cost = max(0, marginal_cost - ets_price)
             CTBO_cost = CSU_cost * (point_capacity + DACCS_capacity)
             
-            # Record first year DACCS is needed
             if first_DACCS_year is None:
                 first_DACCS_year = year
         
@@ -204,22 +272,22 @@ for i, year in enumerate(years):
     
     # Calculate plant-level costs and profits
     for idx, plant in macc.iterrows():
-        # Calculate diluted cost (same for invested and non-invested plants)
+        # Determine diluted cost based on plant type
         if plant['site-stack'].endswith('W2E') or plant['site-stack'].endswith('BECCS'):
             csu_diluted_cost = 0  # Biogenic sources don't pay CTBO on emissions
         elif plant['site-stack'].endswith('cement'):
-            csu_diluted_cost = CTBO_cost_lev * (1 - 0.63)  # Only 37% from fossil fuels (rest is calcination)
+            csu_diluted_cost = CTBO_cost_lev * (1 - 0.63)  # 37% from fossil fuels
         else:
-            csu_diluted_cost = CTBO_cost_lev  # Pay CTBO on all fossil fuel use
+            csu_diluted_cost = CTBO_cost_lev
         
         # Set values based on investment status
         if plant['invested']:
             investment_year = plant['year_invested']
-            CO2_captured_fossil = plant['ktCO2f_yr_captured'] # [ktCO2/yr]
-            CO2_captured_bio = plant['ktCO2bio_yr_captured'] # [ktCO2/yr]
-            csu_gross_profit = CSU_cost # [EUR/tCO2f]
-            ctbo_fossil_profit = CSU_cost * CO2_captured_fossil # [kEUR/yr]
-            ctbo_gross_profit = CSU_cost * (CO2_captured_fossil + CO2_captured_bio) # [kEUR/yr]
+            CO2_captured_fossil = plant['ktCO2f_yr_captured']
+            CO2_captured_bio = plant['ktCO2bio_yr_captured']
+            csu_gross_profit = CSU_cost
+            ctbo_fossil_profit = CSU_cost * CO2_captured_fossil
+            ctbo_gross_profit = CSU_cost * (CO2_captured_fossil + CO2_captured_bio)
         else:
             investment_year = None
             CO2_captured_fossil = 0
@@ -238,13 +306,11 @@ for i, year in enumerate(years):
             'ETS_price': ets_price,
             'CSU_cost': CSU_cost,
             'investment_year': investment_year,
-
             'plant': plant['site-stack'],
             'CO2_captured_fossil': CO2_captured_fossil,
             'CO2_captured_bio': CO2_captured_bio,
             'CCS_cost': plant['EUR/tCO2'],
             'marginal_plant': marginal_cost == plant['EUR/tCO2'],
-
             'csu_diluted_cost': csu_diluted_cost,
             'csu_gross_profit': csu_gross_profit,
             'csu_net_profit': csu_gross_profit - csu_diluted_cost,
@@ -255,8 +321,18 @@ for i, year in enumerate(years):
             'ctbo_net_profit': ctbo_net_profit
         })
 
-print(f"\n2050 Aggregate Results:")
+
+# ============================================================================
+# RESULTS AND ANALYSIS
+# ============================================================================
+
+print("\n" + "="*80)
+print("RESULTS")
+print("="*80)
+
 idx_2050 = np.where(years == 2050)[0][0]
+
+print(f"\n2050 Aggregate Results:")
 print(f"  Supplied CO2f: {supplied_CO2_vec[idx_2050]:.0f} ktCO2/yr")
 print(f"  Emitted CO2f: {total_emissions_vec[idx_2050]:.0f} ktCO2/yr")
 print(f"  CTBO mandate: {ctbo_mandate_vec[idx_2050]:.0f} ktCO2/yr")
@@ -272,33 +348,29 @@ if first_DACCS_year is not None:
 else:
     print(f"\nDACCS was never needed (all capacity met by point sources)")
 
-# Estimate cost-to-consumer [DESNZ emission factor and fuel price data]
-carbon_price = np.array(CTBO_cost_lev_vec) / pounds_to_EUR # [£/tCO2 per year]
-emission_factor_diesel = 2.628 # [kgCO2/litre]
-emission_factor_petrol = 2.339 # [kgCO2/litre]
-emission_factor_gas = 0.2039 # [kgCO2/kWh] 1 thrm <=> 29.3 kWh, or 29.3kWh/thrm
-emission_factor_gas = 0.2039 * 29.3 # [kgCO2/thrm]
-diesel_price = 143.97 # [pence/litre]
-petrol_price = 135.07 # [pence/litre]
-gas_price = 80 # [pence/thrm]
+# Consumer fuel price impacts
+carbon_price = np.array(CTBO_cost_lev_vec) / pounds_to_EUR
+emission_factor_diesel = fuels['diesel']['emission_factor']
+emission_factor_petrol = fuels['petrol']['emission_factor']
+emission_factor_gas = fuels['gas']['emission_factor']
+diesel_price = fuels['diesel']['price']
+petrol_price = fuels['petrol']['price']
+gas_price = fuels['gas']['price']
 
-# Calculate absolute price increases (convert from £/tCO2 to pence per unit)
-diesel_increase_abs = carbon_price * (emission_factor_diesel / 1000) * 100  # [pence/litre]
-petrol_increase_abs = carbon_price * (emission_factor_petrol / 1000) * 100  # [pence/litre]
-gas_increase_abs = carbon_price * (emission_factor_gas / 1000) * 100  # [pence/thrm]
+diesel_increase_abs = carbon_price * (emission_factor_diesel / 1000) * 100
+petrol_increase_abs = carbon_price * (emission_factor_petrol / 1000) * 100
+gas_increase_abs = carbon_price * (emission_factor_gas / 1000) * 100
 
-# Calculate percentage price increases
-diesel_increase_pct = (diesel_increase_abs / diesel_price) * 100  # [%]
-petrol_increase_pct = (petrol_increase_abs / petrol_price) * 100  # [%]
-gas_increase_pct = (gas_increase_abs / gas_price) * 100  # [%]
+diesel_increase_pct = (diesel_increase_abs / diesel_price) * 100
+petrol_increase_pct = (petrol_increase_abs / petrol_price) * 100
+gas_increase_pct = (gas_increase_abs / gas_price) * 100
 
 print(f"\n2050 Consumer Fuel Price Impacts:")
 print(f"  Diesel:  +{diesel_increase_abs[idx_2050]:.2f} pence/litre (+{diesel_increase_pct[idx_2050]:.1f}%)")
 print(f"  Petrol:  +{petrol_increase_abs[idx_2050]:.2f} pence/litre (+{petrol_increase_pct[idx_2050]:.1f}%)")
 print(f"  Gas:     +{gas_increase_abs[idx_2050]:.2f} pence/thrm (+{gas_increase_pct[idx_2050]:.1f}%)")
 
-
-# Convert plant-level results to DataFrame
+# Plant-level analysis
 plant_df = pd.DataFrame(plant_results)
 print(f"\nPlant-level data collected: {len(plant_df)} plant-year observations")
 
@@ -310,18 +382,14 @@ if len(plant_df) > 0:
     plant_npv = []
     for plant_name in plant_df['plant'].unique():
         plant_data = plant_df[plant_df['plant'] == plant_name].copy()
-        # Get investment year (use max to skip None values from non-invested years)
         investment_year = plant_data['investment_year'].max()
         
-        # Skip plants that never invested
         if pd.isna(investment_year):
             continue
         
-        # Calculate discount factors from base year
         base_year = investment_year if USE_INVESTMENT_YEAR_AS_BASE else START_YEAR
         plant_data['discount_factor'] = 1 / (1 + DISCOUNT_RATE) ** (plant_data['year'] - base_year)
         
-        # Calculate discounted cash flows
         npv_gross_profit = (plant_data['ctbo_gross_profit'] * plant_data['discount_factor']).sum()
         npv_net_profit = (plant_data['ctbo_net_profit'] * plant_data['discount_factor']).sum()
         npv_diluted_cost = (plant_data['ctbo_diluted_cost'] * plant_data['discount_factor']).sum()
@@ -339,28 +407,30 @@ if len(plant_df) > 0:
         })
     
     plant_npv_df = pd.DataFrame(plant_npv)
-    
     total_plants = plant_df['plant'].nunique()
     print(f"  Plants that invested: {len(plant_npv_df)} out of {total_plants}")
     
-    # Print annual summaries (CCGT plants only)
+    # CCGT plant summaries
     ccgt_plants = plant_df[plant_df['plant'].str.endswith('CCGT')]
     plant_2030 = ccgt_plants[ccgt_plants['year'] == 2030]
     plant_2040 = ccgt_plants[ccgt_plants['year'] == 2040]
     plant_2050 = ccgt_plants[ccgt_plants['year'] == 2050]
-    print(f"\n  Total CCGT plant (fossil net) profits in 2030: {plant_2030['ctbo_diluted_cost'].sum() - plant_2030['ctbo_fossil_profit'].sum() + plant_2030['ctbo_net_profit'].sum():.0f} kEUR/yr")
-    print(f"  Total CCGT plant (fossil net) profits in 2040: {plant_2040['ctbo_diluted_cost'].sum() - plant_2040['ctbo_fossil_profit'].sum() + plant_2040['ctbo_net_profit'].sum():.0f} kEUR/yr")
-    print(f"  Total CCGT plant (fossil net) profits in 2050: {plant_2050['ctbo_diluted_cost'].sum() - plant_2050['ctbo_fossil_profit'].sum() + plant_2050['ctbo_net_profit'].sum():.0f} kEUR/yr")
     
-    # Print NPV summaries
+    print(f"\n  Total CCGT plant (fossil net) profits in 2030: "
+          f"{plant_2030['ctbo_diluted_cost'].sum() - plant_2030['ctbo_fossil_profit'].sum() + plant_2030['ctbo_net_profit'].sum():.0f} kEUR/yr")
+    print(f"  Total CCGT plant (fossil net) profits in 2040: "
+          f"{plant_2040['ctbo_diluted_cost'].sum() - plant_2040['ctbo_fossil_profit'].sum() + plant_2040['ctbo_net_profit'].sum():.0f} kEUR/yr")
+    print(f"  Total CCGT plant (fossil net) profits in 2050: "
+          f"{plant_2050['ctbo_diluted_cost'].sum() - plant_2050['ctbo_fossil_profit'].sum() + plant_2050['ctbo_net_profit'].sum():.0f} kEUR/yr")
+    
+    # NPV summaries
     base_description = "investment year" if USE_INVESTMENT_YEAR_AS_BASE else f"{START_YEAR}"
     print(f"\n  NPV Analysis (discount rate: {DISCOUNT_RATE*100:.1f}%, base: {base_description}):")
     print(f"    Total NPV gross profit (all plants): {plant_npv_df['NPV_gross_profit'].sum():.0f} kEUR")
     print(f"    Total NPV net profit (all plants): {plant_npv_df['NPV_net_profit'].sum():.0f} kEUR")
     print(f"    Total NPV fossil profit (all plants): {plant_npv_df['NPV_fossil_profit'].sum():.0f} kEUR")
     
-    # Top 10 and bottom 10 plants by NPV net profit
-    # Merge with plant_df to get CO2 capture data (use max to get non-zero invested values)
+    # Top 10 and bottom 10 plants
     plant_co2_data = plant_df.groupby('plant')[['CO2_captured_fossil', 'CO2_captured_bio']].max().reset_index()
     plant_npv_with_co2 = plant_npv_df.merge(plant_co2_data, on='plant', how='left')
     
@@ -369,26 +439,39 @@ if len(plant_df) > 0:
     
     print(f"\n  Top 10 plants by NPV net profit:")
     for idx, row in top_10.iterrows():
-        print(f"    {row['plant'][:45]:45s} | NPV: {row['NPV_net_profit']:8,.0f} kEUR | Invested: {row['investment_year']:.0f} | CO2f: {row['CO2_captured_fossil']:5.0f} | CO2bio: {row['CO2_captured_bio']:5.0f} ktCO2/yr")
+        print(f"    {row['plant'][:45]:45s} | NPV: {row['NPV_net_profit']:8,.0f} kEUR | "
+              f"Invested: {row['investment_year']:.0f} | CO2f: {row['CO2_captured_fossil']:5.0f} | "
+              f"CO2bio: {row['CO2_captured_bio']:5.0f} ktCO2/yr")
     
     print(f"\n  Bottom 10 plants by NPV net profit:")
     for idx, row in bottom_10.iterrows():
-        print(f"    {row['plant'][:45]:45s} | NPV: {row['NPV_net_profit']:8,.0f} kEUR | Invested: {row['investment_year']:.0f} | CO2f: {row['CO2_captured_fossil']:5.0f} | CO2bio: {row['CO2_captured_bio']:5.0f} ktCO2/yr")
+        print(f"    {row['plant'][:45]:45s} | NPV: {row['NPV_net_profit']:8,.0f} kEUR | "
+              f"Invested: {row['investment_year']:.0f} | CO2f: {row['CO2_captured_fossil']:5.0f} | "
+              f"CO2bio: {row['CO2_captured_bio']:5.0f} ktCO2/yr")
 
 
-# ==================== PLOTS ====================
+# ============================================================================
+# PLOTS
+# ============================================================================
+
+print("\n" + "="*80)
+print("GENERATING PLOTS")
+print("="*80)
 
 # Plot 1: MACC curves
 plt.figure(figsize=(10, 6))
-plt.plot(macc_4oak['ktCO2_yr_cumulative'], macc_4oak['EUR/tCO2'], color='green', label='4th-of-a-kind costs')
-plt.plot(macc_foak['ktCO2_yr_cumulative'], macc_foak['EUR/tCO2'], color='red', label='First-of-a-kind costs')
-plt.xlabel('Cumulative Captured CO2 (ktCO2/yr)', fontsize=12)
-plt.ylabel('Marginal Abatement Cost (EUR/tCO2)', fontsize=12)
+plt.plot(macc_4oak['ktCO2_yr_cumulative'], macc_4oak['EUR/tCO2'], 
+         color='green', label='4th-of-a-kind costs', linewidth=2)
+plt.plot(macc_foak['ktCO2_yr_cumulative'], macc_foak['EUR/tCO2'], 
+         color='red', label='First-of-a-kind costs', linewidth=2)
+plt.xlabel('Cumulative Captured CO2 (ktCO2/yr)', fontsize=13)
+plt.ylabel('Marginal Abatement Cost (EUR/tCO2)', fontsize=13)
 plt.title('MACC of point source CCS (fossil + biogenic)', fontsize=14)
 plt.legend(fontsize=11)
-plt.grid(True)
+plt.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig('1_maccs.png', dpi=300)
+print("  Saved: 1_maccs.png")
 
 # Plot 2: Emissions and capacities
 plt.figure(figsize=(10, 6))
@@ -398,17 +481,20 @@ plt.plot(years, ctbo_mandate_vec, label='CTBO Mandate', linewidth=2, color='blac
 plt.plot(years, fCCS_capacity_vec, label='Fossil CCS', linewidth=2, color='gray')
 plt.plot(years, BECCS_capacity_vec, label='BECCS', linewidth=2, color='green')
 plt.plot(years, DACCS_capacity_vec, label='DACCS', linewidth=2, color='lightgreen')
+
 if first_DACCS_year is not None:
     daccs_idx = np.where(years == first_DACCS_year)[0][0]
     plt.plot(first_DACCS_year, DACCS_capacity_vec[daccs_idx], 'o', markersize=6, color='lightgreen')
     plt.plot([], [], 'o', markersize=6, color='lightgreen', label='Year when DACCS is marginal')
-plt.xlabel('Year', fontsize=12)
-plt.ylabel('ktCO2/yr', fontsize=12)
+
+plt.xlabel('Year', fontsize=13)
+plt.ylabel('ktCO2/yr', fontsize=13)
 plt.title('UK Carbon Balances (CTBO Mandate=Fossil CCS+BECCS+DACCS)', fontsize=14)
 plt.legend(fontsize=11)
-plt.grid(True)
+plt.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig('2_carbon_balances.png', dpi=300)
+print("  Saved: 2_carbon_balances.png")
 
 # Plot 3: Costs
 plt.figure(figsize=(10, 6))
@@ -417,7 +503,6 @@ plt.plot(years, marginal_cost_vec, label='Marginal CCS Cost', linewidth=2, color
 plt.plot(years, CSU_cost_vec, label='CSU Cost', linewidth=2, color='orange')
 plt.plot(years, CTBO_cost_lev_vec, label='CTBO Cost (levelized)', linewidth=2, color='black')
 
-# Add markers at first DACCS year
 if first_DACCS_year is not None:
     daccs_idx = np.where(years == first_DACCS_year)[0][0]
     plt.plot(first_DACCS_year, ets_prices[daccs_idx], 'o', markersize=6, color='yellow')
@@ -425,44 +510,17 @@ if first_DACCS_year is not None:
     plt.plot(first_DACCS_year, CSU_cost_vec[daccs_idx], 'o', markersize=6, color='orange')
     plt.plot(first_DACCS_year, CTBO_cost_lev_vec[daccs_idx], 'o', markersize=6, color='black')
     plt.plot([], [], 'o', markersize=6, color='gray', label='Year when DACCS is marginal')
-plt.xlabel('Year', fontsize=12)
-plt.ylabel('EUR/tCO2', fontsize=12)
+
+plt.xlabel('Year', fontsize=13)
+plt.ylabel('EUR/tCO2', fontsize=13)
 plt.title('CSU cost = Marginal CCS Cost - ETS Price', fontsize=14)
 plt.legend(fontsize=11)
-plt.grid(True)
+plt.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig('3_costs.png', dpi=300)
+print("  Saved: 3_costs.png")
 
-# Plot 4: KPI and CTBO costs
-fig, ax1 = plt.subplots(figsize=(10, 6))
-KPI = np.array(CSU_cost_vec) / ets_prices
-ax1.plot(years, KPI, color='blue', label='CSU/ETS Ratio', linewidth=2)
-
-# Add marker at first DACCS year
-if first_DACCS_year is not None:
-    daccs_idx = np.where(years == first_DACCS_year)[0][0]
-    ax1.plot(first_DACCS_year, KPI[daccs_idx], 'o', markersize=6, color='blue')
-    ax1.plot([], [], 'o', markersize=6, color='gray', label='Year when DACCS is marginal')
-
-ax1.set_xlabel('Year', fontsize=12)
-ax1.set_ylabel('CSU/ETS Price Ratio', color='blue', fontsize=12)
-ax1.tick_params(axis='y', labelcolor='blue')
-ax1.grid(True)
-
-ax2 = ax1.twinx()
-ax2.plot(years, CTBO_cost_lev_vec, color='yellow', label='CTBO Cost', linewidth=2)
-
-# Add marker at first DACCS year
-if first_DACCS_year is not None:
-    ax2.plot(first_DACCS_year, CTBO_cost_lev_vec[daccs_idx], 'o', markersize=6, color='yellow')
-ax2.plot([], [], 'o', markersize=6, color='yellow', label='Year when DACCS is marginal')
-ax2.set_ylabel('CTBO Cost (EUR/tCO2)', color='yellow', fontsize=12)
-ax2.tick_params(axis='y', labelcolor='yellow')
-
-plt.title('CSU/ETS Ratio and CTBO Costs Over Time', fontsize=14)
-fig.tight_layout()
-
-# Plot 5: Consumer fuel price increases
+# Plot 4: Consumer fuel price increases
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
 
 # Absolute increases
@@ -470,146 +528,107 @@ ax1.plot(years, diesel_increase_abs, label='Diesel', linewidth=2, color='darkblu
 ax1.plot(years, petrol_increase_abs, label='Petrol', linewidth=2, color='orange')
 ax1.plot(years, gas_increase_abs, label='Gas', linewidth=2, color='red')
 
-# Add markers at first DACCS year
 if first_DACCS_year is not None:
     daccs_idx = np.where(years == first_DACCS_year)[0][0]
     ax1.plot(first_DACCS_year, diesel_increase_abs[daccs_idx], 'o', markersize=6, color='darkblue')
     ax1.plot(first_DACCS_year, petrol_increase_abs[daccs_idx], 'o', markersize=6, color='orange')
     ax1.plot(first_DACCS_year, gas_increase_abs[daccs_idx], 'o', markersize=6, color='red')
-    # Add legend entry for DACCS marker
     ax1.plot([], [], 'o', markersize=6, color='gray', label='Year when DACCS is marginal')
 
-# Annotate CTBO fractions for 2040 and 2050
 idx_2040 = np.where(years == 2040)[0][0]
 ax1.annotate(f'CTBO:\n{ctbo_fraction[idx_2040]:.0f}%', 
              xy=(2040, gas_increase_pct[idx_2040]), 
              xytext=(2040, gas_increase_pct[idx_2040] + 5),
-             fontsize=10, ha='center')
+             fontsize=11, ha='center')
 ax1.annotate(f'CTBO:\n{ctbo_fraction[idx_2050]:.0f}%', 
              xy=(2050, gas_increase_pct[idx_2050]), 
              xytext=(2050, gas_increase_pct[idx_2050] + 5),
-             fontsize=10, ha='center')
+             fontsize=11, ha='center')
 
-ax1.set_xlabel('Year', fontsize=12)
-ax1.set_ylabel('Price Increase (pence per litre/therm)', fontsize=12)
+ax1.set_xlabel('Year', fontsize=13)
+ax1.set_ylabel('Price Increase (pence per litre/thrm)', fontsize=13)
 ax1.legend(fontsize=11)
-ax1.grid(True)
+ax1.grid(True, alpha=0.3)
 
 # Percentage increases
 ax2.plot(years, diesel_increase_pct, label='Diesel', linewidth=2, color='darkblue')
 ax2.plot(years, petrol_increase_pct, label='Petrol', linewidth=2, color='orange')
 ax2.plot(years, gas_increase_pct, label='Gas', linewidth=2, color='red')
 
-# Add markers at first DACCS year
 if first_DACCS_year is not None:
     ax2.plot(first_DACCS_year, diesel_increase_pct[daccs_idx], 'o', markersize=6, color='darkblue')
     ax2.plot(first_DACCS_year, petrol_increase_pct[daccs_idx], 'o', markersize=6, color='orange')
     ax2.plot(first_DACCS_year, gas_increase_pct[daccs_idx], 'o', markersize=6, color='red')
-    # Add legend entry for DACCS marker
     ax2.plot([], [], 'o', markersize=6, color='gray', label='Year when DACCS is marginal')
 
-ax2.set_xlabel('Year', fontsize=12)
-ax2.set_ylabel('Price Increase (%)', fontsize=12)
+ax2.set_xlabel('Year', fontsize=13)
+ax2.set_ylabel('Price Increase (%)', fontsize=13)
 ax2.legend(fontsize=11)
-ax2.grid(True)
+ax2.grid(True, alpha=0.3)
 
 plt.tight_layout()
 plt.savefig('4_price_increases.png', dpi=300)
+print("  Saved: 4_price_increases.png")
 
-# Plot 5: Plant-level profits for selected plants
+# Plot 5: Plant-level profits
 if len(plant_df) > 0:
-    selected_plants = [{"Pembroke Power Station-CCGT": "black"}, {"Runcorn-W2E": "green"}, {"Hope Cement Works-cement": "red"}, {"Medway-CCGT": "gray"}]
+    selected_plants = [
+        {"Pembroke Power Station-CCGT": "black"},
+        {"Runcorn-W2E": "green"},
+        {"Hope Cement Works-cement": "red"},
+        {"Medway-CCGT": "gray"}
+    ]
     
-    # Plot 5: CSU profits for selected plants
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
     
     for plant_dict in selected_plants:
         plant_name, color = list(plant_dict.items())[0]
         plant_data = plant_df[plant_df['plant'] == plant_name]
+        
         if len(plant_data) > 0:
-            line1 = ax1.plot(plant_data['year'], plant_data['csu_gross_profit'], label=plant_name, linewidth=2, color=color)
-            line2 = ax2.plot(plant_data['year'], plant_data['csu_net_profit'], label=plant_name, linewidth=2, color=color)
+            ax1.plot(plant_data['year'], plant_data['ctbo_gross_profit'], 
+                    label=plant_name, linewidth=2, color=color)
+            ax2.plot(plant_data['year'], plant_data['ctbo_net_profit'], 
+                    label=plant_name, linewidth=2, color=color)
             
-            # Add square marker at plant's investment year
-            investment_year = plant_data['investment_year'].max()
-            if not pd.isna(investment_year) and investment_year in plant_data['year'].values:
-                invest_data = plant_data[plant_data['year'] == investment_year].iloc[0]
-                ax1.plot(investment_year, invest_data['csu_gross_profit'], 's', markersize=6, color=color)
-                ax2.plot(investment_year, invest_data['csu_net_profit'], 's', markersize=6, color=color)
-            
-            # Add circular marker at first DACCS year if it exists in this plant's data
-            if first_DACCS_year is not None and first_DACCS_year in plant_data['year'].values:
-                daccs_data = plant_data[plant_data['year'] == first_DACCS_year].iloc[0]
-                ax1.plot(first_DACCS_year, daccs_data['csu_gross_profit'], 'o', markersize=6, color=color)
-                ax2.plot(first_DACCS_year, daccs_data['csu_net_profit'], 'o', markersize=6, color=color)
-    ax1.plot([], [], 'o', markersize=6, color='black', label='Year when DACCS is marginal')
-    ax1.plot([], [], 's', markersize=6, color='black', label='Year when individual plant invested')
-    ax1.set_xlabel('Year', fontsize=12)
-    ax1.set_ylabel('CSU Gross Profit (EUR/tCO2)', fontsize=12)
-    # ax1.set_title('Selected Plants: CSU Gross Profit Over Time', fontsize=14)
-    ax1.legend(fontsize=9, loc='best')
-    ax1.grid(True)
-    
-    ax2.set_xlabel('Year', fontsize=12)
-    ax2.plot([], [], 'o', markersize=6, color='black', label='Year when DACCS is marginal')
-    ax2.plot([], [], 's', markersize=6, color='black', label='Year when individual plant invested')
-    ax2.set_ylabel('CSU Net Profit (EUR/tCO2)', fontsize=12)
-    # ax2.set_title('Selected Plants: CSU Net Profit Over Time', fontsize=14)
-    ax2.legend(fontsize=9, loc='best')
-    ax2.grid(True)
-    
-    plt.tight_layout()
-    
-    # Plot 5: CTBO profits for selected plants
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
-    
-    for plant_dict in selected_plants:
-        plant_name, color = list(plant_dict.items())[0]
-        plant_data = plant_df[plant_df['plant'] == plant_name]
-        if len(plant_data) > 0:
-            line1 = ax1.plot(plant_data['year'], plant_data['ctbo_gross_profit'], label=plant_name, linewidth=2, color=color)
-            line2 = ax2.plot(plant_data['year'], plant_data['ctbo_net_profit'], label=plant_name, linewidth=2, color=color)
-            
-            # Add square marker at plant's investment year
             investment_year = plant_data['investment_year'].max()
             if not pd.isna(investment_year) and investment_year in plant_data['year'].values:
                 invest_data = plant_data[plant_data['year'] == investment_year].iloc[0]
                 ax1.plot(investment_year, invest_data['ctbo_gross_profit'], 's', markersize=6, color=color)
                 ax2.plot(investment_year, invest_data['ctbo_net_profit'], 's', markersize=6, color=color)
             
-            # Add circular marker at first DACCS year if it exists in this plant's data
             if first_DACCS_year is not None and first_DACCS_year in plant_data['year'].values:
                 daccs_data = plant_data[plant_data['year'] == first_DACCS_year].iloc[0]
                 ax1.plot(first_DACCS_year, daccs_data['ctbo_gross_profit'], 'o', markersize=6, color=color)
                 ax2.plot(first_DACCS_year, daccs_data['ctbo_net_profit'], 'o', markersize=6, color=color)
     
-    ax1.set_xlabel('Year', fontsize=12)
-    ax1.set_ylabel('Plant profits (gross) from selling CO2 (kEUR/yr)', fontsize=12)
     ax1.plot([], [], 'o', markersize=6, color='black', label='Year when DACCS is marginal')
     ax1.plot([], [], 's', markersize=6, color='black', label='Year when individual plant invested')
-
-    # ax1.set_title('Selected Plants: CTBO Gross Profit Over Time', fontsize=14)
-    ax1.legend(fontsize=9, loc='best')
-    ax1.grid(True)
+    ax1.set_xlabel('Year', fontsize=13)
+    ax1.set_ylabel('Plant profits (gross) from selling CO2 (kEUR/yr)', fontsize=13)
+    ax1.legend(fontsize=10, loc='best')
+    ax1.grid(True, alpha=0.3)
     
-    ax2.set_xlabel('Year', fontsize=12)
-    ax2.set_ylabel('Plant profits (net) from selling CO2 (kEUR/yr)', fontsize=12)
     ax2.plot([], [], 'o', markersize=6, color='black', label='Year when DACCS is marginal')
     ax2.plot([], [], 's', markersize=6, color='black', label='Year when individual plant invested')
-    # ax2.set_title('Selected Plants: CTBO Net Profit Over Time', fontsize=14)
-    ax2.legend(fontsize=9, loc='best')
-    ax2.grid(True)
+    ax2.set_xlabel('Year', fontsize=13)
+    ax2.set_ylabel('Plant profits (net) from selling CO2 (kEUR/yr)', fontsize=13)
+    ax2.legend(fontsize=10, loc='best')
+    ax2.grid(True, alpha=0.3)
+    
     plt.tight_layout()
     plt.savefig('5_profits.png', dpi=300)
+    print("  Saved: 5_profits.png")
 
-
-# Save plant-level data if requested
+# Save plant-level data
 if SAVE_PLANT_DATA and len(plant_df) > 0:
     plant_df.to_csv('ctbo_plant_results.csv', index=False)
     plant_npv_df.to_csv('ctbo_plant_npv.csv', index=False)
-    print(f"\nPlant-level data saved to 'ctbo_plant_results.csv'")
-    print(f"Plant NPV data saved to 'ctbo_plant_npv.csv'")
+    print(f"\n  Plant-level data saved to 'ctbo_plant_results.csv'")
+    print(f"  Plant NPV data saved to 'ctbo_plant_npv.csv'")
 
-print("\nAnalysis complete!")
-print("TODO: (1) Manually count the CTBO-square-MACC area calculation (2) Check NPV calculations (3) CHECK DR LOGIC (4) Tidy up (5) Implement uncertainty?")
+print("\n" + "="*80)
+print("ANALYSIS COMPLETE")
+print("="*80)
+
 plt.show()

@@ -264,7 +264,7 @@ print("\nCreating map...")
 fig, ax = create_all_plants_map(europe, plants_gdf, debug=True)
 
 # Save the figure
-output_file = 'map_all_plants.png'
+output_file = 'map_concentrations.png'
 plt.savefig(output_file, dpi=400, bbox_inches='tight')
 print(f"\nMap saved as '{output_file}'")
 
