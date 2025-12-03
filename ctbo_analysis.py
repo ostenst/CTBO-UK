@@ -5,9 +5,9 @@ import numpy as np
 # ==================== INPUT PARAMETERS ====================
 
 # Scenario selection
-FOAK = True                    # True: First-of-a-kind costs, False: Nth-of-a-kind costs
+FOAK = False                    # True: First-of-a-kind costs, False: 4th-of-a-kind costs
 CTBO_ENABLED = True            # Enable CTBO mandate
-ETS_HIGH = False               # True: High ETS trajectory (85->154 £/tCO2), False: Low (49->74 £/tCO2)
+ETS = "Low"                   # "High", "Medium", "Low"
 DACCS_EXPENSIVE = True         # True: Expensive DACCS (323->281 £/tCO2), False: Cheap (247->152 £/tCO2)
 VERBOSE = True                # Print detailed investment decisions
 SAVE_PLANT_DATA = True        # Save plant-level results to CSV
@@ -23,20 +23,20 @@ ctbo_fraction = t**2  # [%]
 
 # Diffuse emissions reduction
 DIFFUSE_START_FRACTION = 1.0   # 100% of diffuse emissions in START_YEAR
-DIFFUSE_END_FRACTION = 0.45    # 55% of diffuse emissions by 2050
+DIFFUSE_END_FRACTION = 0.40    # % of diffuse emissions that remain in 2055
 DIFFUSE_TARGET_YEAR = 2055
 
 # Financial parameters
 DISCOUNT_RATE = 0.035          # Real discount rate for NPV calculations [3.5%]
 USE_INVESTMENT_YEAR_AS_BASE = False  # True: NPV from each plant's investment year, False: NPV from START_YEAR
 
-# Price trajectories (in £/tCO2)
+# Price trajectories (in £/tCO2, real 2024 prices)
 pounds_to_EUR = 1.15
-if ETS_HIGH:
-    ets_2025, ets_2050 = 85, 154
-else:
-    ets_2025, ets_2050 = 49, 74
+ets_df = pd.read_csv('data/ETS.csv')
+ets_df.columns = ets_df.columns.str.strip()  # Remove leading/trailing spaces
+ets_df.set_index('Year', inplace=True)
 
+# DACCS cost trajectories
 if DACCS_EXPENSIVE:
     DACCS_2025, DACCS_2050 = 323, 281
 else:
@@ -71,11 +71,22 @@ diffuse_fraction = np.where(
 diffuse_emissions = diffuse_baseline * diffuse_fraction
 
 # ETS price trajectory (convert to EUR/tCO2)
-ets_prices = np.where(
-    years <= 2050,
-    ets_2025 + (years - START_YEAR) * ((ets_2050 - ets_2025) / (2050 - START_YEAR)),
-    ets_2050
-) * pounds_to_EUR
+# Map ETS scenario to CSV column name
+ets_column_map = {
+    "High": "High Sensitivity - Low Fossil Fuel Prices and High Economic Growth (2024 GBP)",
+    "Medium": "Net Zero Strategy Aligned (2024 GBP)",
+    "Low": "Low Sensitivity - High Fossil Fuel Prices and Low Economic Growth (2024 GBP)"
+}
+ets_column = ets_column_map[ETS]
+
+# Get prices for our years (use 2050 value for years beyond 2050)
+ets_prices = []
+for year in years:
+    if year in ets_df.index:
+        ets_prices.append(ets_df.loc[year, ets_column] * pounds_to_EUR)
+    else:
+        ets_prices.append(ets_df.loc[2050, ets_column] * pounds_to_EUR)
+ets_prices = np.array(ets_prices)
 
 # DACCS cost trajectory (convert to EUR/tCO2)
 DACCS_costs = np.where(
@@ -467,6 +478,17 @@ if first_DACCS_year is not None:
     ax1.plot(first_DACCS_year, gas_increase_abs[daccs_idx], 'o', markersize=6, color='red')
     # Add legend entry for DACCS marker
     ax1.plot([], [], 'o', markersize=6, color='gray', label='Year when DACCS is marginal')
+
+# Annotate CTBO fractions for 2040 and 2050
+idx_2040 = np.where(years == 2040)[0][0]
+ax1.annotate(f'CTBO:\n{ctbo_fraction[idx_2040]:.0f}%', 
+             xy=(2040, gas_increase_pct[idx_2040]), 
+             xytext=(2040, gas_increase_pct[idx_2040] + 5),
+             fontsize=10, ha='center')
+ax1.annotate(f'CTBO:\n{ctbo_fraction[idx_2050]:.0f}%', 
+             xy=(2050, gas_increase_pct[idx_2050]), 
+             xytext=(2050, gas_increase_pct[idx_2050] + 5),
+             fontsize=10, ha='center')
 
 ax1.set_xlabel('Year', fontsize=12)
 ax1.set_ylabel('Price Increase (pence per litre/therm)', fontsize=12)
