@@ -1,6 +1,8 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+from pyproj import Transformer
+import geopandas as gpd
 
 def match_transportation(emitter_plant, transport_costs_df, discount_rate=0.035, lifetime=30, debug=False):
     """
@@ -75,7 +77,7 @@ def match_transportation(emitter_plant, transport_costs_df, discount_rate=0.035,
     }
     
     if debug:
-        print(f"\nClosest site: {result['site_name']} (ID: {result['site_id']})")
+        print(f"\nClosest site: {result['site_name']} (ID: {result['site_id']}) of emitter: {emitter_plant['Name']}")
         print(f"Distance: {result['distance_m']:.2f} meters")
         print(f"Mass CO2: {result['mass_co2_kt']} ktCO2/y")
         print(f"CO2 point: {result['co2_point']}")
@@ -91,6 +93,17 @@ def match_transportation(emitter_plant, transport_costs_df, discount_rate=0.035,
 def calculate_distance(easting1, northing1, easting2, northing2):
     """Calculate Euclidean distance between two points"""
     return ((easting1 - easting2)**2 + (northing1 - northing2)**2)**0.5
+
+def latlon_to_easting_northing(latitude, longitude, debug=False):
+    """Convert latitude/longitude to British National Grid Easting/Northing coordinates"""
+    if debug:
+        print(f"Converting: Lat={latitude}, Lon={longitude}")
+    # WGS84 (lat/lon) to British National Grid (EPSG:27700)
+    transformer = Transformer.from_crs("EPSG:4326", "EPSG:27700", always_xy=True)
+    easting, northing = transformer.transform(longitude, latitude)
+    if debug:
+        print(f"Result: Easting={easting}, Northing={northing}")
+    return easting, northing
 
 def approximate_CAPEX(mCO2, xCO2, CEPCI_2025, CEPCI_2023=798.7, capture_rate=0.90, NETL=5.509):
     a = 2.1673
@@ -176,6 +189,9 @@ for i, (idx, row) in enumerate(largest_plants.iterrows(), 1):
 print("Sum of all point-source fossil emitters: ", round(CO2_fossil*10**-6, 1), " MtCO2/yr")
 print("Sum of top 60 fossil emitters: ", round(largest_plants['CO2'].sum()*10**-6, 1), " MtCO2/yr")
 
+# Remove the Site == Elgin PUQ since its in the North Sea
+largest_plants = largest_plants[largest_plants['Site']!="Elgin PUQ"]
+
 # Move Grangemouth Power Station from petroleum to power sector
 largest_plants.loc[largest_plants['Site'] == 'Grangemouth Power Station', 'Sector'] = 'Major power producers'
 
@@ -193,9 +209,25 @@ transport_costs = transport_costs[transport_costs["CO2 Pipeline/Trucking?"] != "
 for idx, plant in largest_plants.iterrows():
     result = match_transportation(plant, transport_costs, discount_rate=0.035, lifetime=30, debug=False)
     largest_plants.loc[idx, 'transport_cost'] = result['total_cost_per_t'] * pounds_to_EUR * CEPCI_2025/CEPCI_2023 # [EUR/tCO2]
+    largest_plants.loc[idx, 'distance_km'] = result['distance_m'] / 1000  # [km] to nearest NZIP plant
 
-# Prepare tentative W2E data (lacking transport locations etc)
+# Prepare tentative W2E data
 w2e_plants = pd.read_csv("data/w2e_plants.csv")
+w2e_plants = w2e_plants[w2e_plants['No.'] != 40] # This is a plant on the Shetland Islands
+
+# Convert Latitude/Longitude to Easting/Northing and calculate transport costs for w2e_plants
+w2e_plants['Easting'] = 0.0
+w2e_plants['Northing'] = 0.0
+w2e_plants['transport_cost'] = 0.0
+for idx, plant in w2e_plants.iterrows():
+    easting, northing = latlon_to_easting_northing(plant['Latitude'], plant['Longitude'], debug=False)
+    w2e_plants.loc[idx, 'Easting'] = easting
+    w2e_plants.loc[idx, 'Northing'] = northing
+    # Now get the updated row with Easting/Northing for transport calculation
+    plant_with_coords = w2e_plants.loc[idx]
+    result = match_transportation(plant_with_coords, transport_costs, discount_rate=0.035, lifetime=30, debug=False)
+    w2e_plants.loc[idx, 'transport_cost'] = result['total_cost_per_t'] * pounds_to_EUR * CEPCI_2025/CEPCI_2023 # [EUR/tCO2]
+    w2e_plants.loc[idx, 'distance_km'] = result['distance_m'] / 1000  # [km] to nearest NZIP plant
 
 # ------------POWER SECTOR------------
 results = []
@@ -261,6 +293,7 @@ for idx, plant in power_producers.iterrows():
         'transtorage': plant['transport_cost'], # [EUR/tCO2]
         'total_4OAK': CAPEX_4OAK+OPEXE+plant['transport_cost'], # [EUR/tCO2]
         'total_FOAK': CAPEX_FOAK+OPEXE+plant['transport_cost'], # [EUR/tCO2]
+        'distance_km': plant['distance_km']
     })
 
 # ------------INDUSTRY SECTOR------------
@@ -327,6 +360,7 @@ for idx, plant in industrial_plants.iterrows():
                 'transtorage': plant['transport_cost'], # [EUR/tCO2]
                 'total_4OAK': CAPEX_4OAK+OPEXE+plant['transport_cost'], # [EUR/tCO2]
                 'total_FOAK': CAPEX_FOAK+OPEXE+plant['transport_cost'], # [EUR/tCO2]
+                'distance_km': plant['distance_km']
             })
 
     if plant['Sector'] == 'Iron & steel industries':
@@ -366,6 +400,7 @@ for idx, plant in industrial_plants.iterrows():
             'transtorage': plant['transport_cost'], # [EUR/tCO2]
             'total_4OAK': CAPEX_4OAK+OPEXE+plant['transport_cost'], # [EUR/tCO2]
             'total_FOAK': CAPEX_FOAK+OPEXE+plant['transport_cost'], # [EUR/tCO2]
+            'distance_km': plant['distance_km']
             })
 
     if plant['Sector'] == 'Cement':
@@ -395,6 +430,7 @@ for idx, plant in industrial_plants.iterrows():
             'transtorage': plant['transport_cost'], # [EUR/tCO2]
             'total_4OAK': CAPEX_4OAK+OPEXE+plant['transport_cost'], # [EUR/tCO2]
             'total_FOAK': CAPEX_FOAK+OPEXE+plant['transport_cost'], # [EUR/tCO2]
+            'distance_km': plant['distance_km']
             })
 
 # ------------W2E SECTOR------------
@@ -428,9 +464,8 @@ for idx, plant in w2e_plants.iterrows():
     OPEXE = OPEX_steam / (plant['CO2']*capture_rate) # [EUR/tCO2]
     OPEXE += pcompr * 1000/3600*celc # [MJ/kgCO2 => MWh/tCO2 => EUR/tCO2] power compression penalty from Tharun plant and system paper
 
-    # Dummy transport costs
-    transport_cost = 30 # [EUR/tCO2] NOTE: must calculate later using geographic distance
-    transport_cost = transport_cost * CEPCI_2025 / CEPCI_2023
+    # Transport costs (calculated from geographic distance to nearest CCS site)
+    transport_cost = plant['transport_cost'] # [EUR/tCO2]
 
     results.append({
         'site-stack': plant['Name'] + '-' + 'W2E',
@@ -446,6 +481,7 @@ for idx, plant in w2e_plants.iterrows():
         'transtorage': transport_cost, # [EUR/tCO2]
         'total_4OAK': CAPEX_4OAK+OPEXE+transport_cost, # [EUR/tCO2]
         'total_FOAK': CAPEX_FOAK+OPEXE+transport_cost, # [EUR/tCO2]
+        'distance_km': plant['distance_km']
     })
 
 # ------------ DRAX BECCS ------------
@@ -470,9 +506,13 @@ difference = profit_baseline - profit_BECCS # [EUR/y]
 OPEXE = difference / (Drax_CO2*capture_rate) # [EUR/tCO2]
 OPEXE += pcompr * 1000/3600*celc # [MJ/kgCO2 => MWh/tCO2 => EUR/tCO2] power compression penalty from Tharun plant and system paper
 
-# Dummy transport costs
-transport_cost = 30 # [EUR/tCO2] NOTE: must calculate later using geographic distance
-transport_cost = transport_cost * CEPCI_2025 / CEPCI_2023
+# Transport costs for Drax
+drax_coordinates = (53.738710, -0.993030) # Lat, Lon
+drax_easting, drax_northing = latlon_to_easting_northing(drax_coordinates[0], drax_coordinates[1], debug=False)
+drax_plant = pd.Series({'Easting': drax_easting, 'Northing': drax_northing, 'Name': 'Drax'})
+result = match_transportation(drax_plant, transport_costs, discount_rate=0.035, lifetime=30, debug=False)
+transport_cost = result['total_cost_per_t'] * pounds_to_EUR * CEPCI_2025/CEPCI_2023 # [EUR/tCO2]
+drax_distance = result['distance_m'] / 1000 # [km]
 
 results.append({
     'site-stack': 'Drax-BECCS',
@@ -488,6 +528,7 @@ results.append({
     'transtorage': transport_cost, # [EUR/tCO2]
     'total_4OAK': CAPEX_4OAK+OPEXE+transport_cost, # [EUR/tCO2]
     'total_FOAK': CAPEX_FOAK+OPEXE+transport_cost, # [EUR/tCO2]
+    'distance_km': drax_distance # [km]
 })
 
 # For every item in results, add 44 SEK/tCO2 for amine makeup to the total_4OAK and total_FOAK. Assumption from Ramboll.
@@ -628,27 +669,131 @@ if results:
 
 # Create and display results table
 if results:
-    print(f"{'Site-Stack':<40} | {'annual_CO2':<8} | {'captured_CO2f':<8} | {'captured_CO2bio':<8} | {'residual_CO2f':<8} | {'FLH':<6} | {'CAPEX_4OAK':<8} | {'CAPEX_FOAK':<8} | {'OPEXE':<8} | {'transtorage':<8} | {'total_4OAK':<8} | {'total_FOAK':<8}")
-    print(f"{'':<40} | {'ktCO2/yr':<8} | {'ktCO2/yr':<8} | {' - ':<8} | {'ktCO2/yr':<8} | {'h/y':<6} | {'EUR/tCO2':<8} | {'EUR/tCO2':<8} | {'EUR/tCO2':<8} | {'EUR/tCO2':<8} | {'EUR/tCO2':<8} | {'EUR/tCO2':<8}")
+    print(f"{'Site-Stack':<30} | {'annual_CO2':<8} | {'captured_CO2f':<8} | {'captured_CO2bio':<8} | {'residual_CO2f':<8} | {'FLH':<6} | {'CAPEX_4OAK':<8} | {'CAPEX_FOAK':<8} | {'OPEXE':<8} | {'transtorage':<8} | {'total_4OAK':<8} | {'total_FOAK':<8} | {'distance_km':<8}")
+    print(f"{'':<40} | {'ktCO2/yr':<8} | {'ktCO2/yr':<8} | {' - ':<8} | {'ktCO2/yr':<8} | {'h/y':<6} | {'EUR/tCO2':<8} | {'EUR/tCO2':<8} | {'EUR/tCO2':<8} | {'EUR/tCO2':<8} | {'EUR/tCO2':<8} | {'EUR/tCO2':<8} | {'km':<8}")
     print("-" * 150)
     for result in results:
-        print(f"{result['site-stack']:<40} | {result['annual_CO2']:>8.1f} | {result['captured_CO2f']:>8.1f} | {result['captured_CO2bio']:>8.1f} | {result['residual_CO2f']:>8.1f} | {result['FLH']:>6.0f} | {result['CAPEX_4OAK']:>8.1f} | {result['CAPEX_FOAK']:>8.1f} | {result['OPEXE']:>8.1f} | {result['transtorage']:>8.1f} | {result['total_4OAK']:>8.1f} | {result['total_FOAK']:>8.1f}")
+        print(f"{result['site-stack']:<40} | {result['annual_CO2']:>8.1f} | {result['captured_CO2f']:>8.1f} | {result['captured_CO2bio']:>8.1f} | {result['residual_CO2f']:>8.1f} | {result['FLH']:>6.0f} | {result['CAPEX_4OAK']:>8.1f} | {result['CAPEX_FOAK']:>8.1f} | {result['OPEXE']:>8.1f} | {result['transtorage']:>8.1f} | {result['total_4OAK']:>8.1f} | {result['total_FOAK']:>8.1f} | {result['distance_km']:>8.2f} ")
     print("-" * 150)
     print(f"Total CO2 emissions: {sum([r['annual_CO2'] for r in results]):,.1f} ktCO2/y")
     print(f"Total captured CO2f: {sum([r['captured_CO2f'] for r in results]):,.1f} ktCO2/y")
 
 print(len(results))
-# Assume CO2 emissions based on DESNZ projections and CCC scenario
-# https://assets.publishing.service.gov.uk/media/6604460f91a320001a82b0fd/uk-greenhouse-gas-emissions-provisional-figures-statistical-release-2023.pdf
-# https://assets.publishing.service.gov.uk/media/675c0ca798302e574b915336/eep-report-2023-2050.pdf
-# https://www.theccc.org.uk/publication/the-seventh-carbon-budget/
 
-# "Under EEP-ready policies only, emissions [all CO2eq] are projected to fall by 23% between 2022 and 2050."
-# In the 7th carbon budget, CO2 emissions fall to negative -40 MtCO2/yr by 2050
-CO2_2023 = 300 # [MtCO2/yr]
-CO2_plants = 1 # [MtCO2/yr]
+# ------------MAP ALL PLANTS------------
+print("\n\nCreating map of all plants with CCS distance...")
+
+# Prepare Drax data
+drax_data = pd.DataFrame([{
+    'Site': 'Drax',
+    'CO2': Drax_CO2,
+    'Easting': drax_easting,
+    'Northing': drax_northing,
+    'distance_km': drax_distance,
+    'Type': 'BECCS'
+}])
+
+# Prepare largest_plants data
+largest_plants_map = largest_plants[['Site', 'CO2', 'Easting', 'Northing', 'distance_km']].copy()
+largest_plants_map['Type'] = 'Fossil'
+
+# Prepare w2e_plants data
+w2e_plants_map = w2e_plants[['Name', 'CO2', 'Easting', 'Northing', 'distance_km']].copy()
+w2e_plants_map = w2e_plants_map.rename(columns={'Name': 'Site'})
+w2e_plants_map['Type'] = 'W2E'
+
+# Combine all plants
+all_plants = pd.concat([largest_plants_map, w2e_plants_map, drax_data], ignore_index=True)
+
+# Remove any plants with missing coordinates or distance
+all_plants = all_plants[
+    all_plants['Easting'].notna() & 
+    all_plants['Northing'].notna() &
+    all_plants['distance_km'].notna()
+].copy()
+
+print(f"Total plants to map: {len(all_plants)}")
+print(f"  - Fossil: {len(largest_plants_map)}")
+print(f"  - W2E: {len(w2e_plants_map)}")
+print(f"  - BECCS: {len(drax_data)}")
+
+# Load Europe shapefile
+print("Loading Europe shapefile...")
+europe = gpd.read_file("data/shapefiles/Europe/Europe_merged.shp").to_crs("EPSG:4326")
+
+# Create GeoDataFrame for plants (convert from British National Grid to WGS84)
+print("Creating GeoDataFrame...")
+plants_gdf = gpd.GeoDataFrame(
+    all_plants, 
+    geometry=gpd.points_from_xy(all_plants['Easting'], all_plants['Northing'], crs="EPSG:27700")
+).to_crs("EPSG:4326")
+
+# Create the plot
+fig, ax = plt.subplots(1, 1, figsize=(12, 15))
+ax.set_aspect(1.90)
+
+# Plot Europe background
+europe.plot(ax=ax, color='lightgray', edgecolor='white', alpha=0.45)
+
+# Plot plants as bubbles (size based on CO2 emissions, color based on distance_km)
+scatter = ax.scatter(
+    plants_gdf.geometry.x, 
+    plants_gdf.geometry.y,
+    s=plants_gdf['CO2']/750,  # Scale for visibility
+    c=plants_gdf['distance_km'],
+    cmap='viridis',
+    vmin=0,
+    vmax=plants_gdf['distance_km'].max(),  # Use actual maximum for full range
+    alpha=0.7,
+    edgecolors='black',
+    linewidth=0.5
+)
+
+# Add colorbar
+cbar = plt.colorbar(scatter, ax=ax, shrink=0.8)
+cbar.set_label('Distance to Nearest CCS Site (km)', fontsize=14)
+
+# Set title
+ax.set_title('UK CCS Candidate Plants\nBubble size proportional to annual CO₂ emissions, colored by distance to nearest CCS site', 
+             fontsize=15, fontweight='bold')
+
+# Set UK-focused view
+ax.set_xlim(-9, 3)
+ax.set_ylim(49.5, 59.5)
+
+# Remove ticks and labels
+ax.set_xticks([])
+ax.set_yticks([])
+
+# Add grid
+ax.grid(True, alpha=0.3)
+
+# Add statistics box
+total_co2 = plants_gdf['CO2'].sum() / 1e6  # Convert to MtCO2
+n_plants = len(plants_gdf)
+avg_distance = plants_gdf['distance_km'].mean()
+max_distance = plants_gdf['distance_km'].max()
+
+# Find plant with maximum distance
+max_distance_plant = plants_gdf.loc[plants_gdf['distance_km'].idxmax()]
+print(f"\nPlant with maximum distance: {max_distance_plant['Site']} ({max_distance_plant['Type']}) at {max_distance:.1f} km")
+
+stats_text = f'Total plants: {n_plants}\n'
+stats_text += f'Total CO₂: {total_co2:.1f} MtCO₂/yr\n'
+stats_text += f'Avg. distance: {avg_distance:.1f} km\n'
+stats_text += f'Max distance: {max_distance:.1f} km'
+
+ax.text(0.02, 0.98, stats_text,
+        transform=ax.transAxes, verticalalignment='top',
+        bbox=dict(boxstyle='round,pad=0.5', facecolor='wheat', alpha=0.8),
+        fontsize=12)
+
+plt.tight_layout()
+
+# Save the figure
+output_file = 'map_ccs_distances.png'
+plt.savefig(output_file, dpi=400, bbox_inches='tight')
+print(f"\nMap saved as '{output_file}'")
+
 plt.show()
 
-print("TODO: Also capture the CO2 from biomass CHP - add to captured volumes and CAPEX!")
-print("\n Should probably NOT capture the extra bio CO2 from industries - its complicated and increases costs... MAYBE add it as an uncertainty lever later!")
-print("Deconflicting Fossil Fuel Abatement, Industrial Competitiveness, and Consumer Costs through a UK Carbon Takeback Obligation")
