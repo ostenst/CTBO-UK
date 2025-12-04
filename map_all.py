@@ -248,6 +248,14 @@ all_plants = pd.concat([valid_plants, w2e_plants_clean, drax_data], ignore_index
 print(f"\nTotal plants after adding W2E and Drax: {len(all_plants)}")
 print(f"Total CO2 (all plants): {all_plants['CO2'].sum()/1e6:.1f} MtCO2/yr")
 
+# Print plants with CO2 concentration above 19%
+high_conc_plants = all_plants[all_plants['xCO2'] > 0.19]
+print(f"\n{'='*80}")
+print(f"Plants with CO2 concentration > 19% ({len(high_conc_plants)} plants):")
+print(f"{'='*80}")
+for idx, plant in high_conc_plants.iterrows():
+    print(f"{plant['Site']:<40} | {plant['xCO2']*100:>5.1f}% | E: {plant['Easting']:>10.1f}, N: {plant['Northing']:>10.1f}")
+
 # Load Europe shapefile
 print("\nLoading Europe shapefile...")
 europe = gpd.read_file("data/shapefiles/Europe/Europe_merged.shp").to_crs("EPSG:4326")
