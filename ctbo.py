@@ -40,8 +40,8 @@ baseline_emissions = {
 
 # Diffuse emissions reduction trajectory
 DIFFUSE_START_FRACTION = 1.0   # 100% of diffuse emissions in START_YEAR
-DIFFUSE_END_FRACTION = 0.40    # 40% of diffuse emissions remain in 2055
-DIFFUSE_TARGET_YEAR = 2055
+DIFFUSE_END_FRACTION = 0.40    # 40% of diffuse emissions remain in 2050
+DIFFUSE_TARGET_YEAR = 2050
 
 # Financial parameters
 DISCOUNT_RATE = 0.035          # Real discount rate for NPV calculations [3.5%]
@@ -459,11 +459,12 @@ print("GENERATING PLOTS")
 print("="*80)
 
 # Plot 1: MACC curves
+viridis = plt.cm.viridis
 plt.figure(figsize=(10, 6))
 plt.plot(macc_4oak['ktCO2_yr_cumulative'], macc_4oak['EUR/tCO2'], 
-         color='green', label='4th-of-a-kind costs', linewidth=2)
+         color=viridis(0.65), label='4th-of-a-kind costs', linewidth=2)
 plt.plot(macc_foak['ktCO2_yr_cumulative'], macc_foak['EUR/tCO2'], 
-         color='red', label='First-of-a-kind costs', linewidth=2)
+         color='crimson', label='First-of-a-kind costs', linewidth=2)
 plt.xlabel('Cumulative Captured CO2 (ktCO2/yr)', fontsize=13)
 plt.ylabel('Marginal Abatement Cost (EUR/tCO2)', fontsize=13)
 plt.title('MACC of point source CCS (fossil + biogenic)', fontsize=14)
@@ -475,17 +476,22 @@ print("  Saved: 1_maccs.png")
 
 # Plot 2: Emissions and capacities
 plt.figure(figsize=(10, 6))
-plt.plot(years, supplied_CO2_vec, label='Supplied CO2', linewidth=2, color='black')
-plt.plot(years, total_emissions_vec, label='Emitted CO2', linewidth=2, color='darkgreen')
+
+# Stacked area plot for CCS capacities (reversed order so fCCS is on top)
+plt.stackplot(years, DACCS_capacity_vec, BECCS_capacity_vec, fCCS_capacity_vec,
+              labels=['DACCS', 'BECCS', 'Fossil CCS'],
+              colors=[viridis(0.5), viridis(0.65), 'gray'],
+              alpha=1.0)
+
+# Line plots on top
+plt.plot(years, supplied_CO2_vec, label='Supplied CO2 (O&G, coal, cem)', linewidth=2, color='black')
+plt.plot(years, total_emissions_vec, label='Emitted CO2', linewidth=2, color=viridis(0.40))
 plt.plot(years, ctbo_mandate_vec, label='CTBO Mandate', linewidth=2, color='black', linestyle='--')
-plt.plot(years, fCCS_capacity_vec, label='Fossil CCS', linewidth=2, color='gray')
-plt.plot(years, BECCS_capacity_vec, label='BECCS', linewidth=2, color='green')
-plt.plot(years, DACCS_capacity_vec, label='DACCS', linewidth=2, color='lightgreen')
 
 if first_DACCS_year is not None:
     daccs_idx = np.where(years == first_DACCS_year)[0][0]
-    plt.plot(first_DACCS_year, DACCS_capacity_vec[daccs_idx], 'o', markersize=6, color='lightgreen')
-    plt.plot([], [], 'o', markersize=6, color='lightgreen', label='Year when DACCS is marginal')
+    plt.plot(first_DACCS_year, DACCS_capacity_vec[daccs_idx], 'o', markersize=6, color=viridis(0.5))
+    plt.plot([], [], 'o', markersize=6, color=viridis(0.5), label='Year when DACCS is marginal')
 
 plt.xlabel('Year', fontsize=13)
 plt.ylabel('ktCO2/yr', fontsize=13)
@@ -522,17 +528,18 @@ print("  Saved: 3_costs.png")
 
 # Plot 4: Consumer fuel price increases
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+magma = plt.cm.magma
 
 # Absolute increases
-ax1.plot(years, diesel_increase_abs, label='Diesel', linewidth=2, color='darkblue')
-ax1.plot(years, petrol_increase_abs, label='Petrol', linewidth=2, color='orange')
-ax1.plot(years, gas_increase_abs, label='Gas', linewidth=2, color='red')
+ax1.plot(years, diesel_increase_abs, label='Diesel', linewidth=2, color=magma(0.20))
+ax1.plot(years, petrol_increase_abs, label='Petrol', linewidth=2, color=magma(0.70))
+ax1.plot(years, gas_increase_abs, label='Gas', linewidth=2, color=magma(0.50))
 
 if first_DACCS_year is not None:
     daccs_idx = np.where(years == first_DACCS_year)[0][0]
-    ax1.plot(first_DACCS_year, diesel_increase_abs[daccs_idx], 'o', markersize=6, color='darkblue')
-    ax1.plot(first_DACCS_year, petrol_increase_abs[daccs_idx], 'o', markersize=6, color='orange')
-    ax1.plot(first_DACCS_year, gas_increase_abs[daccs_idx], 'o', markersize=6, color='red')
+    ax1.plot(first_DACCS_year, diesel_increase_abs[daccs_idx], 'o', markersize=6, color=magma(0.20))
+    ax1.plot(first_DACCS_year, petrol_increase_abs[daccs_idx], 'o', markersize=6, color=magma(0.70))
+    ax1.plot(first_DACCS_year, gas_increase_abs[daccs_idx], 'o', markersize=6, color=magma(0.50))
     ax1.plot([], [], 'o', markersize=6, color='gray', label='Year when DACCS is marginal')
 
 idx_2040 = np.where(years == 2040)[0][0]
@@ -551,14 +558,14 @@ ax1.legend(fontsize=11)
 ax1.grid(True, alpha=0.3)
 
 # Percentage increases
-ax2.plot(years, diesel_increase_pct, label='Diesel', linewidth=2, color='darkblue')
-ax2.plot(years, petrol_increase_pct, label='Petrol', linewidth=2, color='orange')
-ax2.plot(years, gas_increase_pct, label='Gas', linewidth=2, color='red')
+ax2.plot(years, diesel_increase_pct, label='Diesel', linewidth=2, color=magma(0.20))
+ax2.plot(years, petrol_increase_pct, label='Petrol', linewidth=2, color=magma(0.70))
+ax2.plot(years, gas_increase_pct, label='Gas', linewidth=2, color=magma(0.50))
 
 if first_DACCS_year is not None:
-    ax2.plot(first_DACCS_year, diesel_increase_pct[daccs_idx], 'o', markersize=6, color='darkblue')
-    ax2.plot(first_DACCS_year, petrol_increase_pct[daccs_idx], 'o', markersize=6, color='orange')
-    ax2.plot(first_DACCS_year, gas_increase_pct[daccs_idx], 'o', markersize=6, color='red')
+    ax2.plot(first_DACCS_year, diesel_increase_pct[daccs_idx], 'o', markersize=6, color=magma(0.20))
+    ax2.plot(first_DACCS_year, petrol_increase_pct[daccs_idx], 'o', markersize=6, color=magma(0.70))
+    ax2.plot(first_DACCS_year, gas_increase_pct[daccs_idx], 'o', markersize=6, color=magma(0.50))
     ax2.plot([], [], 'o', markersize=6, color='gray', label='Year when DACCS is marginal')
 
 ax2.set_xlabel('Year', fontsize=13)
@@ -569,6 +576,150 @@ ax2.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig('4_price_increases.png', dpi=300)
 print("  Saved: 4_price_increases.png")
+
+# Plot 4b: Consumer fuel price increases (2025-2040)
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+
+# Absolute increases
+ax1.plot(years, diesel_increase_abs, label='Diesel', linewidth=2, color=magma(0.20))
+ax1.plot(years, petrol_increase_abs, label='Petrol', linewidth=2, color=magma(0.70))
+ax1.plot(years, gas_increase_abs, label='Gas', linewidth=2, color=magma(0.50))
+
+if first_DACCS_year is not None and 2025 <= first_DACCS_year <= 2040:
+    daccs_idx = np.where(years == first_DACCS_year)[0][0]
+    ax1.plot(first_DACCS_year, diesel_increase_abs[daccs_idx], 'o', markersize=6, color=magma(0.20))
+    ax1.plot(first_DACCS_year, petrol_increase_abs[daccs_idx], 'o', markersize=6, color=magma(0.70))
+    ax1.plot(first_DACCS_year, gas_increase_abs[daccs_idx], 'o', markersize=6, color=magma(0.50))
+    ax1.plot([], [], 'o', markersize=6, color='gray', label='Year when DACCS is marginal')
+
+ax1.annotate(f'CTBO:\n{ctbo_fraction[idx_2040]:.0f}%', 
+             xy=(2040, gas_increase_pct[idx_2040]), 
+             xytext=(2040, gas_increase_pct[idx_2040] + 5),
+             fontsize=11, ha='center')
+
+ax1.set_xlim(2025, 2040)
+
+# Set y-limits based on visible data range
+idx_start = np.where(years == 2025)[0][0]
+idx_end = np.where(years == 2040)[0][0]
+abs_data_range = np.concatenate([diesel_increase_abs[idx_start:idx_end+1], 
+                                  petrol_increase_abs[idx_start:idx_end+1], 
+                                  gas_increase_abs[idx_start:idx_end+1]])
+y_min_abs = abs_data_range.min()
+y_max_abs = abs_data_range.max()
+y_margin_abs = (y_max_abs - y_min_abs) * 0.15
+ax1.set_ylim(y_min_abs - y_margin_abs, y_max_abs + y_margin_abs)
+
+ax1.set_xlabel('Year', fontsize=13)
+ax1.set_ylabel('Price Increase (pence per litre/thrm)', fontsize=13)
+ax1.legend(fontsize=11)
+ax1.grid(True, alpha=0.3)
+ax1.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x)}'))
+
+# Percentage increases
+ax2.plot(years, diesel_increase_pct, label='Diesel', linewidth=2, color=magma(0.20))
+ax2.plot(years, petrol_increase_pct, label='Petrol', linewidth=2, color=magma(0.70))
+ax2.plot(years, gas_increase_pct, label='Gas', linewidth=2, color=magma(0.50))
+
+if first_DACCS_year is not None and 2025 <= first_DACCS_year <= 2040:
+    ax2.plot(first_DACCS_year, diesel_increase_pct[daccs_idx], 'o', markersize=6, color=magma(0.20))
+    ax2.plot(first_DACCS_year, petrol_increase_pct[daccs_idx], 'o', markersize=6, color=magma(0.70))
+    ax2.plot(first_DACCS_year, gas_increase_pct[daccs_idx], 'o', markersize=6, color=magma(0.50))
+    ax2.plot([], [], 'o', markersize=6, color='gray', label='Year when DACCS is marginal')
+
+ax2.set_xlim(2025, 2040)
+
+# Set y-limits based on visible data range
+pct_data_range = np.concatenate([diesel_increase_pct[idx_start:idx_end+1], 
+                                  petrol_increase_pct[idx_start:idx_end+1], 
+                                  gas_increase_pct[idx_start:idx_end+1]])
+y_min_pct = pct_data_range.min()
+y_max_pct = pct_data_range.max()
+y_margin_pct = (y_max_pct - y_min_pct) * 0.15
+ax2.set_ylim(y_min_pct - y_margin_pct, y_max_pct + y_margin_pct)
+ax2.set_xlabel('Year', fontsize=13)
+ax2.set_ylabel('Price Increase (%)', fontsize=13)
+ax2.legend(fontsize=11)
+ax2.grid(True, alpha=0.3)
+ax2.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x)}'))
+
+plt.tight_layout()
+plt.savefig('4b_price_increases_2025-2040.png', dpi=300)
+print("  Saved: 4b_price_increases_2025-2040.png")
+
+# Plot 4c: Consumer fuel price increases (2035-2055)
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+
+# Absolute increases
+ax1.plot(years, diesel_increase_abs, label='Diesel', linewidth=2, color=magma(0.20))
+ax1.plot(years, petrol_increase_abs, label='Petrol', linewidth=2, color=magma(0.70))
+ax1.plot(years, gas_increase_abs, label='Gas', linewidth=2, color=magma(0.50))
+
+if first_DACCS_year is not None and 2035 <= first_DACCS_year <= 2055:
+    daccs_idx = np.where(years == first_DACCS_year)[0][0]
+    ax1.plot(first_DACCS_year, diesel_increase_abs[daccs_idx], 'o', markersize=6, color=magma(0.20))
+    ax1.plot(first_DACCS_year, petrol_increase_abs[daccs_idx], 'o', markersize=6, color=magma(0.70))
+    ax1.plot(first_DACCS_year, gas_increase_abs[daccs_idx], 'o', markersize=6, color=magma(0.50))
+    ax1.plot([], [], 'o', markersize=6, color='gray', label='Year when DACCS is marginal')
+
+ax1.annotate(f'CTBO:\n{ctbo_fraction[idx_2040]:.0f}%', 
+             xy=(2040, gas_increase_pct[idx_2040]), 
+             xytext=(2040, gas_increase_pct[idx_2040] + 5),
+             fontsize=11, ha='center')
+ax1.annotate(f'CTBO:\n{ctbo_fraction[idx_2050]:.0f}%', 
+             xy=(2050, gas_increase_pct[idx_2050]), 
+             xytext=(2050, gas_increase_pct[idx_2050] + 5),
+             fontsize=11, ha='center')
+
+ax1.set_xlim(2035, 2055)
+
+# Set y-limits based on visible data range
+idx_start = np.where(years == 2035)[0][0]
+idx_end = np.where(years == 2055)[0][0]
+abs_data_range = np.concatenate([diesel_increase_abs[idx_start:idx_end+1], 
+                                  petrol_increase_abs[idx_start:idx_end+1], 
+                                  gas_increase_abs[idx_start:idx_end+1]])
+y_min_abs = abs_data_range.min()
+y_max_abs = abs_data_range.max()
+y_margin_abs = (y_max_abs - y_min_abs) * 0.15
+ax1.set_ylim(y_min_abs - y_margin_abs, y_max_abs + y_margin_abs)
+
+ax1.set_xlabel('Year', fontsize=13)
+ax1.set_ylabel('Price Increase (pence per litre/thrm)', fontsize=13)
+ax1.legend(fontsize=11)
+ax1.grid(True, alpha=0.3)
+ax1.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x)}'))
+
+# Percentage increases
+ax2.plot(years, diesel_increase_pct, label='Diesel', linewidth=2, color=magma(0.20))
+ax2.plot(years, petrol_increase_pct, label='Petrol', linewidth=2, color=magma(0.70))
+ax2.plot(years, gas_increase_pct, label='Gas', linewidth=2, color=magma(0.50))
+
+if first_DACCS_year is not None and 2035 <= first_DACCS_year <= 2055:
+    ax2.plot(first_DACCS_year, diesel_increase_pct[daccs_idx], 'o', markersize=6, color=magma(0.20))
+    ax2.plot(first_DACCS_year, petrol_increase_pct[daccs_idx], 'o', markersize=6, color=magma(0.70))
+    ax2.plot(first_DACCS_year, gas_increase_pct[daccs_idx], 'o', markersize=6, color=magma(0.50))
+    ax2.plot([], [], 'o', markersize=6, color='gray', label='Year when DACCS is marginal')
+
+ax2.set_xlim(2035, 2055)
+
+# Set y-limits based on visible data range
+pct_data_range = np.concatenate([diesel_increase_pct[idx_start:idx_end+1], 
+                                  petrol_increase_pct[idx_start:idx_end+1], 
+                                  gas_increase_pct[idx_start:idx_end+1]])
+y_min_pct = pct_data_range.min()
+y_max_pct = pct_data_range.max()
+y_margin_pct = (y_max_pct - y_min_pct) * 0.15
+ax2.set_ylim(y_min_pct - y_margin_pct, y_max_pct + y_margin_pct)
+ax2.set_xlabel('Year', fontsize=13)
+ax2.set_ylabel('Price Increase (%)', fontsize=13)
+ax2.legend(fontsize=11)
+ax2.grid(True, alpha=0.3)
+ax2.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x)}'))
+
+plt.tight_layout()
+plt.savefig('4c_price_increases_2035-2055.png', dpi=300)
+print("  Saved: 4c_price_increases_2035-2055.png")
 
 # Plot 5: Plant-level profits
 if len(plant_df) > 0:
