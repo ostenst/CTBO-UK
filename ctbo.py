@@ -278,7 +278,12 @@ for i, year in enumerate(years):
         elif plant['site-stack'].endswith('cement'):
             csu_diluted_cost = CTBO_cost_lev * (1 - 0.63)  # 37% from fossil fuels
         else:
-            csu_diluted_cost = CTBO_cost_lev
+            csu_diluted_cost = CTBO_cost_lev # only applies to fossil CO2
+        
+        # Determine how much to subtract from gross CSU profits
+        csu_subtract = max(0, plant['EUR/tCO2'] - ets_price) # positive difference between CCS cost and ETS price
+        csu_subtract = csu_subtract + csu_diluted_cost # plus increases in fossil CO2 costs (if any!)
+        ctbo_diluted_cost = csu_diluted_cost * plant['ktCO2f_yr_baseline']
         
         # Set values based on investment status
         if plant['invested']:
@@ -286,19 +291,19 @@ for i, year in enumerate(years):
             CO2_captured_fossil = plant['ktCO2f_yr_captured']
             CO2_captured_bio = plant['ktCO2bio_yr_captured']
             csu_gross_profit = CSU_cost
+            csu_net_profit = csu_gross_profit - csu_subtract
             ctbo_fossil_profit = CSU_cost * CO2_captured_fossil
             ctbo_gross_profit = CSU_cost * (CO2_captured_fossil + CO2_captured_bio)
+            ctbo_net_profit = csu_net_profit * (CO2_captured_fossil + CO2_captured_bio)
         else:
             investment_year = None
             CO2_captured_fossil = 0
             CO2_captured_bio = 0
             csu_gross_profit = 0
+            csu_net_profit = - csu_diluted_cost
             ctbo_fossil_profit = 0
             ctbo_gross_profit = 0
-        
-        # Calculate derived values
-        ctbo_diluted_cost = csu_diluted_cost * plant['ktCO2f_yr_baseline']
-        ctbo_net_profit = ctbo_gross_profit - ctbo_diluted_cost
+            ctbo_net_profit = - csu_diluted_cost * plant['ktCO2f_yr_baseline']
         
         # Store plant-level results
         plant_results.append({
@@ -313,8 +318,7 @@ for i, year in enumerate(years):
             'marginal_plant': marginal_cost == plant['EUR/tCO2'],
             'csu_diluted_cost': csu_diluted_cost,
             'csu_gross_profit': csu_gross_profit,
-            'csu_net_profit': csu_gross_profit - csu_diluted_cost,
-            'csu_bio_profit': csu_gross_profit,
+            'csu_net_profit': csu_net_profit,
             'ctbo_diluted_cost': ctbo_diluted_cost,
             'ctbo_fossil_profit': ctbo_fossil_profit,
             'ctbo_gross_profit': ctbo_gross_profit,
@@ -734,7 +738,7 @@ if len(plant_df) > 0:
     
     for plant_dict in selected_plants:
         plant_name, color = list(plant_dict.items())[0]
-        plant_data = plant_df[plant_df['plant'] == plant_name]
+        plant_data = plant_df[(plant_df['plant'] == plant_name) & (plant_df['year'] <= 2051)]
         
         if len(plant_data) > 0:
             ax1.plot(plant_data['year'], plant_data['ctbo_gross_profit'], 
@@ -748,7 +752,7 @@ if len(plant_df) > 0:
                 ax1.plot(investment_year, invest_data['ctbo_gross_profit'], 's', markersize=6, color=color)
                 ax2.plot(investment_year, invest_data['ctbo_net_profit'], 's', markersize=6, color=color)
             
-            if first_DACCS_year is not None and first_DACCS_year in plant_data['year'].values:
+            if first_DACCS_year is not None and first_DACCS_year <= 2051 and first_DACCS_year in plant_data['year'].values:
                 daccs_data = plant_data[plant_data['year'] == first_DACCS_year].iloc[0]
                 ax1.plot(first_DACCS_year, daccs_data['ctbo_gross_profit'], 'o', markersize=6, color=color)
                 ax2.plot(first_DACCS_year, daccs_data['ctbo_net_profit'], 'o', markersize=6, color=color)
