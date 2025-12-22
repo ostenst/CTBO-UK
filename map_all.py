@@ -65,13 +65,14 @@ def assign_co2_concentration(row, debug=False):
     
     return xCO2
 
-def create_all_plants_map(europe, plants_gdf, debug=False):
+def create_all_plants_map(europe, plants_gdf, remaining_gdf=None, debug=False):
     """
     Create a map showing all plants colored by CO2 concentration.
     
     Args:
         europe: GeoDataFrame containing Europe shapefile data
         plants_gdf: GeoDataFrame containing plant data with locations
+        remaining_gdf: GeoDataFrame containing remaining smaller plants (plotted as gray)
         debug: If True, print function inputs and outputs
     
     Returns:
@@ -79,6 +80,8 @@ def create_all_plants_map(europe, plants_gdf, debug=False):
     """
     if debug:
         print(f"create_all_plants_map inputs: europe shape={europe.shape}, plants shape={plants_gdf.shape}")
+        if remaining_gdf is not None:
+            print(f"  remaining plants shape={remaining_gdf.shape}")
     
     # Create the plot
     fig, ax = plt.subplots(1, 1, figsize=(12, 15))
@@ -87,11 +90,24 @@ def create_all_plants_map(europe, plants_gdf, debug=False):
     # Plot Europe background
     europe.plot(ax=ax, color='lightgray', edgecolor='white', alpha=0.45)
 
+    # Plot remaining (smaller) plants as gray bubbles first (so they appear behind)
+    if remaining_gdf is not None and len(remaining_gdf) > 0:
+        ax.scatter(
+            remaining_gdf.geometry.x, 
+            remaining_gdf.geometry.y,
+            s=remaining_gdf['CO2']/1000,
+            c='gray',
+            alpha=0.5,
+            edgecolors='darkgray',
+            linewidth=0.3,
+            label=f'Other emitters ({len(remaining_gdf)})'
+        )
+
     # Plot plants as bubbles (size based on CO2 emissions, color based on concentration)
     scatter = ax.scatter(
         plants_gdf.geometry.x, 
         plants_gdf.geometry.y,
-        s=plants_gdf['CO2']/750,  # Scale for visibility (CO2 in tonnes, divide by 1000)
+        s=plants_gdf['CO2']/1000,  # Scale for visibility (CO2 in tonnes, divide by 1000)
         c=plants_gdf['xCO2']*100,  # Convert to percentage for colorbar
         cmap='magma',
         vmin=0,
@@ -129,9 +145,14 @@ def create_all_plants_map(europe, plants_gdf, debug=False):
     n_plants = len(plants_gdf)
     avg_conc = plants_gdf['xCO2'].mean() * 100
     
-    stats_text = f'Total plants: {n_plants}\n'
-    stats_text += f'Total CO₂: {total_co2:.1f} MtCO₂/yr\n'
+    stats_text = f'Top 60 plants: {n_plants}\n'
+    stats_text += f'Top 60 CO₂: {total_co2:.1f} MtCO₂/yr\n'
     stats_text += f'Avg. concentration: {avg_conc:.1f}%'
+    
+    if remaining_gdf is not None and len(remaining_gdf) > 0:
+        remaining_co2 = remaining_gdf['CO2'].sum() / 1e6
+        stats_text += f'\n\nOther emitters: {len(remaining_gdf)}\n'
+        stats_text += f'Other CO₂: {remaining_co2:.1f} MtCO₂/yr'
     
     ax.text(0.02, 0.98, stats_text,
             transform=ax.transAxes, verticalalignment='top',
@@ -141,17 +162,23 @@ def create_all_plants_map(europe, plants_gdf, debug=False):
     plt.tight_layout()
     
     if debug:
-        print(f"create_all_plants_map output: Created figure with {len(plants_gdf)} plants")
+        print(f"create_all_plants_map output: Created figure with {len(plants_gdf)} main plants")
+        if remaining_gdf is not None:
+            print(f"  + {len(remaining_gdf)} remaining plants as gray bubbles")
     
     return fig, ax
 
 # Read the point sources data
 print("Reading point sources data...")
-fossil_plants = pd.read_csv("data/point_sources_CO2_2022.csv")
-fossil_plants['CO2'] = fossil_plants['Emission'] * 3.66  # Convert C to CO2
-fossil_plants = fossil_plants.nlargest(60, 'CO2')  # Keep only 60 largest plants
+fossil_plants_all = pd.read_csv("data/point_sources_CO2_2022.csv")
+fossil_plants_all['CO2'] = fossil_plants_all['Emission'] * 3.66  # Convert C to CO2
 
-print(f"Loaded {len(fossil_plants)} point sources")
+# Split into top 60 and remaining plants
+fossil_plants = fossil_plants_all.nlargest(60, 'CO2').copy()  # Keep only 60 largest plants
+remaining_plants = fossil_plants_all[~fossil_plants_all.index.isin(fossil_plants.index)].copy()
+
+print(f"Loaded {len(fossil_plants)} top point sources")
+print(f"Remaining smaller emitters: {len(remaining_plants)}")
 print(f"Total CO2: {fossil_plants['CO2'].sum()/1e6:.1f} MtCO2/yr")
 
 # Assign CO2 concentrations to each plant
@@ -169,9 +196,11 @@ print(sector_stats)
 # Remove outliers and handle duplicates
 print("\nManaging outliers...")
 
-# Remove Elgin PUQ (in the North Sea)
+# Remove Elgin PUQ (in the North Sea) and entries starting with "Port Talbot"
 fossil_plants = fossil_plants[fossil_plants['Site'] != "Elgin PUQ"]
 print(f"Removed Elgin PUQ (North Sea location)")
+fossil_plants = fossil_plants[~fossil_plants['Site'].str.startswith('Port Talbot')]
+print(f"Removed Port Talbot entries")
 
 # Move Grangemouth Power Station from petroleum to power sector
 if 'Grangemouth Power Station' in fossil_plants['Site'].values:
@@ -267,9 +296,21 @@ plants_gdf = gpd.GeoDataFrame(
     geometry=gpd.points_from_xy(all_plants['Easting'], all_plants['Northing'], crs="EPSG:27700")
 ).to_crs("EPSG:4326")
 
+# Create GeoDataFrame for remaining (smaller) fossil plants
+remaining_valid = remaining_plants[
+    remaining_plants['Easting'].notna() & 
+    remaining_plants['Northing'].notna()
+].copy()
+print(f"Remaining plants with valid coordinates: {len(remaining_valid)}")
+
+remaining_gdf = gpd.GeoDataFrame(
+    remaining_valid, 
+    geometry=gpd.points_from_xy(remaining_valid['Easting'], remaining_valid['Northing'], crs="EPSG:27700")
+).to_crs("EPSG:4326")
+
 # Create the map
 print("\nCreating map...")
-fig, ax = create_all_plants_map(europe, plants_gdf, debug=True)
+fig, ax = create_all_plants_map(europe, plants_gdf, remaining_gdf=remaining_gdf, debug=True)
 
 # Save the figure
 output_file = 'map_concentrations.png'

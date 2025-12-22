@@ -19,9 +19,9 @@ import numpy as np
 # ============================================================================
 
 # Scenario selection
-FOAK = True                    # True: First-of-a-kind costs, False: 4th-of-a-kind costs
+FOAK = False                    # True: First-of-a-kind costs, False: 4th-of-a-kind costs
 CTBO_ENABLED = True            # Enable CTBO mandate
-ETS = "Low"                   # "High", "Medium", "Low"
+ETS = "High"                   # "High", "Medium", "Low"
 DACCS_EXPENSIVE = True         # True: Expensive DACCS (323->281 £/tCO2), False: Cheap (247->152 £/tCO2)
 VERBOSE = True                # Print detailed investment decisions
 SAVE_PLANT_DATA = True        # Save plant-level results to CSV
@@ -40,7 +40,7 @@ baseline_emissions = {
 
 # Diffuse emissions reduction trajectory
 DIFFUSE_START_FRACTION = 1.0   # 100% of diffuse emissions in START_YEAR
-DIFFUSE_END_FRACTION = 0.60    # 40% of diffuse emissions remain in 2050
+DIFFUSE_END_FRACTION = 0.40    # 40% of diffuse emissions remain in 2050
 DIFFUSE_TARGET_YEAR = 2050
 
 # Financial parameters

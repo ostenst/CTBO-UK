@@ -113,7 +113,7 @@ def latlon_to_easting_northing(latitude, longitude, debug=False):
     return easting, northing
 
 
-def approximate_CAPEX(mCO2, xCO2, CEPCI_2025, CEPCI_2023=798.7, capture_rate=0.90, NETL=5.509, debug=False):
+def approximate_CAPEX(mCO2, xCO2, fixed, CEPCI_2025, CEPCI_2023=798.7, capture_rate=0.90, NETL=5.509, debug=False):
     """
     Estimate CAPEX for CO2 capture using Kim & Leonard (2025) correlation.
     
@@ -153,12 +153,13 @@ def approximate_CAPEX(mCO2, xCO2, CEPCI_2025, CEPCI_2023=798.7, capture_rate=0.9
         TEC = a + (b * (xCO2)**n + c) * (remaining_V_fluegas)**m
         CAPEX += TEC
     
+    OPEX_fixed = CAPEX * fixed # [MEUR p.a.]
     CAPEX = CAPEX * NETL * CEPCI_2025 / CEPCI_2023  # [MEUR]
     
     if debug:
         print(f"approximate_CAPEX output: CAPEX={CAPEX} MEUR")
     
-    return CAPEX
+    return CAPEX, OPEX_fixed
 
 
 def levelize_MEUR(CAPEX, annual_CO2, capture_rate=0.95, discount_rate=0.07, lifetime=25, debug=False):
@@ -258,7 +259,7 @@ def energy_supply(mCO2, capture_rate, FLH, qreb, pcompr, qsteam, qelc, qchp, cst
 
 
 def create_result_entry(site_stack, annual_CO2, biogenic, captured_CO2f, captured_CO2bio, 
-                       residual_CO2f, FLH, CAPEX_4OAK, CAPEX_FOAK, OPEXE, transtorage, distance_km):
+                       residual_CO2f, FLH, CAPEX_4OAK, CAPEX_FOAK, OPEXE, OPEX_fixed, transtorage, distance_km):
     """Create a standardized result dictionary entry"""
     return {
         'site-stack': site_stack,
@@ -271,9 +272,10 @@ def create_result_entry(site_stack, annual_CO2, biogenic, captured_CO2f, capture
         'CAPEX_4OAK': CAPEX_4OAK,  # [EUR/tCO2]
         'CAPEX_FOAK': CAPEX_FOAK,  # [EUR/tCO2]
         'OPEXE': OPEXE,  # [EUR/tCO2]
+        'OPEX_fixed': OPEX_fixed,  # [EUR/tCO2]
         'transtorage': transtorage,  # [EUR/tCO2]
-        'total_4OAK': CAPEX_4OAK + OPEXE + transtorage,  # [EUR/tCO2]
-        'total_FOAK': CAPEX_FOAK + OPEXE + transtorage,  # [EUR/tCO2]
+        'total_4OAK': CAPEX_4OAK + OPEXE + OPEX_fixed + transtorage,  # [EUR/tCO2]
+        'total_FOAK': CAPEX_FOAK + OPEXE + OPEX_fixed + transtorage,  # [EUR/tCO2]
         'distance_km': distance_km
     }
 
@@ -293,14 +295,18 @@ capture_rate = 0.95
 discount_rate = 0.07
 lifetime = 25  # [years]
 qreb = 3.5  # [MJ/kgCO2]
+# qreb = 2.5
 pcompr = 0.37  # [MJ/kgCO2]
 
 # Energy and makeup costs
 celc = 80  # [EUR/MWh]
+celc = 160
 cbio = 65  # [EUR/MWh]
+cbio = 120
 csteam = 4.1  # [EUR/tsteam @130C]
 amine_cost = 44  # [SEK/tCO2]
 sek_to_eur = 0.091
+fixed = 0.03 # [% of CAPEX p.a.]
 
 # Power sector (CCGT) assumptions
 power_ccgt = {
@@ -433,10 +439,11 @@ for idx, plant in power_producers.iterrows():
     FLH = plant['CO2'] / mCO2  # [h/y]
     
     # CAPEX
-    CAPEX = approximate_CAPEX(mCO2, xCO2, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
+    CAPEX, OPEX_fixed = approximate_CAPEX(mCO2, xCO2, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
     levelized_CAPEX = levelize_MEUR(CAPEX, plant['CO2'], capture_rate, discount_rate, lifetime)
     CAPEX_4OAK = levelized_CAPEX
     CAPEX_FOAK = FOAK * CAPEX_4OAK
+    OPEX_fixed = OPEX_fixed*10**6 / (plant['CO2'] * capture_rate) # [EUR/tCO2]
     
     # OPEXE - Energy penalty
     mCO2_captured = mCO2 * capture_rate
@@ -458,7 +465,7 @@ for idx, plant in power_producers.iterrows():
         plant['CO2'], 0,
         mCO2_captured * FLH / 1000, 0,
         mCO2_residual * FLH / 1000,
-        FLH, CAPEX_4OAK, CAPEX_FOAK, OPEXE,
+        FLH, CAPEX_4OAK, CAPEX_FOAK, OPEXE, OPEX_fixed,
         plant['transport_cost'], plant['distance_km']
     ))
 
@@ -504,10 +511,11 @@ for idx, plant in industrial_plants.iterrows():
             )
             mCO2_total = mCO2f_captured + mCO2bio_captured
             
-            CAPEX = approximate_CAPEX(mCO2_total, xCO2_stack, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
+            CAPEX, OPEX_fixed = approximate_CAPEX(mCO2_total, xCO2_stack, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
             levelized_CAPEX = levelize_MEUR(CAPEX, annual_CO2_stack, capture_rate, discount_rate, lifetime)
             CAPEX_4OAK = levelized_CAPEX
             CAPEX_FOAK = FOAK * CAPEX_4OAK
+            OPEX_fixed = OPEX_fixed*10**6 / (plant['CO2'] * capture_rate) # [EUR/tCO2]
             
             results.append(create_result_entry(
                 f"{plant['Site']}-{stack_name}",
@@ -515,7 +523,7 @@ for idx, plant in industrial_plants.iterrows():
                 mCO2f_captured * FLH_industry / 1000,
                 mCO2bio_captured * FLH_industry / 1000,
                 mCO2f_residual * FLH_industry / 1000,
-                FLH_industry, CAPEX_4OAK, CAPEX_FOAK, OPEXE,
+                FLH_industry, CAPEX_4OAK, CAPEX_FOAK, OPEXE, OPEX_fixed,
                 plant['transport_cost'], plant['distance_km']
             ))
     
@@ -537,10 +545,11 @@ for idx, plant in industrial_plants.iterrows():
         )
         mCO2_total = mCO2f_captured + mCO2bio_captured
         
-        CAPEX = approximate_CAPEX(mCO2_total, xCO2_stack, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
+        CAPEX, OPEX_fixed = approximate_CAPEX(mCO2_total, xCO2_stack, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
         levelized_CAPEX = levelize_MEUR(CAPEX, annual_CO2_stack, capture_rate, discount_rate, lifetime)
         CAPEX_4OAK = levelized_CAPEX
         CAPEX_FOAK = FOAK * CAPEX_4OAK
+        OPEX_fixed = OPEX_fixed*10**6 / (plant['CO2'] * capture_rate) # [EUR/tCO2]
         
         results.append(create_result_entry(
             f"{plant['Site']}-{stack_name}",
@@ -548,7 +557,7 @@ for idx, plant in industrial_plants.iterrows():
             mCO2f_captured * FLH_industry / 1000,
             mCO2bio_captured * FLH_industry / 1000,
             mCO2f_residual * FLH_industry / 1000,
-            FLH_industry, CAPEX_4OAK, CAPEX_FOAK, OPEXE,
+            FLH_industry, CAPEX_4OAK, CAPEX_FOAK, OPEXE, OPEX_fixed,
             plant['transport_cost'], plant['distance_km']
         ))
     
@@ -564,10 +573,11 @@ for idx, plant in industrial_plants.iterrows():
         )
         mCO2_total = mCO2f_captured + mCO2bio_captured
         
-        CAPEX = approximate_CAPEX(mCO2_total, xCO2_stack, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
+        CAPEX, OPEX_fixed = approximate_CAPEX(mCO2_total, xCO2_stack, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
         levelized_CAPEX = levelize_MEUR(CAPEX, annual_CO2_stack, capture_rate, discount_rate, lifetime)
         CAPEX_4OAK = levelized_CAPEX
         CAPEX_FOAK = FOAK * CAPEX_4OAK
+        OPEX_fixed = OPEX_fixed*10**6 / (plant['CO2'] * capture_rate) # [EUR/tCO2]
         
         results.append(create_result_entry(
             f"{plant['Site']}-cement",
@@ -575,7 +585,7 @@ for idx, plant in industrial_plants.iterrows():
             mCO2f_captured * FLH_industry / 1000,
             mCO2bio_captured * FLH_industry / 1000,
             mCO2f_residual * FLH_industry / 1000,
-            FLH_industry, CAPEX_4OAK, CAPEX_FOAK, OPEXE,
+            FLH_industry, CAPEX_4OAK, CAPEX_FOAK, OPEXE, OPEX_fixed,
             plant['transport_cost'], plant['distance_km']
         ))
 
@@ -600,10 +610,11 @@ for idx, plant in w2e_plants.iterrows():
     xCO2_w2e = 0.11
     
     # CAPEX
-    CAPEX = approximate_CAPEX(mCO2, xCO2_w2e, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
+    CAPEX, OPEX_fixed = approximate_CAPEX(mCO2, xCO2_w2e, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
     levelized_CAPEX = levelize_MEUR(CAPEX, plant['CO2'], capture_rate, discount_rate, lifetime)
     CAPEX_4OAK = levelized_CAPEX
     CAPEX_FOAK = FOAK * CAPEX_4OAK
+    OPEX_fixed = OPEX_fixed*10**6 / (plant['CO2'] * capture_rate) # [EUR/tCO2]
     
     # OPEXE - Assuming waste heat is used for reboiler
     Qreb_w2e = qreb * mCO2 * capture_rate * 1000 / 3600  # [MW]
@@ -618,7 +629,7 @@ for idx, plant in w2e_plants.iterrows():
         mCO2 * capture_rate * FLH_w2e / 1000 * fossil_fraction,
         mCO2 * capture_rate * FLH_w2e / 1000 * (1 - fossil_fraction),
         mCO2 * (1 - capture_rate) * fossil_fraction * FLH_w2e / 1000,
-        FLH_w2e, CAPEX_4OAK, CAPEX_FOAK, OPEXE,
+        FLH_w2e, CAPEX_4OAK, CAPEX_FOAK, OPEXE, OPEX_fixed,
         plant['transport_cost'], plant['distance_km']
     ))
 
@@ -642,10 +653,11 @@ FLH_drax = Drax_CO2 / (Qfuel_drax * emission_factor)
 # CAPEX
 xCO2_drax = 0.13
 mCO2_drax = Drax_CO2 / FLH_drax
-CAPEX_drax = approximate_CAPEX(mCO2_drax, xCO2_drax, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
+CAPEX_drax, OPEX_fixed = approximate_CAPEX(mCO2_drax, xCO2_drax, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
 levelized_CAPEX_drax = levelize_MEUR(CAPEX_drax, Drax_CO2, capture_rate, discount_rate, lifetime)
 CAPEX_4OAK_drax = levelized_CAPEX_drax
 CAPEX_FOAK_drax = FOAK * CAPEX_4OAK_drax
+OPEX_fixed = OPEX_fixed*10**6 / (Drax_CO2 * capture_rate) # [EUR/tCO2]
 
 # OPEXE - Lost revenue from efficiency penalty
 profit_baseline = Qfuel_drax * eta_P_drax/100 * FLH_drax * celc
@@ -667,7 +679,7 @@ results.append(create_result_entry(
     Drax_CO2, 1,
     0, mCO2_drax * capture_rate * FLH_drax / 1000,
     0, FLH_drax,
-    CAPEX_4OAK_drax, CAPEX_FOAK_drax, OPEXE_drax,
+    CAPEX_4OAK_drax, CAPEX_FOAK_drax, OPEXE_drax, OPEX_fixed,
     transport_cost_drax, drax_distance
 ))
 
@@ -676,11 +688,13 @@ results.append(create_result_entry(
 # POST-PROCESSING
 # ============================================================================
 
-# Add amine makeup cost (assumption from Ramboll)
+# Add amine makeup cost (assumption from Ramboll) and transport and storage costs (from CATF)
 for result in results:
     result['total_4OAK'] += amine_cost * sek_to_eur # [SEK/tCO2] to [EUR/tCO2]
     result['total_FOAK'] += amine_cost * sek_to_eur
-
+    result['transtorage'] += 30
+    result['total_4OAK'] += 30
+    result['total_FOAK'] += 30
 
 # ============================================================================
 # MACC CURVE GENERATION
@@ -778,6 +792,7 @@ if results:
              transform=plt.gca().transAxes, verticalalignment='top',
              bbox=dict(boxstyle='round', facecolor='lightcoral', alpha=0.8), fontsize=12)
     plt.tight_layout()
+    plt.savefig('0_macc_foak.png', dpi=400, bbox_inches='tight')
     
     print(f"\nFOAK Marginal Abatement Cost Curve Summary:")
     print(f"Total CO2 capture potential: {total_captured_foak:.0f} ktCO2/yr")
@@ -815,6 +830,8 @@ if results:
 
 print(f"\nTotal number of entries: {len(results)}")
 
+mean_transport_and_storage_cost = sum([r['transtorage'] for r in results]) / len(results)
+print(f"Mean transport and storage cost: {mean_transport_and_storage_cost:.1f} EUR/tCO2")
 
 # ============================================================================
 # MAPPING
