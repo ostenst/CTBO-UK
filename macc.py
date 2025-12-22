@@ -283,6 +283,7 @@ def create_result_entry(site_stack, annual_CO2, biogenic, captured_CO2f, capture
 # ============================================================================
 # CONFIGURATION AND CONSTANTS
 # ============================================================================
+HALF = True # True: only half of the plants are considered
 
 # Economic parameters
 pounds_to_EUR = 1.15
@@ -375,6 +376,9 @@ if fawley_mask.sum() > 1:
     largest_plants = largest_plants[~fawley_mask | (largest_plants.index == first_fawley_idx)].copy()
     largest_plants.loc[first_fawley_idx, 'CO2'] = fawley_total_co2
 
+if HALF:
+    largest_plants = largest_plants.iloc[::2]  # Select every second entry
+    
 # Load transport cost data
 transport_costs = pd.read_csv("data/nzip_balanced_scenario_results.csv", encoding='latin-1')
 transport_costs = transport_costs[transport_costs["CO2 Pipeline/Trucking?"] != "No CCS"]

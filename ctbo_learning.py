@@ -48,6 +48,11 @@ DISCOUNT_RATE = 0.035          # Real discount rate for NPV calculations [3.5%]
 USE_INVESTMENT_YEAR_AS_BASE = False  # NPV base: False=START_YEAR, True=investment year
 pounds_to_EUR = 1.15
 
+LEARNING = True # NOTE: Only combine LEARNING with FOAK = False, since we adjust a 4th-of-a-kind cost using FOAK and LR factors
+FOAK = 1.7553  # First-of-a-kind multiplier (from foak.py)
+learning_rate = 0.12 # [%] in 1-2^-b=LR
+b = -np.log2(1 - learning_rate) # and Cn=Cfoak_n*(capacity_cumulative/capacity_0)^-b
+
 # Fuel assumptions for consumer cost analysis
 fuels = {
     'diesel': {
@@ -192,6 +197,8 @@ CTBO_cost_lev_vec = []
 
 # Initialize plant-level results storage
 plant_results = []
+capacity_0 = None  # First installed CCS capacity for learning rate calculation
+capacity_cumulative = 0  # Cumulative installed CCS capacity [ktCO2/yr]
 first_DACCS_year = None
 
 # Main simulation loop
@@ -202,12 +209,25 @@ for i, year in enumerate(years):
     
     # Voluntary investments (ETS-driven)
     for idx, plant in macc.iterrows():
-        if not plant['invested'] and plant['EUR/tCO2'] < ets_price:
+        if plant['invested']:
+            continue
+        
+        # Calculate plant cost (with learning rate if applicable)
+        plant_cost = plant['EUR/tCO2']
+        if LEARNING and capacity_0 is not None:
+            plant_cost = plant_cost * FOAK
+            plant_cost = plant_cost * (capacity_cumulative / capacity_0) ** -b
+        
+        if plant_cost < ets_price:
             macc.loc[idx, 'invested'] = True
             macc.loc[idx, 'year_invested'] = year
+            plant_capacity = plant['ktCO2f_yr_captured'] + plant['ktCO2bio_yr_captured']
+            if capacity_0 is None:
+                capacity_0 = plant_capacity
+            capacity_cumulative += plant_capacity
             if VERBOSE:
                 print(f"Year {year}: Voluntary investment in {plant['site-stack']} "
-                      f"(cost: {plant['EUR/tCO2']:.0f} < ETS: {ets_price:.0f} EUR/tCO2)")
+                      f"(cost: {plant_cost:.0f} < ETS: {ets_price:.0f} EUR/tCO2)")
     
     # Calculate current emissions and capacities
     baseline_emissions_current = macc['ktCO2f_yr_baseline'].where(~macc['invested'], 0).sum()
@@ -235,29 +255,47 @@ for i, year in enumerate(years):
         j = 0
         while missing_capacity > 0 and j < len(macc):
             plant = macc.iloc[j]
-            if not plant['invested']:
-                if plant['EUR/tCO2'] > DACCS_cost:
-                    if VERBOSE:
-                        print(f"Year {year}: Switching to DACCS "
-                              f"(cost: {DACCS_cost:.0f} < plant: {plant['EUR/tCO2']:.0f} EUR/tCO2)")
-                    break
-                
-                macc.loc[j, 'invested'] = True
-                macc.loc[j, 'year_invested'] = year
-                point_fossil_capacity += plant['ktCO2f_yr_captured']
-                point_bio_capacity += plant['ktCO2bio_yr_captured']
-                point_capacity += plant['ktCO2f_yr_captured'] + plant['ktCO2bio_yr_captured']
-                missing_capacity = ctbo_mandate - point_capacity
-                
+            if plant['invested']:
+                j += 1
+                continue
+            
+            # Calculate plant cost (with learning rate if applicable)
+            plant_cost = plant['EUR/tCO2']
+            if LEARNING and capacity_0 is not None:
+                plant_cost = plant_cost * FOAK
+                plant_cost = plant_cost * (capacity_cumulative / capacity_0) ** -b
+                print(f"==>Costs before/after learning rate: {plant['EUR/tCO2']:.0f} / {plant_cost:.0f} EUR/tCO2")
+            
+            if plant_cost > DACCS_cost:
                 if VERBOSE:
-                    print(f"Year {year}: Mandate {plant['site-stack']} (cost: {plant['EUR/tCO2']:.0f} EUR/tCO2)")
+                    print(f"Year {year}: Switching to DACCS "
+                          f"(cost: {DACCS_cost:.0f} < plant: {plant_cost:.0f} EUR/tCO2)")
+                break
+            
+            macc.loc[j, 'invested'] = True
+            macc.loc[j, 'year_invested'] = year
+            plant_capacity = plant['ktCO2f_yr_captured'] + plant['ktCO2bio_yr_captured']
+            point_fossil_capacity += plant['ktCO2f_yr_captured']
+            point_bio_capacity += plant['ktCO2bio_yr_captured']
+            point_capacity += plant_capacity
+            missing_capacity = ctbo_mandate - point_capacity
+            
+            if capacity_0 is None:
+                capacity_0 = plant_capacity
+            capacity_cumulative += plant_capacity
+            
+            if VERBOSE:
+                print(f"Year {year}: Mandate {plant['site-stack']} (cost: {plant_cost:.0f} EUR/tCO2)")
             j += 1
         
         # Calculate costs based on marginal plant
         invested_plants = macc[macc['invested']]
         if len(invested_plants) > 0:
             marginal_plant = invested_plants.loc[invested_plants['EUR/tCO2'].idxmax()]
-            marginal_cost = marginal_plant['EUR/tCO2']
+            if LEARNING and capacity_0 is not None:
+                marginal_cost = marginal_plant['EUR/tCO2'] * FOAK * (capacity_cumulative / capacity_0) ** -b
+            else:
+                marginal_cost = marginal_plant['EUR/tCO2']
             CSU_cost = max(0, marginal_cost - ets_price)
             CTBO_cost = CSU_cost * point_capacity
         
