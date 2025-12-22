@@ -230,7 +230,7 @@ def combined_simulation(
     lifetime_ccs=25,
     qreb=3.5,
     pcompr=0.37,
-    celc=160,
+    celc=300, #160  EUR/MWh
     cbio=120,
     csteam=4.1,
     amine_cost=44,
@@ -245,6 +245,15 @@ def combined_simulation(
     elc_eff=0.33,
     evaporation_enthalpy=2257,
     emission_factor_bio=0.3318,
+    # --- Sector-specific parameters ---
+    FLH_industry=8500,
+    refinery_stacks=None,
+    scunthorpe_xCO2=None,
+    cement_xCO2=0.20,
+    w2e_xCO2=0.11,
+    drax_xCO2=0.13,
+    drax_efficiency_penalty=0.24,
+    extra_transtorage=30,
     # --- CTBO Configuration ---
     USE_FOAK=False,
     CTBO_ENABLED=True,
@@ -263,6 +272,8 @@ def combined_simulation(
     ETS_LINEAR=True,
     ets_linear_start=45,
     ets_linear_end=None,
+    CTBO_growth_factor=0.4,
+    cement_process_fraction=0.63,
     debug=False
 ):
     """
@@ -282,17 +293,32 @@ def combined_simulation(
     if w2e_config is None:
         w2e_config = {'emission_factor': 0.98, 'FLH': 8760 * 0.866, 'fossil_fraction': 0.465}
     if drax_config is None:
-        drax_config = {'CO2': 11500000, 'Pinstalled': 2580, 'eta_P': 33 / (1 - 0.24), 'coordinates': (53.738710, -0.993030)}
+        drax_config = {'CO2': 11500000, 'Pinstalled': 2580, 'eta_P': 33 / (1 - drax_efficiency_penalty), 'coordinates': (53.738710, -0.993030)}
     if baseline_emissions is None:
         baseline_emissions = {'coal': 17, 'oil': 140, 'gas': 127}
     if fuels is None:
         fuels = {
-            'diesel': {'emission_factor': 2.628, 'price': 143.97},
-            'petrol': {'emission_factor': 2.339, 'price': 135.07},
-            'gas': {'emission_factor': 0.2039 * 29.3, 'price': 80}
+            'diesel': {'emission_factor': 2.628, 'price': 143.97}, # https://commonslibrary.parliament.uk/research-briefings/cbp-9714/
+            'petrol': {'emission_factor': 2.339, 'price': 135.07}, # kgCO2/litre, p/litre
+            'gas': {'emission_factor': 0.2039 * 29.3, 'price': 6.3*29.3} # kgCO2/thrm (1 thrm = 29.3 kWh), p/therm
         }
     if ets_linear_end is None:
-        ets_linear_end = {"Low": 85, "Medium": 125, "High": 155}
+        ets_linear_end = {"Low": 85, "Medium": 125, "High": 155} # {"Low": 85, "Medium": 125, "High": 155} CCC 7thCB uses 409 GBP by 2050
+    if refinery_stacks is None:
+        # {stack_name: [fraction_of_total_CO2, xCO2_concentration]}
+        refinery_stacks = {
+            'power': [0.298, (3*25 + 8*54)/(25+54)/100],
+            'crackers': [0.20, 17/100],
+            'distillation': [0.17, 11/100],
+            'smr': [0.118, (8*6 + 24*26)/(6+26)/100],
+            'remaining': [0.188, 8/100],
+        }
+    if scunthorpe_xCO2 is None:
+        scunthorpe_xCO2 = {
+            'Scunthorpe Power Station': ('chp', 0.296),
+            'Scunthorpe Blast Furnaces': ('stove', 0.251),
+            'Scunthorpe Sinter': ('sinter', 0.15),
+        }
     
     # DACCS costs
     if DACCS_EXPENSIVE:
@@ -414,8 +440,6 @@ def combined_simulation(
         ))
     
     # --- INDUSTRY SECTOR ---
-    FLH_industry = 8500
-    
     refineries = largest_plants[largest_plants['Sector'] == 'Processing & distribution of petroleum products'].copy()
     scunthorpe_stacks = largest_plants[largest_plants['Site'].str.startswith('Scunthorpe', na=False)].copy()
     cement_plants = largest_plants[largest_plants['Sector'] == 'Cement'].copy()
@@ -424,17 +448,10 @@ def combined_simulation(
     for idx, plant in industrial_plants.iterrows():
         if plant['Sector'] == 'Processing & distribution of petroleum products':
             annual_CO2 = plant['CO2']
-            stacks = {
-                'power': [annual_CO2 * 0.298, (3*25 + 8*54)/(25+54)/100],
-                'crackers': [annual_CO2 * 0.20, 17/100],
-                'distillation': [annual_CO2 * 0.17, 11/100],
-                'smr': [annual_CO2 * 0.118, (8*6 + 24*26)/(6+26)/100],
-                'remaining': [annual_CO2 * 0.188, 8/100],
-            }
             
-            for stack_name, stack_data in stacks.items():
-                annual_CO2_stack = stack_data[0]
-                xCO2_stack = stack_data[1]
+            for stack_name, stack_params in refinery_stacks.items():
+                annual_CO2_stack = annual_CO2 * stack_params[0]
+                xCO2_stack = stack_params[1]
                 mCO2 = annual_CO2_stack / FLH_industry
                 
                 mCO2f_captured, mCO2bio_captured, mCO2f_residual, OPEXE, Qfuel_tot = energy_supply(
@@ -460,12 +477,8 @@ def combined_simulation(
                 ))
         
         if plant['Sector'] == 'Iron & steel industries':
-            if plant['Site'] == 'Scunthorpe Power Station':
-                stack_name, xCO2_stack = 'chp', 0.296
-            elif plant['Site'] == 'Scunthorpe Blast Furnaces':
-                stack_name, xCO2_stack = 'stove', 0.251
-            elif plant['Site'] == 'Scunthorpe Sinter':
-                stack_name, xCO2_stack = 'sinter', 0.15
+            if plant['Site'] in scunthorpe_xCO2:
+                stack_name, xCO2_stack = scunthorpe_xCO2[plant['Site']]
             else:
                 continue
             
@@ -496,7 +509,7 @@ def combined_simulation(
         
         if plant['Sector'] == 'Cement':
             annual_CO2_stack = plant['CO2']
-            xCO2_stack = 0.20
+            xCO2_stack = cement_xCO2
             mCO2 = annual_CO2_stack / FLH_industry
             
             mCO2f_captured, mCO2bio_captured, mCO2f_residual, OPEXE, Qfuel_tot = energy_supply(
@@ -530,7 +543,7 @@ def combined_simulation(
     
     for idx, plant in w2e_plants.iterrows():
         mCO2 = plant['CO2'] / FLH_w2e
-        xCO2_w2e = 0.11
+        xCO2_w2e = w2e_xCO2
         
         CAPEX, OPEX_fixed_val = approximate_CAPEX(mCO2, xCO2_w2e, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
         levelized_CAPEX = levelize_MEUR(CAPEX, plant['CO2'], capture_rate, discount_rate_ccs, lifetime_ccs)
@@ -563,7 +576,7 @@ def combined_simulation(
     Qfuel_drax = Pinstalled_drax / (eta_P_drax / 100)
     FLH_drax = Drax_CO2 / (Qfuel_drax * emission_factor)
     
-    xCO2_drax = 0.13
+    xCO2_drax = drax_xCO2
     mCO2_drax = Drax_CO2 / FLH_drax
     CAPEX_drax, OPEX_fixed_val = approximate_CAPEX(mCO2_drax, xCO2_drax, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
     levelized_CAPEX_drax = levelize_MEUR(CAPEX_drax, Drax_CO2, capture_rate, discount_rate_ccs, lifetime_ccs)
@@ -572,7 +585,7 @@ def combined_simulation(
     OPEX_fixed_val = OPEX_fixed_val * 10**6 / (Drax_CO2 * capture_rate)
     
     profit_baseline = Qfuel_drax * eta_P_drax/100 * FLH_drax * celc
-    profit_BECCS = Qfuel_drax * eta_P_drax/100 * (1 - 0.24) * FLH_drax * celc
+    profit_BECCS = Qfuel_drax * eta_P_drax/100 * (1 - drax_efficiency_penalty) * FLH_drax * celc
     difference = profit_baseline - profit_BECCS
     OPEXE_drax = difference / (Drax_CO2 * capture_rate)
     OPEXE_drax += pcompr * 1000/3600 * celc
@@ -595,9 +608,9 @@ def combined_simulation(
     
     # --- POST-PROCESSING ---
     for result in results:
-        result['total_4OAK'] += amine_cost * sek_to_eur + 30
-        result['total_FOAK'] += amine_cost * sek_to_eur + 30
-        result['transtorage'] += 30
+        result['total_4OAK'] += amine_cost * sek_to_eur + extra_transtorage
+        result['total_FOAK'] += amine_cost * sek_to_eur + extra_transtorage
+        result['transtorage'] += extra_transtorage
     
     # Create MACC dataframes
     results_df = pd.DataFrame(results)
@@ -667,7 +680,7 @@ def combined_simulation(
     diffuse_baseline = total_emissions_2023 - full_point_source_emissions # NOTE: same no matter if HALF=True or False
     
     # Create trajectories
-    t = (years - START_YEAR) * 2/5
+    t = (years - START_YEAR) * CTBO_growth_factor
     ctbo_fraction = t**2
     
     diffuse_fraction = np.where(
@@ -814,7 +827,7 @@ def combined_simulation(
             if plant['site-stack'].endswith('W2E') or plant['site-stack'].endswith('BECCS'):
                 csu_diluted_cost = 0
             elif plant['site-stack'].endswith('cement'):
-                csu_diluted_cost = CTBO_cost_lev * (1 - 0.63)
+                csu_diluted_cost = CTBO_cost_lev * (1 - cement_process_fraction)
             else:
                 csu_diluted_cost = CTBO_cost_lev
             
