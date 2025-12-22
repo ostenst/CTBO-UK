@@ -15,114 +15,6 @@ from pyproj import Transformer
 
 
 # ============================================================================
-# CONFIGURATION AND HARD-CODED INPUTS
-# ============================================================================
-
-# --- MACC Configuration ---
-HALF = True  # True: only half of the plants are considered
-
-# Economic parameters
-pounds_to_EUR = 1.15
-CEPCI_2025 = 930
-CEPCI_2023 = 798.7
-FOAK_MULTIPLIER = 1.7553  # First-of-a-kind multiplier (from foak.py)
-
-# CCS parameters
-capture_rate = 0.95
-discount_rate_ccs = 0.07
-lifetime_ccs = 25  # [years]
-qreb = 3.5  # [MJ/kgCO2]
-pcompr = 0.37  # [MJ/kgCO2]
-
-# Energy and makeup costs
-celc = 160  # [EUR/MWh]
-cbio = 120  # [EUR/MWh]
-csteam = 4.1  # [EUR/tsteam @130C]
-amine_cost = 44  # [SEK/tCO2]
-sek_to_eur = 0.091
-fixed = 0.03  # [% of CAPEX p.a.]
-
-# Power sector (CCGT) assumptions
-power_ccgt = {
-    'xCO2': 0.05,
-    'eta_P': 0.49,
-    'emission_factor': 0.204,
-    'gas_eff': 0.35,
-    'steam_eff': 0.51
-}
-
-# Waste-to-Energy (W2E) sector assumptions
-w2e_config = {
-    'emission_factor': 0.98,
-    'FLH': 8760 * 0.866,
-    'fossil_fraction': 0.465
-}
-
-# Drax BECCS assumptions
-drax_config = {
-    'CO2': 11500000,
-    'Pinstalled': 2580,
-    'eta_P': 33 / (1 - 0.24),
-    'coordinates': (53.738710, -0.993030)
-}
-
-# Energy supply fractions for industrial sector
-qsteam = 0.15
-qelc = 0.30
-qchp = 0.55
-elc_eff = 0.33
-evaporation_enthalpy = 2257
-emission_factor_bio = 0.3318
-
-# --- CTBO Configuration ---
-USE_FOAK = False  # True: First-of-a-kind costs, False: 4th-of-a-kind costs
-CTBO_ENABLED = True
-ETS_SCENARIO = "Low"  # "High", "Medium", "Low"
-DACCS_EXPENSIVE = True  # True: Expensive DACCS (323->281 £/tCO2), False: Cheap (247->152 £/tCO2)
-VERBOSE = True
-SAVE_PLANT_DATA = True
-
-# Time parameters
-START_YEAR = 2025
-END_YEAR = 2055
-years = np.arange(START_YEAR, END_YEAR + 1)
-
-# Baseline emissions (2025)
-baseline_emissions = {
-    'coal': 17,
-    'oil': 140,
-    'gas': 127
-}
-
-# Diffuse emissions reduction trajectory
-DIFFUSE_START_FRACTION = 1.0
-DIFFUSE_END_FRACTION = 0.15
-DIFFUSE_TARGET_YEAR = 2050
-
-# Financial parameters
-DISCOUNT_RATE = 0.035
-USE_INVESTMENT_YEAR_AS_BASE = False
-
-# Fuel assumptions for consumer cost analysis
-fuels = {
-    'diesel': {'emission_factor': 2.628, 'price': 143.97},
-    'petrol': {'emission_factor': 2.339, 'price': 135.07},
-    'gas': {'emission_factor': 0.2039 * 29.3, 'price': 80}
-}
-
-# DACCS cost trajectories (£/tCO2)
-if DACCS_EXPENSIVE:
-    DACCS_2025, DACCS_2050 = 323, 281
-else:
-    DACCS_2025, DACCS_2050 = 247, 152
-
-# ETS price trajectory
-ETS_LINEAR = True
-ets_linear_start = 45
-ets_linear_end = {"Low": 85, "Medium": 125, "High": 155}
-
-
-# ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
 
@@ -276,27 +168,163 @@ def create_result_entry(site_stack, annual_CO2, biogenic, captured_CO2f, capture
 
 
 # ============================================================================
-# MACC CALCULATION
+# DATA LOADING
 # ============================================================================
 
-def calculate_macc(debug=False):
-    """Calculate the MACC for all sectors and return 4OAK and FOAK dataframes."""
+def load_data(debug=False):
+    """Load all required CSV files once. Returns a dictionary of dataframes."""
+    if debug:
+        print("\n" + "="*80)
+        print("LOADING DATA FILES")
+        print("="*80)
+    
+    data = {}
+    
+    # Load fossil plants
+    data['fossil_plants'] = pd.read_csv("data/point_sources_CO2_2022.csv")
+    data['fossil_plants']['CO2'] = data['fossil_plants']['Emission'] * 3.66
+    if debug:
+        print(f"  Loaded fossil_plants: {len(data['fossil_plants'])} rows")
+    
+    # Load transport costs
+    data['transport_costs'] = pd.read_csv("data/nzip_balanced_scenario_results.csv", encoding='latin-1')
+    data['transport_costs'] = data['transport_costs'][data['transport_costs']["CO2 Pipeline/Trucking?"] != "No CCS"]
+    if debug:
+        print(f"  Loaded transport_costs: {len(data['transport_costs'])} rows")
+    
+    # Load W2E plants
+    data['w2e_plants'] = pd.read_csv("data/w2e_plants.csv")
+    data['w2e_plants'] = data['w2e_plants'][data['w2e_plants']['No.'] != 40]  # Remove Shetland Islands
+    if debug:
+        print(f"  Loaded w2e_plants: {len(data['w2e_plants'])} rows")
+    
+    # Load power capacities
+    data['power_capacities'] = pd.read_csv("data/power_capacities_clean.csv")
+    if debug:
+        print(f"  Loaded power_capacities: {len(data['power_capacities'])} rows")
+    
+    # Load ETS prices (for non-linear ETS option)
+    data['ets_prices'] = pd.read_csv('data/ETS.csv')
+    data['ets_prices'].columns = data['ets_prices'].columns.str.strip()
+    data['ets_prices'].set_index('Year', inplace=True)
+    if debug:
+        print(f"  Loaded ets_prices: {len(data['ets_prices'])} rows")
+    
+    return data
+
+
+# ============================================================================
+# COMBINED SIMULATION
+# ============================================================================
+
+def combined_simulation(
+    data,
+    # --- MACC Configuration ---
+    HALF=True,
+    pounds_to_EUR=1.15,
+    CEPCI_2025=930,
+    CEPCI_2023=798.7,
+    FOAK_MULTIPLIER=1.7553,
+    capture_rate=0.95,
+    discount_rate_ccs=0.07,
+    lifetime_ccs=25,
+    qreb=3.5,
+    pcompr=0.37,
+    celc=160,
+    cbio=120,
+    csteam=4.1,
+    amine_cost=44,
+    sek_to_eur=0.091,
+    fixed=0.03,
+    power_ccgt=None,
+    w2e_config=None,
+    drax_config=None,
+    qsteam=0.15,
+    qelc=0.30,
+    qchp=0.55,
+    elc_eff=0.33,
+    evaporation_enthalpy=2257,
+    emission_factor_bio=0.3318,
+    # --- CTBO Configuration ---
+    USE_FOAK=False,
+    CTBO_ENABLED=True,
+    ETS_SCENARIO="Low",
+    DACCS_EXPENSIVE=True,
+    VERBOSE=True,
+    START_YEAR=2025,
+    END_YEAR=2055,
+    baseline_emissions=None,
+    DIFFUSE_START_FRACTION=1.0,
+    DIFFUSE_END_FRACTION=0.15,
+    DIFFUSE_TARGET_YEAR=2050,
+    DISCOUNT_RATE=0.035,
+    USE_INVESTMENT_YEAR_AS_BASE=False,
+    fuels=None,
+    ETS_LINEAR=True,
+    ets_linear_start=45,
+    ets_linear_end=None,
+    debug=False
+):
+    """
+    Run combined MACC calculation and CTBO simulation.
+    
+    Parameters:
+        data: Dictionary of pre-loaded dataframes from load_data()
+        All other parameters have sensible defaults.
+    
+    Returns:
+        Dictionary containing all simulation results
+    """
+    
+    # Set default dicts if not provided
+    if power_ccgt is None:
+        power_ccgt = {'xCO2': 0.05, 'eta_P': 0.49, 'emission_factor': 0.204, 'gas_eff': 0.35, 'steam_eff': 0.51}
+    if w2e_config is None:
+        w2e_config = {'emission_factor': 0.98, 'FLH': 8760 * 0.866, 'fossil_fraction': 0.465}
+    if drax_config is None:
+        drax_config = {'CO2': 11500000, 'Pinstalled': 2580, 'eta_P': 33 / (1 - 0.24), 'coordinates': (53.738710, -0.993030)}
+    if baseline_emissions is None:
+        baseline_emissions = {'coal': 17, 'oil': 140, 'gas': 127}
+    if fuels is None:
+        fuels = {
+            'diesel': {'emission_factor': 2.628, 'price': 143.97},
+            'petrol': {'emission_factor': 2.339, 'price': 135.07},
+            'gas': {'emission_factor': 0.2039 * 29.3, 'price': 80}
+        }
+    if ets_linear_end is None:
+        ets_linear_end = {"Low": 85, "Medium": 125, "High": 155}
+    
+    # DACCS costs
+    if DACCS_EXPENSIVE:
+        DACCS_2025, DACCS_2050 = 323, 281
+    else:
+        DACCS_2025, DACCS_2050 = 247, 152
+    
+    years = np.arange(START_YEAR, END_YEAR + 1)
     
     if debug:
         print("\n" + "="*80)
-        print("CALCULATING MACC")
+        print("RUNNING COMBINED SIMULATION")
         print("="*80)
+        print(f"  HALF={HALF}, USE_FOAK={USE_FOAK}, ETS_SCENARIO={ETS_SCENARIO}")
+        print(f"  DACCS_EXPENSIVE={DACCS_EXPENSIVE}, CTBO_ENABLED={CTBO_ENABLED}")
+    
+    # ========================================================================
+    # MACC CALCULATION
+    # ========================================================================
+    
+    if debug:
+        print("\n--- CALCULATING MACC ---")
     
     results = []
     
-    # Load data
-    fossil_plants = pd.read_csv("data/point_sources_CO2_2022.csv")
-    fossil_plants['CO2'] = fossil_plants['Emission'] * 3.66
-    
+    # Prepare largest plants
+    fossil_plants = data['fossil_plants'].copy()
     largest_plants = fossil_plants.nlargest(60, 'CO2')[['PlantID', 'Site', 'Easting', 'Northing', 'Operator', 'Sector', 'CO2']]
     largest_plants = largest_plants[largest_plants['Site'] != "Elgin PUQ"]
     largest_plants.loc[largest_plants['Site'] == 'Grangemouth Power Station', 'Sector'] = 'Major power producers'
     
+    # Combine Fawley Refinery entries
     fawley_mask = largest_plants['Site'] == 'Fawley Refinery'
     if fawley_mask.sum() > 1:
         fawley_total_co2 = largest_plants.loc[fawley_mask, 'CO2'].sum()
@@ -304,19 +332,24 @@ def calculate_macc(debug=False):
         largest_plants = largest_plants[~fawley_mask | (largest_plants.index == first_fawley_idx)].copy()
         largest_plants.loc[first_fawley_idx, 'CO2'] = fawley_total_co2
     
+    # Calculate full point source emissions before HALF filtering
+    largest_plants_full = largest_plants.copy()
+    full_point_source_emissions = largest_plants_full['CO2'].sum() / 1000  # [ktCO2/yr]
+    full_cement_emissions = largest_plants_full[largest_plants_full['Sector'] == 'Cement']['CO2'].sum() / 1000
+    
     if HALF:
         largest_plants = largest_plants.iloc[::2]
     
-    transport_costs = pd.read_csv("data/nzip_balanced_scenario_results.csv", encoding='latin-1')
-    transport_costs = transport_costs[transport_costs["CO2 Pipeline/Trucking?"] != "No CCS"]
+    transport_costs = data['transport_costs'].copy()
     
+    # Calculate transport costs for largest plants
     for idx, plant in largest_plants.iterrows():
         result = match_transportation(plant, transport_costs, discount_rate=0.035, lifetime=30)
         largest_plants.loc[idx, 'transport_cost'] = result['total_cost_per_t'] * pounds_to_EUR * CEPCI_2025/CEPCI_2023
         largest_plants.loc[idx, 'distance_km'] = result['distance_m'] / 1000
     
-    w2e_plants = pd.read_csv("data/w2e_plants.csv")
-    w2e_plants = w2e_plants[w2e_plants['No.'] != 40]
+    # Prepare W2E plants
+    w2e_plants = data['w2e_plants'].copy()
     w2e_plants['Easting'] = 0.0
     w2e_plants['Northing'] = 0.0
     w2e_plants['transport_cost'] = 0.0
@@ -337,7 +370,7 @@ def calculate_macc(debug=False):
     gas_eff = power_ccgt['gas_eff']
     steam_eff = power_ccgt['steam_eff']
     
-    power_capacities = pd.read_csv("data/power_capacities_clean.csv")
+    power_capacities = data['power_capacities'].copy()
     power_producers = largest_plants[
         (largest_plants['Sector'] == 'Major power producers') |
         (largest_plants['Sector'] == 'Minor power producers')
@@ -562,11 +595,11 @@ def calculate_macc(debug=False):
     
     # --- POST-PROCESSING ---
     for result in results:
-        result['total_4OAK'] += amine_cost * sek_to_eur + 30 # +30 from extra transport and storage costs
+        result['total_4OAK'] += amine_cost * sek_to_eur + 30
         result['total_FOAK'] += amine_cost * sek_to_eur + 30
         result['transtorage'] += 30
     
-    # Create dataframes
+    # Create MACC dataframes
     results_df = pd.DataFrame(results)
     
     # 4OAK MACC
@@ -601,14 +634,6 @@ def calculate_macc(debug=False):
         'EUR/tCO2': results_df_foak['total_FOAK']
     })
     
-    # Calculate full point source emissions (before HALF filtering) for baseline calculation
-    fossil_plants_full = pd.read_csv("data/point_sources_CO2_2022.csv")
-    fossil_plants_full['CO2'] = fossil_plants_full['Emission'] * 3.66
-    largest_plants_full = fossil_plants_full.nlargest(60, 'CO2')[['PlantID', 'Site', 'Sector', 'CO2']]
-    largest_plants_full = largest_plants_full[largest_plants_full['Site'] != "Elgin PUQ"]
-    full_point_source_emissions = largest_plants_full['CO2'].sum() / 1000  # [ktCO2/yr]
-    full_cement_emissions = largest_plants_full[largest_plants_full['Sector'] == 'Cement']['CO2'].sum() / 1000  # [ktCO2/yr]
-    
     if debug:
         total_captured = macc_4oak['ktCO2_yr_cumulative'].iloc[-1]
         avg_cost = macc_4oak['EUR/tCO2'].mean()
@@ -616,54 +641,31 @@ def calculate_macc(debug=False):
         print(f"  Total CO2 capture potential bio+fossil: {total_captured:.0f} ktCO2/yr")
         print(f"  Average abatement cost: {avg_cost:.1f} EUR/tCO2")
         print(f"  Cost range: {macc_4oak['EUR/tCO2'].min():.1f} - {macc_4oak['EUR/tCO2'].max():.1f} EUR/tCO2")
-        print(f"  Full point source emissions (all 60 FOSSIL plants): {full_point_source_emissions:.0f} ktCO2/yr")
-        print(f"  Full cement emissions: {full_cement_emissions:.0f} ktCO2/yr")
     
-    return macc_4oak, macc_foak, full_point_source_emissions, full_cement_emissions
-
-
-# ============================================================================
-# CTBO SIMULATION
-# ============================================================================
-
-def run_ctbo_simulation(macc_4oak, macc_foak, full_point_source_emissions, full_cement_emissions, debug=False):
-    """Run the CTBO policy simulation."""
+    # ========================================================================
+    # CTBO SIMULATION
+    # ========================================================================
     
     if debug:
-        print("\n" + "="*80)
-        print("RUNNING CTBO SIMULATION")
-        print("="*80)
-        print(f"Using {'FOAK' if USE_FOAK else '4OAK'} cost scenario")
-        print(f"ETS scenario: {ETS_SCENARIO}")
-        print(f"DACCS cost: {'Expensive' if DACCS_EXPENSIVE else 'Cheap'}")
+        print("\n--- RUNNING CTBO SIMULATION ---")
+        print(f"  Using {'FOAK' if USE_FOAK else '4OAK'} cost scenario")
+        print(f"  ETS scenario: {ETS_SCENARIO}")
+        print(f"  DACCS cost: {'Expensive' if DACCS_EXPENSIVE else 'Cheap'}")
     
     # Select MACC
-    macc_4oak = macc_4oak.copy()
-    macc_foak = macc_foak.copy()
-    macc_4oak['invested'] = False
-    macc_foak['invested'] = False
-    macc = macc_foak if USE_FOAK else macc_4oak
-    macc_fossil_CO2 = macc['ktCO2f_yr_baseline'].sum()  # This is the remaining CO2, even if we removed HALF of the plants
-    omitted_CO2 = full_point_source_emissions - macc_fossil_CO2 # This is the CO2 that was omitted by the HALF filter
+    macc_4oak_sim = macc_4oak.copy()
+    macc_foak_sim = macc_foak.copy()
+    macc_4oak_sim['invested'] = False
+    macc_foak_sim['invested'] = False
+    macc = macc_foak_sim if USE_FOAK else macc_4oak_sim
     
-    # Calculate baseline emissions using full point source data (not filtered by HALF); add cement, then substract all point sources
+    macc_fossil_CO2 = macc['ktCO2f_yr_baseline'].sum()
+    omitted_CO2 = full_point_source_emissions - macc_fossil_CO2
+    
+    # Calculate baseline emissions
     total_emissions_2023 = (baseline_emissions['coal'] + baseline_emissions['oil'] +
                             baseline_emissions['gas']) * 1000 + full_cement_emissions
-    diffuse_baseline = total_emissions_2023 - omitted_CO2 # NOTE: may need to check the carbon balances here...
-    
-    # # For debugging:
-    # macc_point_sources_fossil = macc['ktCO2f_yr_baseline'].sum()
-    # macc_point_sources_bio = macc['ktCO2bio_yr_baseline'].sum()
-    # macc_cement_emissions = macc_4oak[macc_4oak['site-stack'].str.endswith('-cement')]['ktCO2f_yr_baseline'].sum()
-    
-    # if debug:
-    #     print(f"\nTotal fossil emissions (2025): {total_emissions_2023:.0f} ktCO2/yr")
-    #     print(f"  Full point sources (60 FOSSIL plants): {full_point_source_emissions:.0f} ktCO2/yr")
-    #     print(f"  Full cement emissions: {full_cement_emissions:.0f} ktCO2/yr")
-    #     print(f"  MACC point sources (modeled fossil): {macc_point_sources_fossil:.0f} ktCO2/yr")
-    #     print(f"  MACC point sources (modeled bio): {macc_point_sources_bio:.0f} ktCO2/yr")
-    #     print(f"  MACC cement emissions (modeled): {macc_cement_emissions:.0f} ktCO2/yr")
-    #     print(f"  Diffuse fossil CO2: {diffuse_baseline:.0f} ktCO2/yr")
+    diffuse_baseline = total_emissions_2023 - omitted_CO2
     
     # Create trajectories
     t = (years - START_YEAR) * 2/5
@@ -685,9 +687,7 @@ def run_ctbo_simulation(macc_4oak, macc_foak, full_point_source_emissions, full_
             ets_end
         ) * pounds_to_EUR
     else:
-        ets_df = pd.read_csv('data/ETS.csv')
-        ets_df.columns = ets_df.columns.str.strip()
-        ets_df.set_index('Year', inplace=True)
+        ets_df = data['ets_prices'].copy()
         ets_column_map = {
             "High": "High Sensitivity - Low Fossil Fuel Prices and High Economic Growth (2024 GBP)",
             "Medium": "Net Zero Strategy Aligned (2024 GBP)",
@@ -741,7 +741,7 @@ def run_ctbo_simulation(macc_4oak, macc_foak, full_point_source_emissions, full_
         baseline_emissions_current = macc['ktCO2f_yr_baseline'].where(~macc['invested'], 0).sum()
         residual_emissions = macc['ktCO2f_yr_residual'].where(macc['invested'], 0).sum()
         plant_emissions = baseline_emissions_current + residual_emissions
-        total_emissions = plant_emissions + diffuse
+        total_emissions_current = plant_emissions + diffuse
         
         supplied_CO2 = macc['ktCO2f_yr_baseline'].sum() + diffuse
         ctbo_mandate = supplied_CO2 * ctbo_fraction[i] / 100
@@ -801,7 +801,7 @@ def run_ctbo_simulation(macc_4oak, macc_foak, full_point_source_emissions, full_
         
         # Store aggregate results
         supplied_CO2_vec.append(supplied_CO2)
-        total_emissions_vec.append(total_emissions)
+        total_emissions_vec.append(total_emissions_current)
         ctbo_mandate_vec.append(ctbo_mandate)
         fCCS_capacity_vec.append(point_fossil_capacity)
         BECCS_capacity_vec.append(point_bio_capacity)
@@ -861,7 +861,14 @@ def run_ctbo_simulation(macc_4oak, macc_foak, full_point_source_emissions, full_
                 'ctbo_net_profit': ctbo_net_profit
             })
     
-    results = {
+    # ========================================================================
+    # RETURN RESULTS
+    # ========================================================================
+    
+    return {
+        'macc_4oak': macc_4oak,
+        'macc_foak': macc_foak,
+        'macc': macc,
         'years': years,
         'ctbo_fraction': ctbo_fraction,
         'ets_prices': ets_prices,
@@ -877,10 +884,15 @@ def run_ctbo_simulation(macc_4oak, macc_foak, full_point_source_emissions, full_
         'CTBO_cost_lev_vec': CTBO_cost_lev_vec,
         'plant_results': plant_results,
         'first_DACCS_year': first_DACCS_year,
-        'macc': macc
+        'full_point_source_emissions': full_point_source_emissions,
+        'full_cement_emissions': full_cement_emissions,
+        'diffuse_baseline': diffuse_baseline,
+        'pounds_to_EUR': pounds_to_EUR,
+        'fuels': fuels,
+        'START_YEAR': START_YEAR,
+        'DISCOUNT_RATE': DISCOUNT_RATE,
+        'USE_INVESTMENT_YEAR_AS_BASE': USE_INVESTMENT_YEAR_AS_BASE
     }
-    
-    return results
 
 
 # ============================================================================
@@ -893,13 +905,24 @@ if __name__ == "__main__":
     print("COMBINED MACC + CTBO SIMULATION")
     print("="*80)
     
-    # Calculate MACC
-    macc_4oak, macc_foak, full_point_source_emissions, full_cement_emissions = calculate_macc(debug=True)
+    # Load data once
+    data = load_data(debug=True)
     
-    # Run CTBO simulation
-    results = run_ctbo_simulation(macc_4oak, macc_foak, full_point_source_emissions, full_cement_emissions, debug=True)
+    # Run simulation with default parameters (or override as needed)
+    results = combined_simulation(
+        data,
+        HALF=False,
+        USE_FOAK=False,
+        ETS_SCENARIO="Low",
+        DACCS_EXPENSIVE=True,
+        VERBOSE=True,
+        debug=True
+    )
     
     # Extract results
+    macc_4oak = results['macc_4oak']
+    macc_foak = results['macc_foak']
+    macc = results['macc']
     years = results['years']
     ctbo_fraction = results['ctbo_fraction']
     ets_prices = results['ets_prices']
@@ -915,7 +938,11 @@ if __name__ == "__main__":
     CTBO_cost_lev_vec = results['CTBO_cost_lev_vec']
     plant_results = results['plant_results']
     first_DACCS_year = results['first_DACCS_year']
-    macc = results['macc']
+    pounds_to_EUR = results['pounds_to_EUR']
+    fuels = results['fuels']
+    START_YEAR = results['START_YEAR']
+    DISCOUNT_RATE = results['DISCOUNT_RATE']
+    USE_INVESTMENT_YEAR_AS_BASE = results['USE_INVESTMENT_YEAR_AS_BASE']
     
     # ============================================================================
     # RESULTS
@@ -969,6 +996,7 @@ if __name__ == "__main__":
     plant_df = pd.DataFrame(plant_results)
     print(f"\nPlant-level data collected: {len(plant_df)} plant-year observations")
     
+    plant_npv_df = pd.DataFrame()
     if len(plant_df) > 0:
         print(f"  Years covered: {plant_df['year'].min():.0f} - {plant_df['year'].max():.0f}")
         print(f"  Number of plants: {plant_df['plant'].nunique()}")
@@ -1120,177 +1148,8 @@ if __name__ == "__main__":
     plt.savefig('4_price_increases.png', dpi=300)
     print("  Saved: 4_price_increases.png")
     
-    # Plot 4b: Consumer fuel price increases (2025-2040)
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
-    
-    ax1.plot(years, diesel_increase_abs, label='Diesel', linewidth=2, color=magma(0.20))
-    ax1.plot(years, petrol_increase_abs, label='Petrol', linewidth=2, color=magma(0.70))
-    ax1.plot(years, gas_increase_abs, label='Gas', linewidth=2, color=magma(0.50))
-    
-    if first_DACCS_year is not None and 2025 <= first_DACCS_year <= 2040:
-        daccs_idx = np.where(years == first_DACCS_year)[0][0]
-        ax1.plot(first_DACCS_year, diesel_increase_abs[daccs_idx], 'o', markersize=6, color=magma(0.20))
-        ax1.plot(first_DACCS_year, petrol_increase_abs[daccs_idx], 'o', markersize=6, color=magma(0.70))
-        ax1.plot(first_DACCS_year, gas_increase_abs[daccs_idx], 'o', markersize=6, color=magma(0.50))
-        ax1.plot([], [], 'o', markersize=6, color='gray', label='Year when DACCS is marginal')
-    
-    ax1.set_xlim(2025, 2040)
-    idx_start = np.where(years == 2025)[0][0]
-    idx_end = np.where(years == 2040)[0][0]
-    abs_data_range = np.concatenate([diesel_increase_abs[idx_start:idx_end+1],
-                                      petrol_increase_abs[idx_start:idx_end+1],
-                                      gas_increase_abs[idx_start:idx_end+1]])
-    y_margin_abs = (abs_data_range.max() - abs_data_range.min()) * 0.15
-    ax1.set_ylim(abs_data_range.min() - y_margin_abs, abs_data_range.max() + y_margin_abs)
-    
-    ax1.set_xlabel('Year', fontsize=13)
-    ax1.set_ylabel('Price Increase (pence per litre/thrm)', fontsize=13)
-    ax1.legend(fontsize=11)
-    ax1.grid(True, alpha=0.3)
-    ax1.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x)}'))
-    
-    ax2.plot(years, diesel_increase_pct, label='Diesel', linewidth=2, color=magma(0.20))
-    ax2.plot(years, petrol_increase_pct, label='Petrol', linewidth=2, color=magma(0.70))
-    ax2.plot(years, gas_increase_pct, label='Gas', linewidth=2, color=magma(0.50))
-    
-    if first_DACCS_year is not None and 2025 <= first_DACCS_year <= 2040:
-        ax2.plot(first_DACCS_year, diesel_increase_pct[daccs_idx], 'o', markersize=6, color=magma(0.20))
-        ax2.plot(first_DACCS_year, petrol_increase_pct[daccs_idx], 'o', markersize=6, color=magma(0.70))
-        ax2.plot(first_DACCS_year, gas_increase_pct[daccs_idx], 'o', markersize=6, color=magma(0.50))
-        ax2.plot([], [], 'o', markersize=6, color='gray', label='Year when DACCS is marginal')
-    
-    ax2.set_xlim(2025, 2040)
-    pct_data_range = np.concatenate([diesel_increase_pct[idx_start:idx_end+1],
-                                      petrol_increase_pct[idx_start:idx_end+1],
-                                      gas_increase_pct[idx_start:idx_end+1]])
-    y_margin_pct = (pct_data_range.max() - pct_data_range.min()) * 0.15
-    ax2.set_ylim(pct_data_range.min() - y_margin_pct, pct_data_range.max() + y_margin_pct)
-    ax2.set_xlabel('Year', fontsize=13)
-    ax2.set_ylabel('Price Increase (%)', fontsize=13)
-    ax2.legend(fontsize=11)
-    ax2.grid(True, alpha=0.3)
-    ax2.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x)}'))
-    
-    plt.tight_layout()
-    plt.savefig('4b_price_increases_2025-2040.png', dpi=300)
-    print("  Saved: 4b_price_increases_2025-2040.png")
-    
-    # Plot 4c: Consumer fuel price increases (2035-2055)
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
-    
-    ax1.plot(years, diesel_increase_abs, label='Diesel', linewidth=2, color=magma(0.20))
-    ax1.plot(years, petrol_increase_abs, label='Petrol', linewidth=2, color=magma(0.70))
-    ax1.plot(years, gas_increase_abs, label='Gas', linewidth=2, color=magma(0.50))
-    
-    if first_DACCS_year is not None and 2035 <= first_DACCS_year <= 2055:
-        daccs_idx = np.where(years == first_DACCS_year)[0][0]
-        ax1.plot(first_DACCS_year, diesel_increase_abs[daccs_idx], 'o', markersize=6, color=magma(0.20))
-        ax1.plot(first_DACCS_year, petrol_increase_abs[daccs_idx], 'o', markersize=6, color=magma(0.70))
-        ax1.plot(first_DACCS_year, gas_increase_abs[daccs_idx], 'o', markersize=6, color=magma(0.50))
-        ax1.plot([], [], 'o', markersize=6, color='gray', label='Year when DACCS is marginal')
-    
-    ax1.set_xlim(2035, 2055)
-    idx_start = np.where(years == 2035)[0][0]
-    idx_end = np.where(years == 2055)[0][0]
-    abs_data_range = np.concatenate([diesel_increase_abs[idx_start:idx_end+1],
-                                      petrol_increase_abs[idx_start:idx_end+1],
-                                      gas_increase_abs[idx_start:idx_end+1]])
-    y_margin_abs = (abs_data_range.max() - abs_data_range.min()) * 0.15
-    ax1.set_ylim(abs_data_range.min() - y_margin_abs, abs_data_range.max() + y_margin_abs)
-    
-    ax1.set_xlabel('Year', fontsize=13)
-    ax1.set_ylabel('Price Increase (pence per litre/thrm)', fontsize=13)
-    ax1.legend(fontsize=11)
-    ax1.grid(True, alpha=0.3)
-    ax1.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x)}'))
-    
-    ax2.plot(years, diesel_increase_pct, label='Diesel', linewidth=2, color=magma(0.20))
-    ax2.plot(years, petrol_increase_pct, label='Petrol', linewidth=2, color=magma(0.70))
-    ax2.plot(years, gas_increase_pct, label='Gas', linewidth=2, color=magma(0.50))
-    
-    if first_DACCS_year is not None and 2035 <= first_DACCS_year <= 2055:
-        ax2.plot(first_DACCS_year, diesel_increase_pct[daccs_idx], 'o', markersize=6, color=magma(0.20))
-        ax2.plot(first_DACCS_year, petrol_increase_pct[daccs_idx], 'o', markersize=6, color=magma(0.70))
-        ax2.plot(first_DACCS_year, gas_increase_pct[daccs_idx], 'o', markersize=6, color=magma(0.50))
-        ax2.plot([], [], 'o', markersize=6, color='gray', label='Year when DACCS is marginal')
-    
-    ax2.set_xlim(2035, 2055)
-    pct_data_range = np.concatenate([diesel_increase_pct[idx_start:idx_end+1],
-                                      petrol_increase_pct[idx_start:idx_end+1],
-                                      gas_increase_pct[idx_start:idx_end+1]])
-    y_margin_pct = (pct_data_range.max() - pct_data_range.min()) * 0.15
-    ax2.set_ylim(pct_data_range.min() - y_margin_pct, pct_data_range.max() + y_margin_pct)
-    ax2.set_xlabel('Year', fontsize=13)
-    ax2.set_ylabel('Price Increase (%)', fontsize=13)
-    ax2.legend(fontsize=11)
-    ax2.grid(True, alpha=0.3)
-    ax2.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x)}'))
-    
-    plt.tight_layout()
-    plt.savefig('4c_price_increases_2035-2055.png', dpi=300)
-    print("  Saved: 4c_price_increases_2035-2055.png")
-    
-    # Plot 5: Plant-level profits
-    if len(plant_df) > 0:
-        selected_plants = [
-            {"Pembroke Power Station-CCGT": "black"},
-            {"Runcorn-W2E": "green"},
-            {"Hope Cement Works-cement": "red"},
-            {"Medway-CCGT": "gray"}
-        ]
-        
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
-        
-        for plant_dict in selected_plants:
-            plant_name, color = list(plant_dict.items())[0]
-            plant_data = plant_df[(plant_df['plant'] == plant_name) & (plant_df['year'] <= 2051)]
-            
-            if len(plant_data) > 0:
-                ax1.plot(plant_data['year'], plant_data['ctbo_gross_profit'],
-                        label=plant_name, linewidth=2, color=color)
-                ax2.plot(plant_data['year'], plant_data['ctbo_net_profit'],
-                        label=plant_name, linewidth=2, color=color)
-                
-                investment_year = plant_data['investment_year'].max()
-                if not pd.isna(investment_year) and investment_year in plant_data['year'].values:
-                    invest_data = plant_data[plant_data['year'] == investment_year].iloc[0]
-                    ax1.plot(investment_year, invest_data['ctbo_gross_profit'], 's', markersize=6, color=color)
-                    ax2.plot(investment_year, invest_data['ctbo_net_profit'], 's', markersize=6, color=color)
-                
-                if first_DACCS_year is not None and first_DACCS_year <= 2051 and first_DACCS_year in plant_data['year'].values:
-                    daccs_data = plant_data[plant_data['year'] == first_DACCS_year].iloc[0]
-                    ax1.plot(first_DACCS_year, daccs_data['ctbo_gross_profit'], 'o', markersize=6, color=color)
-                    ax2.plot(first_DACCS_year, daccs_data['ctbo_net_profit'], 'o', markersize=6, color=color)
-        
-        ax1.plot([], [], 'o', markersize=6, color='black', label='Year when DACCS is marginal')
-        ax1.plot([], [], 's', markersize=6, color='black', label='Year when individual plant invested')
-        ax1.set_xlabel('Year', fontsize=13)
-        ax1.set_ylabel('Plant profits (gross) from selling CO2 (kEUR/yr)', fontsize=13)
-        ax1.legend(fontsize=10, loc='best')
-        ax1.grid(True, alpha=0.3)
-        
-        ax2.plot([], [], 'o', markersize=6, color='black', label='Year when DACCS is marginal')
-        ax2.plot([], [], 's', markersize=6, color='black', label='Year when individual plant invested')
-        ax2.set_xlabel('Year', fontsize=13)
-        ax2.set_ylabel('Plant profits (net) from selling CO2 (kEUR/yr)', fontsize=13)
-        ax2.legend(fontsize=10, loc='best')
-        ax2.grid(True, alpha=0.3)
-        
-        plt.tight_layout()
-        plt.savefig('5_profits.png', dpi=300)
-        print("  Saved: 5_profits.png")
-    
-    # Save plant-level data
-    if SAVE_PLANT_DATA and len(plant_df) > 0:
-        plant_df.to_csv('ctbo_plant_results.csv', index=False)
-        if len(plant_npv_df) > 0:
-            plant_npv_df.to_csv('ctbo_plant_npv.csv', index=False)
-        print(f"\n  Plant-level data saved to 'ctbo_plant_results.csv'")
-        print(f"  Plant NPV data saved to 'ctbo_plant_npv.csv'")
-    
     print("\n" + "="*80)
     print("ANALYSIS COMPLETE")
     print("="*80)
     
     plt.show()
-
