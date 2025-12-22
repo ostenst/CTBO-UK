@@ -21,7 +21,7 @@ import numpy as np
 # Scenario selection
 FOAK = False                    # True: First-of-a-kind costs, False: 4th-of-a-kind costs
 CTBO_ENABLED = True            # Enable CTBO mandate
-ETS = "High"                   # "High", "Medium", "Low"
+ETS = "Low"                   # "High", "Medium", "Low"
 DACCS_EXPENSIVE = True         # True: Expensive DACCS (323->281 £/tCO2), False: Cheap (247->152 £/tCO2)
 VERBOSE = True                # Print detailed investment decisions
 SAVE_PLANT_DATA = True        # Save plant-level results to CSV
