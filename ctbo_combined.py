@@ -255,7 +255,7 @@ def combined_simulation(
     END_YEAR=2055,
     baseline_emissions=None,
     DIFFUSE_START_FRACTION=1.0,
-    DIFFUSE_END_FRACTION=0.15,
+    DIFFUSE_END_FRACTION=0.20,
     DIFFUSE_TARGET_YEAR=2050,
     DISCOUNT_RATE=0.035,
     USE_INVESTMENT_YEAR_AS_BASE=False,
@@ -659,13 +659,12 @@ def combined_simulation(
     macc_foak_sim['invested'] = False
     macc = macc_foak_sim if USE_FOAK else macc_4oak_sim
     
-    macc_fossil_CO2 = macc['ktCO2f_yr_baseline'].sum()
-    omitted_CO2 = full_point_source_emissions - macc_fossil_CO2
-    
+    macc_fossil_CO2 = macc['ktCO2f_yr_baseline'].sum() 
+
     # Calculate baseline emissions
     total_emissions_2023 = (baseline_emissions['coal'] + baseline_emissions['oil'] +
                             baseline_emissions['gas']) * 1000 + full_cement_emissions
-    diffuse_baseline = total_emissions_2023 - omitted_CO2
+    diffuse_baseline = total_emissions_2023 - full_point_source_emissions # NOTE: same no matter if HALF=True or False
     
     # Create trajectories
     t = (years - START_YEAR) * 2/5
@@ -911,7 +910,7 @@ if __name__ == "__main__":
     # Run simulation with default parameters (or override as needed)
     results = combined_simulation(
         data,
-        HALF=False,
+        HALF=True,
         USE_FOAK=False,
         ETS_SCENARIO="Low",
         DACCS_EXPENSIVE=True,
