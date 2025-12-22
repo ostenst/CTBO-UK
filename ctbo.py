@@ -44,6 +44,7 @@ DIFFUSE_END_FRACTION = 0.15    # 40% of diffuse emissions remain in 2050
 DIFFUSE_TARGET_YEAR = 2050
 
 # Financial parameters
+print("Do not apply learning logic... it would change the MACC order dynamically, impacting the CSU price (which may decrease even...)")
 DISCOUNT_RATE = 0.035          # Real discount rate for NPV calculations [3.5%]
 USE_INVESTMENT_YEAR_AS_BASE = False  # NPV base: False=START_YEAR, True=investment year
 pounds_to_EUR = 1.15
@@ -107,7 +108,7 @@ total_emissions_2023 = (baseline_emissions['coal'] + baseline_emissions['oil'] +
                         baseline_emissions['gas']) * 1000 + cement_emissions
 point_sources = macc_4oak['ktCO2f_yr_baseline'].sum()
 diffuse_baseline = total_emissions_2023 - point_sources
-
+print(" BUG BUG BUG : when HALF the MACC is used, the total emissions include point sources... should maybe remove these?")
 print(f"\nTotal fossil emissions (2025): {total_emissions_2023:.0f} ktCO2/yr")
 print(f"  Point sources: {point_sources:.0f} ktCO2/yr")
 print(f"  Diffuse: {diffuse_baseline:.0f} ktCO2/yr")
