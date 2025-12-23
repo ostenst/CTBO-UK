@@ -220,7 +220,7 @@ def load_data(debug=False):
 def combined_simulation(
     data,
     # --- MACC Configuration ---
-    HALF=True,                      # [-] bool: use every 2nd plant from top-60 emitters
+    HALF=False,                     # [-] bool: use every 2nd plant from top-60 emitters
     pounds_to_EUR=1.15,             # [EUR/GBP] currency conversion factor
     CEPCI_2025=930,                 # [-] Chemical Engineering Plant Cost Index (2025)
     CEPCI_2023=798.7,               # [-] Chemical Engineering Plant Cost Index (2023 reference)
@@ -258,7 +258,7 @@ def combined_simulation(
     # --- CTBO Configuration ---
     USE_FOAK=False,                 # [-] bool: use FOAK costs instead of 4OAK
     CTBO_ENABLED=True,              # [-] bool: enable CTBO mandate
-    ETS_SCENARIO="Low",             # [-] str: "High", "Medium", or "Low"
+    ETS_SCENARIO="High",            # [-] str: "High", "Medium", or "Low"
     DACCS_EXPENSIVE=True,           # [-] bool: use expensive DACCS trajectory
     VERBOSE=True,                   # [-] bool: print investment decisions
     START_YEAR=2025,                # [year] Simulation start year
@@ -275,7 +275,7 @@ def combined_simulation(
     ets_linear_end=None,            # dict: {"Low", "Medium", "High"} in [GBP/tCO2] at 2050
     CTBO_growth_factor=0.4,         # [-] Quadratic growth factor for CTBO mandate (t = years * factor)
     cement_process_fraction=0.63,   # [-] Fraction of cement CO2 from process (vs fuel)
-    debug=False                     # [-] bool: print debug information
+    debug=True                      # [-] bool: print debug information
 ):
     """
     Run combined MACC calculation and CTBO simulation.
@@ -839,6 +839,8 @@ def combined_simulation(
             # NOTE: think about what PROFITS and COSTS we can actually include in NPV calculations... for example, ETS avoided? Draw MACC!
             # Why are fossil plants profiting MORE when the ETS price is very high? => Internalized costs are low
             # I think the NPV calculations refer to only CSUs: the profits of selling CSUs (above the ETS price... so the NPV of "engaging with the CTBO-CSU program") and the costs of internalizing CSUs...
+            # This is the "additional" NPV provided by a CTBO!
+            # Why do fossil emitters benefit from high ETS prices? Because the dark blue area decreases, i.e., a greater fraction of the CSU cost is pure profit, rather than internalized costs.
             # We could make an alternative NPV calculation including CCS costs and ETS profits - however, it does not match the investment logic of MACCcost<ETSprice
             if plant['invested']:
                 investment_year = plant['year_invested']
@@ -940,15 +942,7 @@ if __name__ == "__main__":
     data = load_data(debug=True)
     
     # Run simulation with default parameters (or override as needed)
-    results = combined_simulation(
-        data,
-        HALF=False,
-        USE_FOAK=False,
-        ETS_SCENARIO="Low",
-        DACCS_EXPENSIVE=True,
-        VERBOSE=True,
-        debug=True
-    )
+    results = combined_simulation(data)
     
     # Extract results
     macc_4oak = results['macc_4oak']
