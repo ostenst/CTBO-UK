@@ -220,61 +220,62 @@ def load_data(debug=False):
 def combined_simulation(
     data,
     # --- MACC Configuration ---
-    HALF=True,
-    pounds_to_EUR=1.15,
-    CEPCI_2025=930,
-    CEPCI_2023=798.7,
-    FOAK_MULTIPLIER=1.7553,
-    capture_rate=0.95,
-    discount_rate_ccs=0.07,
-    lifetime_ccs=25,
-    qreb=3.5,
-    pcompr=0.37,
-    celc=300, #160  EUR/MWh
-    cbio=120,
-    csteam=4.1,
-    amine_cost=44,
-    sek_to_eur=0.091,
-    fixed=0.03,
-    power_ccgt=None,
-    w2e_config=None,
-    drax_config=None,
-    qsteam=0.15,
-    qelc=0.30,
-    qchp=0.55,
-    elc_eff=0.33,
-    evaporation_enthalpy=2257,
-    emission_factor_bio=0.3318,
+    HALF=True,                      # [-] bool: use every 2nd plant from top-60 emitters
+    pounds_to_EUR=1.15,             # [EUR/GBP] currency conversion factor
+    CEPCI_2025=930,                 # [-] Chemical Engineering Plant Cost Index (2025)
+    CEPCI_2023=798.7,               # [-] Chemical Engineering Plant Cost Index (2023 reference)
+    FOAK_MULTIPLIER=1.7553,         # [-] First-of-a-kind cost multiplier
+    NETL=5.509,                     # [-] NETL methodology CAPEX multiplier
+    capture_rate=0.95,              # [-] CO2 capture rate (0-1)
+    discount_rate_ccs=0.07,         # [-] Discount rate for CCS CAPEX annualization (0-1)
+    lifetime_ccs=25,                # [years] CCS project lifetime
+    qreb=3.5,                       # [MJ/kgCO2] Specific reboiler heat duty
+    pcompr=0.37,                    # [MJ/kgCO2] Specific compression power
+    celc=300,                       # [EUR/MWh] Electricity cost
+    cbio=120,                       # [EUR/MWh] Biomass fuel cost
+    csteam=4.1,                     # [EUR/tsteam] Steam cost at ~130°C
+    amine_cost=44,                  # [SEK/tCO2] Amine makeup cost
+    sek_to_eur=0.091,               # [EUR/SEK] currency conversion factor
+    fixed=0.04,                     # [-] Fixed OPEX as fraction of CAPEX per annum
+    power_ccgt=None,                # dict: {xCO2 [-], eta_P [MWel/MWfuel], emission_factor [tCO2/MWhfuel], gas_eff [-], steam_eff [-]}
+    w2e_config=None,                # dict: {emission_factor [tCO2/twaste], FLH [h/yr], fossil_fraction [-]}
+    drax_config=None,               # dict: {CO2 [tCO2/yr], Pinstalled [MW], eta_P [%], coordinates (lat, lon)}
+    qsteam=0.15,                    # [-] Fraction of reboiler heat from steam (0-1)
+    qelc=0.30,                      # [-] Fraction of reboiler heat from electricity (0-1)
+    qchp=0.55,                      # [-] Fraction of reboiler heat from biomass CHP (0-1)
+    elc_eff=0.33,                   # [-] Efficiency of electric reboiler (0-1)
+    evaporation_enthalpy=2257,      # [MJ/tsteam] Enthalpy of vaporization
+    emission_factor_bio=0.3318,     # [tCO2/MWhfuel] Biomass emission factor
     # --- Sector-specific parameters ---
-    FLH_industry=8500,
-    refinery_stacks=None,
-    scunthorpe_xCO2=None,
-    cement_xCO2=0.20,
-    w2e_xCO2=0.11,
-    drax_xCO2=0.13,
-    drax_efficiency_penalty=0.24,
-    extra_transtorage=30,
+    FLH_industry=8500,              # [h/yr] Full load hours for industrial plants
+    refinery_stacks=None,           # dict: stack fractions and xCO2 values
+    scunthorpe_xCO2=None,           # dict: xCO2 values for iron & steel stacks
+    cement_xCO2=0.20,               # [-] CO2 concentration in cement flue gas (0-1)
+    w2e_xCO2=0.11,                  # [-] CO2 concentration in W2E flue gas (0-1)
+    drax_xCO2=0.13,                 # [-] CO2 concentration in Drax flue gas (0-1)
+    drax_efficiency_penalty=0.24,   # [-] Efficiency penalty from CCS on Drax (0-1)
+    extra_transtorage=30,           # [EUR/tCO2] Additional transport & storage cost
     # --- CTBO Configuration ---
-    USE_FOAK=False,
-    CTBO_ENABLED=True,
-    ETS_SCENARIO="Low",
-    DACCS_EXPENSIVE=True,
-    VERBOSE=True,
-    START_YEAR=2025,
-    END_YEAR=2055,
-    baseline_emissions=None,
-    DIFFUSE_START_FRACTION=1.0,
-    DIFFUSE_END_FRACTION=0.20,
-    DIFFUSE_TARGET_YEAR=2050,
-    DISCOUNT_RATE=0.035,
-    USE_INVESTMENT_YEAR_AS_BASE=False,
-    fuels=None,
-    ETS_LINEAR=True,
-    ets_linear_start=45,
-    ets_linear_end=None,
-    CTBO_growth_factor=0.4,
-    cement_process_fraction=0.63,
-    debug=False
+    USE_FOAK=False,                 # [-] bool: use FOAK costs instead of 4OAK
+    CTBO_ENABLED=True,              # [-] bool: enable CTBO mandate
+    ETS_SCENARIO="Low",             # [-] str: "High", "Medium", or "Low"
+    DACCS_EXPENSIVE=True,           # [-] bool: use expensive DACCS trajectory
+    VERBOSE=True,                   # [-] bool: print investment decisions
+    START_YEAR=2025,                # [year] Simulation start year
+    END_YEAR=2055,                  # [year] Simulation end year
+    baseline_emissions=None,        # dict: {coal, oil, gas} in [MtCO2/yr]
+    DIFFUSE_START_FRACTION=1.0,     # [-] Fraction of diffuse emissions at START_YEAR (0-1)
+    DIFFUSE_END_FRACTION=0.20,      # [-] Fraction of diffuse emissions at DIFFUSE_TARGET_YEAR (0-1)
+    DIFFUSE_TARGET_YEAR=2050,       # [year] Target year for diffuse emissions reduction
+    DISCOUNT_RATE=0.035,            # [-] Real discount rate for NPV calculations (0-1)
+    USE_INVESTMENT_YEAR_AS_BASE=False,  # [-] bool: NPV base year = investment year vs START_YEAR
+    fuels=None,                     # dict: {fuel: {emission_factor [kgCO2/L or kgCO2/therm], price [pence/L or pence/therm]}}
+    ETS_LINEAR=True,                # [-] bool: use linear ETS trajectory vs CSV data
+    ets_linear_start=45,            # [GBP/tCO2] ETS price at START_YEAR
+    ets_linear_end=None,            # dict: {"Low", "Medium", "High"} in [GBP/tCO2] at 2050
+    CTBO_growth_factor=0.4,         # [-] Quadratic growth factor for CTBO mandate (t = years * factor)
+    cement_process_fraction=0.63,   # [-] Fraction of cement CO2 from process (vs fuel)
+    debug=False                     # [-] bool: print debug information
 ):
     """
     Run combined MACC calculation and CTBO simulation.
@@ -322,9 +323,9 @@ def combined_simulation(
     
     # DACCS costs
     if DACCS_EXPENSIVE:
-        DACCS_2025, DACCS_2050 = 323, 281
+        DACCS_2025, DACCS_2050 = 391, 391 # 323, 281 7th CB
     else:
-        DACCS_2025, DACCS_2050 = 247, 152
+        DACCS_2025, DACCS_2050 = 322, 322 # 247, 152
     
     years = np.arange(START_YEAR, END_YEAR + 1)
     
@@ -410,7 +411,7 @@ def combined_simulation(
         mCO2 = Qfuel * emission_factor
         FLH = plant['CO2'] / mCO2
         
-        CAPEX, OPEX_fixed_val = approximate_CAPEX(mCO2, xCO2, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
+        CAPEX, OPEX_fixed_val = approximate_CAPEX(mCO2, xCO2, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=NETL)
         levelized_CAPEX = levelize_MEUR(CAPEX, plant['CO2'], capture_rate, discount_rate_ccs, lifetime_ccs)
         CAPEX_4OAK = levelized_CAPEX
         CAPEX_FOAK = FOAK_MULTIPLIER * CAPEX_4OAK
@@ -460,7 +461,7 @@ def combined_simulation(
                 )
                 mCO2_total = mCO2f_captured + mCO2bio_captured
                 
-                CAPEX, OPEX_fixed_val = approximate_CAPEX(mCO2_total, xCO2_stack, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
+                CAPEX, OPEX_fixed_val = approximate_CAPEX(mCO2_total, xCO2_stack, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=NETL)
                 levelized_CAPEX = levelize_MEUR(CAPEX, annual_CO2_stack, capture_rate, discount_rate_ccs, lifetime_ccs)
                 CAPEX_4OAK = levelized_CAPEX
                 CAPEX_FOAK = FOAK_MULTIPLIER * CAPEX_4OAK
@@ -491,7 +492,7 @@ def combined_simulation(
             )
             mCO2_total = mCO2f_captured + mCO2bio_captured
             
-            CAPEX, OPEX_fixed_val = approximate_CAPEX(mCO2_total, xCO2_stack, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
+            CAPEX, OPEX_fixed_val = approximate_CAPEX(mCO2_total, xCO2_stack, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=NETL)
             levelized_CAPEX = levelize_MEUR(CAPEX, annual_CO2_stack, capture_rate, discount_rate_ccs, lifetime_ccs)
             CAPEX_4OAK = levelized_CAPEX
             CAPEX_FOAK = FOAK_MULTIPLIER * CAPEX_4OAK
@@ -518,7 +519,7 @@ def combined_simulation(
             )
             mCO2_total = mCO2f_captured + mCO2bio_captured
             
-            CAPEX, OPEX_fixed_val = approximate_CAPEX(mCO2_total, xCO2_stack, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
+            CAPEX, OPEX_fixed_val = approximate_CAPEX(mCO2_total, xCO2_stack, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=NETL)
             levelized_CAPEX = levelize_MEUR(CAPEX, annual_CO2_stack, capture_rate, discount_rate_ccs, lifetime_ccs)
             CAPEX_4OAK = levelized_CAPEX
             CAPEX_FOAK = FOAK_MULTIPLIER * CAPEX_4OAK
@@ -545,7 +546,7 @@ def combined_simulation(
         mCO2 = plant['CO2'] / FLH_w2e
         xCO2_w2e = w2e_xCO2
         
-        CAPEX, OPEX_fixed_val = approximate_CAPEX(mCO2, xCO2_w2e, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
+        CAPEX, OPEX_fixed_val = approximate_CAPEX(mCO2, xCO2_w2e, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=NETL)
         levelized_CAPEX = levelize_MEUR(CAPEX, plant['CO2'], capture_rate, discount_rate_ccs, lifetime_ccs)
         CAPEX_4OAK = levelized_CAPEX
         CAPEX_FOAK = FOAK_MULTIPLIER * CAPEX_4OAK
@@ -578,7 +579,7 @@ def combined_simulation(
     
     xCO2_drax = drax_xCO2
     mCO2_drax = Drax_CO2 / FLH_drax
-    CAPEX_drax, OPEX_fixed_val = approximate_CAPEX(mCO2_drax, xCO2_drax, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=5.509)
+    CAPEX_drax, OPEX_fixed_val = approximate_CAPEX(mCO2_drax, xCO2_drax, fixed, CEPCI_2025, CEPCI_2023, capture_rate=0.90, NETL=NETL)
     levelized_CAPEX_drax = levelize_MEUR(CAPEX_drax, Drax_CO2, capture_rate, discount_rate_ccs, lifetime_ccs)
     CAPEX_4OAK_drax = levelized_CAPEX_drax
     CAPEX_FOAK_drax = FOAK_MULTIPLIER * CAPEX_4OAK_drax
@@ -831,19 +832,21 @@ def combined_simulation(
             else:
                 csu_diluted_cost = CTBO_cost_lev
             
-            csu_subtract = max(0, plant['EUR/tCO2'] - ets_price)
-            csu_subtract = csu_subtract + csu_diluted_cost
-            ctbo_diluted_cost = csu_diluted_cost * plant['ktCO2f_yr_baseline']
+            csu_subtract = max(0, plant['EUR/tCO2'] - ets_price)                # if invested, this diff must be covered by someting, i.e., CSU profits
+            csu_subtract = csu_subtract + csu_diluted_cost                      # also internalize fossil fuel costs
+            ctbo_diluted_cost = csu_diluted_cost * plant['ktCO2f_yr_baseline']  # internalized fuel costs
             
+            # NOTE: think about what PROFITS and COSTS we can actually include in NPV calculations... for example, ETS avoided? Draw MACC!
+            # Why are fossil plants profiting MORE when the ETS price is very high? => Internalized costs are low
             if plant['invested']:
                 investment_year = plant['year_invested']
                 CO2_captured_fossil = plant['ktCO2f_yr_captured']
                 CO2_captured_bio = plant['ktCO2bio_yr_captured']
                 csu_gross_profit = CSU_cost
-                csu_net_profit = csu_gross_profit - csu_subtract
+                csu_net_profit = csu_gross_profit - csu_subtract # [EUR/tCO2]
                 ctbo_fossil_profit = CSU_cost * CO2_captured_fossil
                 ctbo_gross_profit = CSU_cost * (CO2_captured_fossil + CO2_captured_bio)
-                ctbo_net_profit = csu_net_profit * (CO2_captured_fossil + CO2_captured_bio)
+                ctbo_net_profit = csu_net_profit * (CO2_captured_fossil + CO2_captured_bio) # [kEUR/yr] total profit 
             else:
                 investment_year = None
                 CO2_captured_fossil = 0
@@ -872,40 +875,54 @@ def combined_simulation(
                 'ctbo_gross_profit': ctbo_gross_profit,
                 'ctbo_net_profit': ctbo_net_profit
             })
-    
-    # ========================================================================
-    # RETURN RESULTS
-    # ========================================================================
-    
-    return {
-        'macc_4oak': macc_4oak,
-        'macc_foak': macc_foak,
-        'macc': macc,
-        'years': years,
-        'ctbo_fraction': ctbo_fraction,
-        'ets_prices': ets_prices,
-        'DACCS_costs': DACCS_costs,
-        'supplied_CO2_vec': supplied_CO2_vec,
-        'total_emissions_vec': total_emissions_vec,
-        'ctbo_mandate_vec': ctbo_mandate_vec,
-        'fCCS_capacity_vec': fCCS_capacity_vec,
-        'BECCS_capacity_vec': BECCS_capacity_vec,
-        'DACCS_capacity_vec': DACCS_capacity_vec,
-        'marginal_cost_vec': marginal_cost_vec,
-        'CSU_cost_vec': CSU_cost_vec,
-        'CTBO_cost_lev_vec': CTBO_cost_lev_vec,
-        'plant_results': plant_results,
-        'first_DACCS_year': first_DACCS_year,
-        'full_point_source_emissions': full_point_source_emissions,
-        'full_cement_emissions': full_cement_emissions,
-        'diffuse_baseline': diffuse_baseline,
-        'pounds_to_EUR': pounds_to_EUR,
-        'fuels': fuels,
-        'START_YEAR': START_YEAR,
-        'DISCOUNT_RATE': DISCOUNT_RATE,
-        'USE_INVESTMENT_YEAR_AS_BASE': USE_INVESTMENT_YEAR_AS_BASE
-    }
+    # Calculate NPV for each plant
+    plant_results = pd.DataFrame(plant_results)
+    plant_npv = []
+    for plant_name in plant_results['plant'].unique():
+        plant_data = plant_results[plant_results['plant'] == plant_name].copy()
+        investment_year = plant_data['investment_year'].max()
+        if pd.isna(investment_year):
+            continue
 
+        base_year = investment_year if USE_INVESTMENT_YEAR_AS_BASE else START_YEAR
+        plant_data['discount_factor'] = 1 / (1 + DISCOUNT_RATE) ** (plant_data['year'] - base_year)
+        npv_gross_profit = (plant_data['ctbo_gross_profit'] * plant_data['discount_factor']).sum()
+        npv_net_profit = (plant_data['ctbo_net_profit'] * plant_data['discount_factor']).sum()
+
+        plant_npv.append({
+            'plant': plant_name,
+            'npv_gross_profit': npv_gross_profit,
+            'npv_net_profit': npv_net_profit,
+            'investment_year': investment_year,
+        })
+
+    results = {}
+    results['macc_4oak'] = macc_4oak
+    results['macc_foak'] = macc_foak
+    results['macc'] = macc
+    results['years'] = years
+    results['ctbo_fraction'] = ctbo_fraction
+    results['ets_prices'] = ets_prices
+    results['DACCS_costs'] = DACCS_costs
+    results['supplied_CO2_vec'] = supplied_CO2_vec
+    results['total_emissions_vec'] = total_emissions_vec
+    results['ctbo_mandate_vec'] = ctbo_mandate_vec
+    results['fCCS_capacity_vec'] = fCCS_capacity_vec
+    results['BECCS_capacity_vec'] = BECCS_capacity_vec
+    results['DACCS_capacity_vec'] = DACCS_capacity_vec
+    results['marginal_cost_vec'] = marginal_cost_vec
+    results['CSU_cost_vec'] = CSU_cost_vec
+    results['CTBO_cost_lev_vec'] = CTBO_cost_lev_vec
+    results['plant_results'] = plant_results
+    results['first_DACCS_year'] = first_DACCS_year
+    results['pounds_to_EUR'] = pounds_to_EUR
+    results['fuels'] = fuels
+    results['START_YEAR'] = START_YEAR
+    results['DISCOUNT_RATE'] = DISCOUNT_RATE
+    results['USE_INVESTMENT_YEAR_AS_BASE'] = USE_INVESTMENT_YEAR_AS_BASE
+    results['plant_npv'] = plant_npv
+    
+    return results
 
 # ============================================================================
 # MAIN EXECUTION
@@ -923,7 +940,7 @@ if __name__ == "__main__":
     # Run simulation with default parameters (or override as needed)
     results = combined_simulation(
         data,
-        HALF=True,
+        HALF=False,
         USE_FOAK=False,
         ETS_SCENARIO="Low",
         DACCS_EXPENSIVE=True,
@@ -955,6 +972,7 @@ if __name__ == "__main__":
     START_YEAR = results['START_YEAR']
     DISCOUNT_RATE = results['DISCOUNT_RATE']
     USE_INVESTMENT_YEAR_AS_BASE = results['USE_INVESTMENT_YEAR_AS_BASE']
+    plant_npv = results['plant_npv']
     
     # ============================================================================
     # RESULTS
@@ -981,7 +999,7 @@ if __name__ == "__main__":
         print(f"\nDACCS first needed in: {first_DACCS_year:.0f}")
     else:
         print(f"\nDACCS was never needed (all capacity met by point sources)")
-    
+
     # Consumer fuel price impacts
     carbon_price = np.array(CTBO_cost_lev_vec) / pounds_to_EUR
     emission_factor_diesel = fuels['diesel']['emission_factor']
@@ -1003,40 +1021,6 @@ if __name__ == "__main__":
     print(f"  Diesel:  +{diesel_increase_abs[idx_2050]:.2f} pence/litre (+{diesel_increase_pct[idx_2050]:.1f}%)")
     print(f"  Petrol:  +{petrol_increase_abs[idx_2050]:.2f} pence/litre (+{petrol_increase_pct[idx_2050]:.1f}%)")
     print(f"  Gas:     +{gas_increase_abs[idx_2050]:.2f} pence/thrm (+{gas_increase_pct[idx_2050]:.1f}%)")
-    
-    # Plant-level analysis
-    plant_df = pd.DataFrame(plant_results)
-    print(f"\nPlant-level data collected: {len(plant_df)} plant-year observations")
-    
-    plant_npv_df = pd.DataFrame()
-    if len(plant_df) > 0:
-        print(f"  Years covered: {plant_df['year'].min():.0f} - {plant_df['year'].max():.0f}")
-        print(f"  Number of plants: {plant_df['plant'].nunique()}")
-        
-        # Calculate NPV for each plant
-        plant_npv = []
-        for plant_name in plant_df['plant'].unique():
-            plant_data = plant_df[plant_df['plant'] == plant_name].copy()
-            investment_year = plant_data['investment_year'].max()
-            
-            if pd.isna(investment_year):
-                continue
-            
-            base_year = investment_year if USE_INVESTMENT_YEAR_AS_BASE else START_YEAR
-            plant_data['discount_factor'] = 1 / (1 + DISCOUNT_RATE) ** (plant_data['year'] - base_year)
-            
-            npv_gross_profit = (plant_data['ctbo_gross_profit'] * plant_data['discount_factor']).sum()
-            npv_net_profit = (plant_data['ctbo_net_profit'] * plant_data['discount_factor']).sum()
-            
-            plant_npv.append({
-                'plant': plant_name,
-                'investment_year': investment_year,
-                'NPV_gross_profit': npv_gross_profit,
-                'NPV_net_profit': npv_net_profit
-            })
-        
-        plant_npv_df = pd.DataFrame(plant_npv)
-        print(f"  Plants that invested: {len(plant_npv_df)} out of {plant_df['plant'].nunique()}")
     
     # ============================================================================
     # PLOTS
@@ -1159,6 +1143,37 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.savefig('4_price_increases.png', dpi=300)
     print("  Saved: 4_price_increases.png")
+
+    # Plot 5: Plant-level NPV
+    plant_npv_df = pd.DataFrame(plant_npv) # Omit Drax-BECCS for clarity
+    plant_npv_df = plant_npv_df[plant_npv_df['plant'] != 'Drax-BECCS']
+    print("\n" + "="*80)
+    print(f"Plant-level NPV: {len(plant_npv_df)} plants")
+    plt.figure(figsize=(14, 6))
+    x = range(len(plant_npv_df))
+    # plt.bar(x, plant_npv_df['npv_gross_profit']/1000, label='Gross Profit', color='red', alpha=0.5)
+    plt.bar(x, plant_npv_df['npv_net_profit']/1000, label='Net Profit', color='green', alpha=0.5)
+    plt.xlabel('Plant', fontsize=13)
+    plt.ylabel('NPV (kEUR)', fontsize=13)
+    plt.title('Plant-level NPV', fontsize=14)
+    plt.legend(fontsize=11)
+    plt.xticks(x, plant_npv_df['plant'], rotation=90, fontsize=7)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+    # Plot 6: Plant-level NPV vs investment year
+    plt.figure(figsize=(10, 6))
+    colors = ['green' if p.endswith('W2E') or p.endswith('BECCS') else 'gray' for p in plant_npv_df['plant']]
+    plt.scatter(plant_npv_df['investment_year'], plant_npv_df['npv_net_profit']/1000, c=colors, alpha=0.5)
+    plt.scatter([], [], color='green', alpha=0.5, label='W2E / BECCS')
+    plt.scatter([], [], color='gray', alpha=0.5, label='Other (fossil)')
+    plt.xlabel('Investment Year', fontsize=13)
+    plt.ylabel('NPV (kEUR)', fontsize=13)
+    plt.title('Plant-level NPV vs Investment Year', fontsize=14)
+    plt.legend(fontsize=11)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig('6_npv_vs_investment_year.png', dpi=300)
     
     print("\n" + "="*80)
     print("ANALYSIS COMPLETE")
