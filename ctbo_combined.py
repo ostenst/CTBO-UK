@@ -838,6 +838,8 @@ def combined_simulation(
             
             # NOTE: think about what PROFITS and COSTS we can actually include in NPV calculations... for example, ETS avoided? Draw MACC!
             # Why are fossil plants profiting MORE when the ETS price is very high? => Internalized costs are low
+            # I think the NPV calculations refer to only CSUs: the profits of selling CSUs (above the ETS price... so the NPV of "engaging with the CTBO-CSU program") and the costs of internalizing CSUs...
+            # We could make an alternative NPV calculation including CCS costs and ETS profits - however, it does not match the investment logic of MACCcost<ETSprice
             if plant['invested']:
                 investment_year = plant['year_invested']
                 CO2_captured_fossil = plant['ktCO2f_yr_captured']
