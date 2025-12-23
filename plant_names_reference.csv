@@ -1,0 +1,133 @@
+plant_index,plant_name
+0,Runcorn-W2E
+1,Riverside-W2E
+2,Tees Valley-W2E
+3,Ferrybridge FM1-W2E
+4,Ferrybridge FM2-W2E
+5,Rookery South C-W2E
+6,Kemsley-W2E
+7,Edmonton-W2E
+8,Allington-W2E
+9,Wilton 11-W2E
+10,Lakeside-W2E
+11,Trident Park-W2E
+12,Severnside-W2E
+13,SELCHP-W2E
+14,Avonmouth-W2E
+15,Tyseley-W2E
+16,Dunbar-W2E
+17,Ardley-W2E
+18,Four Ashes-W2E
+19,Beddington Lane-W2E
+20,Newhurst-W2E
+21,Great Blakenham-W2E
+22,Coventry-W2E
+23,Greatmoor-W2E
+24,Allerton Park-W2E
+25,Devonport-W2E
+26,Cornwall-W2E
+27,Sheffield-W2E
+28,Newhaven-W2E
+29,Hartlebury-W2E
+30,Marchwood-W2E
+31,Parc Adfer-W2E
+32,Portsmouth-W2E
+33,Javelin Park-W2E
+34,Baldovie-W2E
+35,Eastcroft-W2E
+36,Hanford-W2E
+37,Leeds-W2E
+38,North Hykeham-W2E
+39,Millerhill-W2E
+40,Glasgow ACT-W2E
+41,Kirklees-W2E
+42,Belfast ACT-W2E
+43,Chineham-W2E
+44,NESS-W2E
+45,Wolverhampton-W2E
+46,Baddesley-W2E
+47,Battlefield-W2E
+48,Peterborough-W2E
+49,Hooton Park ACT-W2E
+50,Bolton-W2E
+51,Milton Keynes ACT-W2E
+52,Dudley-W2E
+53,Exeter-W2E
+54,Levenseat ACT-W2E
+55,NewLincs-W2E
+56,Eco Park ACT-W2E
+57,Energy Works ACT-W2E
+58,Scunthorpe Power Station-chp
+59,Scunthorpe Blast Furnaces-stove
+60,Hope Cement Works-cement
+61,New Rugby-cement
+62,Grangemouth Power Station-CCGT
+63,Ketton-cement
+64,Fawley Refinery-crackers
+65,Tunstead Cement-cement
+66,Cauldon Cement-cement
+67,Ribblesdale-cement
+68,Fawley Refinery-smr
+69,Pembroke Refinery-crackers
+70,Padeswood-cement
+71,Scunthorpe Sinter-sinter
+72,Dunbar Works-cement
+73,South Killingholme-crackers
+74,Stanlow Refinery-crackers
+75,Pembroke Refinery-smr
+76,Fawley Refinery-distillation
+77,South Killingholme-smr
+78,Fawley Refinery-power
+79,Stanlow Refinery-smr
+80,Pembroke Refinery-distillation
+81,Fawley Refinery-remaining
+82,Pembroke Refinery-power
+83,South Killingholme-distillation
+84,Stanlow Refinery-distillation
+85,Pembroke Refinery-remaining
+86,Grangemouth Refinery-crackers
+87,South Killingholme-power
+88,Stanlow Refinery-power
+89,Lindsey Oil Refinery-crackers
+90,South Killingholme-remaining
+91,Stanlow Refinery-remaining
+92,Pembroke Power Station-CCGT
+93,Grangemouth Refinery-smr
+94,Grangemouth Refinery-power
+95,Grangemouth Refinery-distillation
+96,Lindsey Oil Refinery-smr
+97,Lindsey Oil Refinery-power
+98,Lindsey Oil Refinery-distillation
+99,Grangemouth Refinery-remaining
+100,Lindsey Oil Refinery-remaining
+101,Marchwood  Power  Station-CCGT
+102,Enfield Power Station-CCGT
+103,Staythorpe Power Station-CCGT
+104,Carrington CCGT-CCGT
+105,Didcot B-CCGT
+106,Saltend-CCGT
+107,Immingham-CCGT
+108,Coolkeeragh-CCGT
+109,West Burton B CCGT Power Station-CCGT
+110,Ballylumford-CCGT
+111,Keadby-CCGT
+112,Kilroot-CCGT
+113,Kings Lynn Power Station-CCGT
+114,Spalding-CCGT
+115,Shoreham Power Station-CCGT
+116,Seabank-CCGT
+117,Great Yarmouth Power Station-CCGT
+118,Drax-BECCS
+119,Little Barford-CCGT
+120,Langage Energy Centre-CCGT
+121,Damhead Creek Power Station-CCGT
+122,Cottam Development Centre-CCGT
+123,Peterhead Power Station-CCGT
+124,Grain CCGT-CCGT
+125,South Humber-CCGT
+126,Isle of Wight-W2E
+127,Connahs Quay Power Station-CCGT
+128,Medway-CCGT
+129,Rye House-CCGT
+130,Coryton-CCGT
+131,Rocksavage-CCGT

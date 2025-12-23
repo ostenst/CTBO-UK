@@ -18,49 +18,59 @@ from pyproj import Transformer
 # HELPER FUNCTIONS
 # ============================================================================
 
-def match_transportation(emitter_plant, transport_costs_df, discount_rate=0.035, lifetime=30, debug=False):
-    """Find the nearest CCS site to an emitter plant and calculate total cost per tonne CO2."""
-    if debug:
-        print(f"Finding nearest CCS site for: {emitter_plant.get('Site', 'Unknown')}")
-    
-    distances = []
-    for idx, row in transport_costs_df.iterrows():
-        if pd.notna(row['Easting']) and pd.notna(row['Northing']):
-            dist = calculate_distance(emitter_plant['Easting'], emitter_plant['Northing'],
-                                      row['Easting'], row['Northing'])
-            distances.append({
-                'Site ID': row['Site ID'],
-                'Site': row['Site'],
-                'Easting': row['Easting'],
-                'Northing': row['Northing'],
-                'Distance': dist
-            })
-    
-    distances_df = pd.DataFrame(distances)
-    closest_distance_idx = distances_df['Distance'].idxmin()
-    closest_site_id = distances_df.loc[closest_distance_idx, 'Site ID']
-    closest_site_original = transport_costs_df[transport_costs_df['Site ID'] == closest_site_id].iloc[0]
-    
-    mass_CO2 = closest_site_original['Total Tonnes of CO2 stored (MtCO2) 2070']
-    onshore_mode = closest_site_original['CO2 Pipeline/Trucking?']
-    
-    onshore_opex = float(closest_site_original['CO2 onshore transport opex (£m/y)']) / mass_CO2
-    
-    if onshore_mode == "Pipeline":
-        pipeline_capex = float(closest_site_original['CO2 onshore pipeline capex (£m)'])
-        annuity_factor = (discount_rate * (1 + discount_rate) ** lifetime) / ((1 + discount_rate) ** lifetime - 1)
-        onshore_pipeline = pipeline_capex * annuity_factor / mass_CO2
-        onshore_opex += onshore_pipeline
-    
-    injection_opex = float(closest_site_original['CO2 T&S cost from defined point (£/t)'])
-    total_cost = onshore_opex + injection_opex
-    
+def match_transportation_fast(emitter_plant, transport_costs_df=None, discount_rate=0.035, lifetime=30, debug=False):
+    """Fast placeholder: assigns fixed transport cost of 50 to every plant."""
     return {
-        'site_id': closest_site_id,
-        'site_name': closest_site_original['Site'],
-        'distance_m': distances_df.loc[closest_distance_idx, 'Distance'],
-        'total_cost_per_t': round(total_cost, 1)
+        'site_id': 'PLACEHOLDER',
+        'site_name': 'PLACEHOLDER',
+        'distance_m': 50000,  # 50 km placeholder
+        'total_cost_per_t': 20.0
     }
+
+
+# def match_transportation(emitter_plant, transport_costs_df, discount_rate=0.035, lifetime=30, debug=False):
+#     """Find the nearest CCS site to an emitter plant and calculate total cost per tonne CO2."""
+#     if debug:
+#         print(f"Finding nearest CCS site for: {emitter_plant.get('Site', 'Unknown')}")
+#     
+#     distances = []
+#     for idx, row in transport_costs_df.iterrows():
+#         if pd.notna(row['Easting']) and pd.notna(row['Northing']):
+#             dist = calculate_distance(emitter_plant['Easting'], emitter_plant['Northing'],
+#                                       row['Easting'], row['Northing'])
+#             distances.append({
+#                 'Site ID': row['Site ID'],
+#                 'Site': row['Site'],
+#                 'Easting': row['Easting'],
+#                 'Northing': row['Northing'],
+#                 'Distance': dist
+#             })
+#     
+#     distances_df = pd.DataFrame(distances)
+#     closest_distance_idx = distances_df['Distance'].idxmin()
+#     closest_site_id = distances_df.loc[closest_distance_idx, 'Site ID']
+#     closest_site_original = transport_costs_df[transport_costs_df['Site ID'] == closest_site_id].iloc[0]
+#     
+#     mass_CO2 = closest_site_original['Total Tonnes of CO2 stored (MtCO2) 2070']
+#     onshore_mode = closest_site_original['CO2 Pipeline/Trucking?']
+#     
+#     onshore_opex = float(closest_site_original['CO2 onshore transport opex (£m/y)']) / mass_CO2
+#     
+#     if onshore_mode == "Pipeline":
+#         pipeline_capex = float(closest_site_original['CO2 onshore pipeline capex (£m)'])
+#         annuity_factor = (discount_rate * (1 + discount_rate) ** lifetime) / ((1 + discount_rate) ** lifetime - 1)
+#         onshore_pipeline = pipeline_capex * annuity_factor / mass_CO2
+#         onshore_opex += onshore_pipeline
+#     
+#     injection_opex = float(closest_site_original['CO2 T&S cost from defined point (£/t)'])
+#     total_cost = onshore_opex + injection_opex
+#     
+#     return {
+#         'site_id': closest_site_id,
+#         'site_name': closest_site_original['Site'],
+#         'distance_m': distances_df.loc[closest_distance_idx, 'Distance'],
+#         'total_cost_per_t': round(total_cost, 1)
+#     }
 
 
 def calculate_distance(easting1, northing1, easting2, northing2, debug=False):
@@ -217,7 +227,7 @@ def load_data(debug=False):
 # COMBINED SIMULATION
 # ============================================================================
 
-def simulate(
+def simulate_ctbo(
     data,
     # --- MACC Configuration ---
     HALF=False,                     # [-] bool: use every 2nd plant from top-60 emitters
@@ -304,7 +314,7 @@ def simulate(
             'gas': {'emission_factor': 0.2039 * 29.3, 'price': 6.3*29.3} # kgCO2/thrm (1 thrm = 29.3 kWh), p/therm
         }
     if ets_linear_end is None:
-        ets_linear_end = {"Low": 85, "Medium": 125, "High": 155} # {"Low": 85, "Medium": 125, "High": 155} CCC 7thCB uses 409 GBP by 2050
+        ets_linear_end = {"Low": 150, "Medium": 250, "High": 350} # {"Low": 85, "Medium": 125, "High": 155} CCC 7thCB uses 409 GBP by 2050
     if refinery_stacks is None:
         # {stack_name: [fraction_of_total_CO2, xCO2_concentration]}
         refinery_stacks = {
@@ -371,7 +381,7 @@ def simulate(
     
     # Calculate transport costs for largest plants
     for idx, plant in largest_plants.iterrows():
-        result = match_transportation(plant, transport_costs, discount_rate=0.035, lifetime=30)
+        result = match_transportation_fast(plant, transport_costs, discount_rate=0.035, lifetime=30)
         largest_plants.loc[idx, 'transport_cost'] = result['total_cost_per_t'] * pounds_to_EUR * CEPCI_2025/CEPCI_2023
         largest_plants.loc[idx, 'distance_km'] = result['distance_m'] / 1000
     
@@ -386,7 +396,7 @@ def simulate(
         w2e_plants.loc[idx, 'Easting'] = easting
         w2e_plants.loc[idx, 'Northing'] = northing
         plant_with_coords = w2e_plants.loc[idx]
-        result = match_transportation(plant_with_coords, transport_costs, discount_rate=0.035, lifetime=30)
+        result = match_transportation_fast(plant_with_coords, transport_costs, discount_rate=0.035, lifetime=30)
         w2e_plants.loc[idx, 'transport_cost'] = result['total_cost_per_t'] * pounds_to_EUR * CEPCI_2025/CEPCI_2023
         w2e_plants.loc[idx, 'distance_km'] = result['distance_m'] / 1000
     
@@ -594,7 +604,7 @@ def simulate(
     drax_coordinates = drax_config['coordinates']
     drax_easting, drax_northing = latlon_to_easting_northing(drax_coordinates[0], drax_coordinates[1])
     drax_plant = pd.Series({'Easting': drax_easting, 'Northing': drax_northing, 'Name': 'Drax'})
-    result_drax = match_transportation(drax_plant, transport_costs, discount_rate=0.035, lifetime=30)
+    result_drax = match_transportation_fast(drax_plant, transport_costs, discount_rate=0.035, lifetime=30)
     transport_cost_drax = result_drax['total_cost_per_t'] * pounds_to_EUR * CEPCI_2025/CEPCI_2023
     drax_distance = result_drax['distance_m'] / 1000
     
@@ -879,12 +889,21 @@ def simulate(
                 'ctbo_gross_profit': ctbo_gross_profit,
                 'ctbo_net_profit': ctbo_net_profit
             })
-    # Calculate NPV for each plant
+    # Calculate NPV for each plant (fixed-order arrays based on MACC)
     plant_results = pd.DataFrame(plant_results)
-    plant_npv = []
-    for plant_name in plant_results['plant'].unique():
+    all_plants = macc['site-stack'].tolist()  # Fixed order from MACC
+    n_plants = len(all_plants)
+    
+    # Initialize arrays with NaN (for plants that didn't invest)
+    plant_npv_net = np.full(n_plants, np.nan)
+    plant_npv_gross = np.full(n_plants, np.nan)
+    plant_investment_year = np.full(n_plants, np.nan)
+    
+    plant_npv = []  # Keep dict version for backwards compatibility
+    for i, plant_name in enumerate(all_plants):
         plant_data = plant_results[plant_results['plant'] == plant_name].copy()
         investment_year = plant_data['investment_year'].max()
+        
         if pd.isna(investment_year):
             continue
 
@@ -893,6 +912,12 @@ def simulate(
         npv_gross_profit = (plant_data['ctbo_gross_profit'] * plant_data['discount_factor']).sum()
         npv_net_profit = (plant_data['ctbo_net_profit'] * plant_data['discount_factor']).sum()
 
+        # Store in fixed-order arrays
+        plant_npv_net[i] = npv_net_profit
+        plant_npv_gross[i] = npv_gross_profit
+        plant_investment_year[i] = investment_year
+        
+        # Keep dict version
         plant_npv.append({
             'plant': plant_name,
             'npv_gross_profit': npv_gross_profit,
@@ -929,6 +954,11 @@ def simulate(
     results['first_DACCS_year'] = first_DACCS_year
     results['fuels'] = fuels
     results['plant_npv'] = plant_npv
+    # Plant NPV arrays (fixed order matching plant_names)
+    results['plant_names'] = all_plants                      # List of plant names (for reference)
+    results['plant_npv_net'] = plant_npv_net                 # [kEUR] NPV net profit per plant
+    results['plant_npv_gross'] = plant_npv_gross             # [kEUR] NPV gross profit per plant
+    results['plant_investment_year'] = plant_investment_year # [year] Investment year per plant
     # Fuel price impacts
     results['diesel_increase_abs'] = diesel_increase_abs  # [pence/L] time series
     results['petrol_increase_abs'] = petrol_increase_abs  # [pence/L] time series
@@ -959,7 +989,7 @@ if __name__ == "__main__":
     data = load_data(debug=True)
     
     # Run simulation with default parameters (or override as needed)
-    results = simulate(data)
+    results = simulate_ctbo(data)
     
     # Extract results
     macc_4oak = results['macc_4oak']
