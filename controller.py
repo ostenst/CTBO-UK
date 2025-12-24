@@ -42,6 +42,8 @@ if __name__ == "__main__":
         RealParameter("pcompr", 0.30, 0.45),                # [MJ/kgCO2] Compression power
         RealParameter("fixed", 0.03, 0.05),                 # [-] Fixed OPEX fraction
         RealParameter("emission_factor_bio", 0.28, 0.38),   # [tCO2/MWhfuel] Biomass emission factor
+        RealParameter("qsteam", 0.10, 0.30),                # [-] Fraction of reboiler heat from steam
+        RealParameter("qelc", 0.30, 0.40),                  # [-] Fraction of reboiler heat from electricity
         # Sector-specific uncertainties
         RealParameter("cement_xCO2", 0.18, 0.22),           # [-] CO2 concentration in cement flue gas
         RealParameter("w2e_xCO2", 0.09, 0.13),              # [-] CO2 concentration in W2E flue gas
@@ -57,6 +59,7 @@ if __name__ == "__main__":
     model.levers = [
         RealParameter("DIFFUSE_END_FRACTION", 0.10, 0.40),  # [-] Diffuse emissions target
         CategoricalParameter("ETS_SCENARIO", ["Low", "Medium", "High"]),
+        CategoricalParameter("USE_FOAK", [True, False]),
     ]
 
     # Outcomes: metrics we want to track
@@ -82,8 +85,8 @@ if __name__ == "__main__":
         Constant("CTBO_ENABLED", True),
 
         Constant("CTBO_growth_factor", 0.4),
-        Constant("HALF", False),
-        Constant("USE_FOAK", False),
+        Constant("HALF", False), # NOTE, must be a constant otherwise EMA fails to save outcomes
+        # Constant("USE_FOAK", False),
 
         Constant("VERBOSE", False),
         Constant("debug", False),
@@ -100,14 +103,11 @@ if __name__ == "__main__":
         Constant("sek_to_eur", 0.091),
         Constant("pounds_to_EUR", 1.15),
         Constant("evaporation_enthalpy", 2257),
-        Constant("qsteam", 0.15),
-        Constant("qelc", 0.30),
-        Constant("qchp", 0.55),
         Constant("elc_eff", 0.33),
     ]
 
-    n_scenarios = 30
-    n_policies = 10
+    n_scenarios = 20
+    n_policies = 20
 
     results = perform_experiments(
         model, 

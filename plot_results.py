@@ -242,6 +242,95 @@ def plot_npv_vs_investment_year(combined_df, array_outcomes, scenario_col="ETS_S
     plt.tight_layout()
 
 
+def plot_positive_npv_fraction_boxplot(combined_df, array_outcomes, plant_names=None,
+                                        plant_filter=None, ETS_filter=None, debug=False):
+    """
+    Plot boxplot of fraction of positive NPV vs investment year (all data combined).
+    
+    Parameters:
+        plant_filter: None (all plants), "biogenic" (W2E/BECCS only), or "fossil" (exclude W2E/BECCS)
+    """
+    if debug:
+        print(f"Plotting positive NPV fraction boxplot (filter={plant_filter})")
+    
+    plant_npv_net = array_outcomes.get("plant_npv_net")
+    plant_inv_year = array_outcomes.get("plant_investment_year")
+    
+    if plant_npv_net is None or plant_inv_year is None:
+        print("Warning: Missing plant NPV or investment year data")
+        return
+    
+    # Create ETS mask based on filter
+    if ETS_filter is not None:
+        ets_mask = combined_df["ETS_SCENARIO"] == ETS_filter
+        plant_npv_net = plant_npv_net[ets_mask.values]
+        plant_inv_year = plant_inv_year[ets_mask.values]
+    
+    # Create plant mask based on filter
+    n_plants = plant_npv_net.shape[1]
+    if plant_filter is not None and plant_names is not None:
+        plant_mask = np.zeros(n_plants, dtype=bool)
+        for i, name in enumerate(plant_names):
+            is_biogenic = name.endswith("W2E") or name.endswith("BECCS")
+            if plant_filter == "biogenic":
+                plant_mask[i] = is_biogenic
+            elif plant_filter == "fossil":
+                plant_mask[i] = not is_biogenic
+        # Apply mask to data
+        plant_npv_net = plant_npv_net[:, plant_mask]
+        plant_inv_year = plant_inv_year[:, plant_mask]
+    
+    n_exp = plant_npv_net.shape[0]
+    
+    # Get all unique years across all experiments
+    all_years = plant_inv_year[~np.isnan(plant_inv_year)].astype(int)
+    unique_years = np.sort(np.unique(all_years))
+    
+    # For each experiment, calculate fraction positive per year
+    data_for_boxplot = {yr: [] for yr in unique_years}
+    
+    for exp_idx in range(n_exp):
+        exp_npv = plant_npv_net[exp_idx]
+        exp_year = plant_inv_year[exp_idx]
+        
+        for yr in unique_years:
+            yr_mask = exp_year == yr
+            if yr_mask.sum() > 0:
+                yr_npv = exp_npv[yr_mask]
+                valid = ~np.isnan(yr_npv)
+                if valid.sum() > 0:
+                    frac_positive = (yr_npv[valid] > 0).sum() / valid.sum()
+                    data_for_boxplot[yr].append(frac_positive)
+    
+    # Prepare data for boxplot
+    boxplot_data = [data_for_boxplot[yr] for yr in unique_years]
+    
+    plt.figure(figsize=(12, 6))
+    bp = plt.boxplot(boxplot_data, positions=unique_years, widths=0.6, patch_artist=True)
+    
+    # Style the boxplot with different colors based on filter
+    colors = {"biogenic": "#27ae60", "fossil": "#7f8c8d", None: "#3498db"}
+    box_color = colors.get(plant_filter, "#3498db")
+    for box in bp['boxes']:
+        box.set(facecolor=box_color, alpha=0.7)
+    for median in bp['medians']:
+        median.set(color='#e74c3c', linewidth=2)
+    
+    # Title based on filter
+    filter_labels = {"biogenic": " (W2E/BECCS only)", "fossil": " (Fossil only)", None: ""}
+    title_suffix = filter_labels.get(plant_filter, "")
+    if ETS_filter is not None:
+        title_suffix += f" [ETS: {ETS_filter}]"
+    
+    plt.xlabel('Investment Year', fontsize=13)
+    plt.ylabel('Fraction with Positive NPV', fontsize=13)
+    plt.title(f'Distribution of Positive NPV Fraction by Investment Year{title_suffix}', fontsize=14)
+    plt.axhline(y=0.5, color='black', linestyle='--', linewidth=0.5, alpha=0.5)
+    plt.ylim(0, 1.05)
+    plt.grid(True, alpha=0.3, axis='y')
+    plt.tight_layout()
+
+
 def plot_positive_npv_fraction(combined_df, array_outcomes, scenario_col="ETS_SCENARIO",
                                 debug=False):
     """Plot fraction of positive NPV vs investment year by ETS scenario."""
@@ -355,8 +444,8 @@ if __name__ == "__main__":
             title="Levelized CTBO Cost Over Time by ETS Scenario"
         )
     
-    # Plot 4: CCS capacity stack
-    plot_capacity_stack(combined_df, array_outcomes)
+    # # Plot 4: CCS capacity stack
+    # plot_capacity_stack(combined_df, array_outcomes)
     
     # Plot 5: Plant-level NPV
     if plant_names:
@@ -365,8 +454,17 @@ if __name__ == "__main__":
     # Plot 6: NPV vs Investment Year
     plot_npv_vs_investment_year(combined_df, array_outcomes)
     
-    # Plot 7: Fraction of positive NPV vs Investment Year
+    # Plot 7: Fraction of positive NPV vs Investment Year (by ETS scenario)
     plot_positive_npv_fraction(combined_df, array_outcomes)
+    
+    # Plot 8: Fraction of positive NPV vs Investment Year (boxplot, all data)
+    plot_positive_npv_fraction_boxplot(combined_df, array_outcomes, plant_names, plant_filter=None, ETS_filter=None)
+    
+    # Plot 9: Fraction of positive NPV - biogenic plants only (W2E/BECCS)
+    plot_positive_npv_fraction_boxplot(combined_df, array_outcomes, plant_names, plant_filter="biogenic", ETS_filter=None)
+    
+    # Plot 10: Fraction of positive NPV - fossil plants only
+    plot_positive_npv_fraction_boxplot(combined_df, array_outcomes, plant_names, plant_filter="fossil", ETS_filter=None)
     
     plt.show()
 

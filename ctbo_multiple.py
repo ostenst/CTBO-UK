@@ -252,7 +252,6 @@ def simulate_ctbo(
     drax_config=None,               # dict: {CO2 [tCO2/yr], Pinstalled [MW], eta_P [%], coordinates (lat, lon)}
     qsteam=0.15,                    # [-] Fraction of reboiler heat from steam (0-1)
     qelc=0.30,                      # [-] Fraction of reboiler heat from electricity (0-1)
-    qchp=0.55,                      # [-] Fraction of reboiler heat from biomass CHP (0-1)
     elc_eff=0.33,                   # [-] Efficiency of electric reboiler (0-1)
     evaporation_enthalpy=2257,      # [MJ/tsteam] Enthalpy of vaporization
     emission_factor_bio=0.3318,     # [tCO2/MWhfuel] Biomass emission factor
@@ -297,7 +296,6 @@ def simulate_ctbo(
     Returns:
         Dictionary containing all simulation results
     """
-    
     # Set default dicts if not provided
     if power_ccgt is None:
         power_ccgt = {'xCO2': 0.05, 'eta_P': 0.49, 'emission_factor': 0.204, 'gas_eff': 0.35, 'steam_eff': 0.51}
@@ -310,11 +308,11 @@ def simulate_ctbo(
     if fuels is None:
         fuels = {
             'diesel': {'emission_factor': 2.628, 'price': 143.97}, # https://commonslibrary.parliament.uk/research-briefings/cbp-9714/
-            'petrol': {'emission_factor': 2.339, 'price': 135.07}, # kgCO2/litre, p/litre
-            'gas': {'emission_factor': 0.2039 * 29.3, 'price': 6.3*29.3} # kgCO2/thrm (1 thrm = 29.3 kWh), p/therm
+            'petrol': {'emission_factor': 2.339, 'price': 135.07}, # kgCO2/litre, p/litre, average bill is 11.200 kWh natural gas per year, link below:
+            'gas': {'emission_factor': 0.2039 * 29.3, 'price': 6.3*29.3} # kgCO2/thrm (1 thrm = 29.3 kWh), this seems good ExcelTable: https://www.gov.uk/government/statistical-data-sets/annual-domestic-energy-price-statistics
         }
     if ets_linear_end is None:
-        ets_linear_end = {"Low": 150, "Medium": 250, "High": 350} # {"Low": 85, "Medium": 125, "High": 155} CCC 7thCB uses 409 GBP by 2050
+        ets_linear_end = {"Low": 200, "Medium": 300, "High": 400} # [GBP] {"Low": 85, "Medium": 125, "High": 155} CCC 7thCB uses 409 GBP by 2050
     if refinery_stacks is None:
         # {stack_name: [fraction_of_total_CO2, xCO2_concentration]}
         refinery_stacks = {
@@ -451,6 +449,7 @@ def simulate_ctbo(
         ))
     
     # --- INDUSTRY SECTOR ---
+    qchp = 1 - qsteam - qelc # [-] Fraction of reboiler heat from biomass CHP (0-1)
     refineries = largest_plants[largest_plants['Sector'] == 'Processing & distribution of petroleum products'].copy()
     scunthorpe_stacks = largest_plants[largest_plants['Site'].str.startswith('Scunthorpe', na=False)].copy()
     cement_plants = largest_plants[largest_plants['Sector'] == 'Cement'].copy()
