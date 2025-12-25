@@ -1123,16 +1123,16 @@ if __name__ == "__main__":
     plt.figure(figsize=(10, 6))
     plt.stackplot(years, DACCS_capacity_vec, BECCS_capacity_vec, fCCS_capacity_vec,
                   labels=['DACCS', 'BECCS', 'Fossil CCS'],
-                  colors=[magma(0.30), magma(0.60), 'gray'],
+                  colors=[magma(0.80), magma(0.60), 'gray'],
                   alpha=0.85)
     plt.plot(years, supplied_CO2_vec, label='Supplied CO2 (O&G, coal, lime)', linewidth=2, color='black')
-    plt.plot(years, total_emissions_vec, label='Gross Emitted CO2', linewidth=2, color=magma(0.50))
+    plt.plot(years, total_emissions_vec, label='Gross Emitted CO2', linewidth=2, color=magma(0.40))
     plt.plot(years, ctbo_mandate_vec, label='CTBO Mandate', linewidth=2, color='black', linestyle='--')
     
     if first_DACCS_year is not None:
         daccs_idx = np.where(years == first_DACCS_year)[0][0]
-        plt.plot(first_DACCS_year, DACCS_capacity_vec[daccs_idx], 'o', markersize=6, color=magma(0.30))
-        plt.plot([], [], 'o', markersize=6, color=magma(0.30), label='Year when DACCS is marginal')
+        plt.plot(first_DACCS_year, DACCS_capacity_vec[daccs_idx], 'o', markersize=6, color=magma(0.80))
+        plt.plot([], [], 'o', markersize=6, color=magma(0.80), label='Year when DACCS is marginal')
     
     plt.xlabel('Year', fontsize=13)
     plt.ylabel('ktCO2/yr', fontsize=13)

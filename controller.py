@@ -1,4 +1,5 @@
 import numpy as np
+from numpy._core.numeric import False_
 import pandas as pd
 from ctbo_multiple import simulate_ctbo, load_data
 from ema_workbench import (
@@ -70,9 +71,9 @@ if __name__ == "__main__":
         ScalarOutcome("gas_increase_abs_2040", ScalarOutcome.MINIMIZE),
         ScalarOutcome("gas_increase_abs_2050", ScalarOutcome.MINIMIZE),
         ArrayOutcome("gas_increase_pct"),
-        ArrayOutcome("fCCS_capacity_vec"),
-        ArrayOutcome("BECCS_capacity_vec"),
-        ArrayOutcome("DACCS_capacity_vec"),
+        ArrayOutcome("supplied_CO2_vec"),
+        ArrayOutcome("total_emissions_vec"),
+        ArrayOutcome("ctbo_mandate_vec"),
         ArrayOutcome("CTBO_cost_lev_vec"),
         # Plant-level NPV outcomes (fixed order, NaN for non-invested plants)
         ArrayOutcome("plant_npv_net"),          # [kEUR] Net NPV per plant
@@ -85,7 +86,7 @@ if __name__ == "__main__":
         Constant("data", data),
         Constant("CTBO_ENABLED", True),
         Constant("CTBO_growth_factor", 0.4),
-        Constant("HALF", True), # NOTE, must be a constant otherwise EMA fails to save outcomes
+        Constant("HALF", False), # NOTE, must be a constant otherwise EMA fails to save outcomes
         Constant("USE_FOAK", False),
 
         Constant("VERBOSE", False),
@@ -105,8 +106,8 @@ if __name__ == "__main__":
         Constant("elc_eff", 0.33),
     ]
 
-    n_scenarios = 20
-    n_policies = 10
+    n_scenarios = 30
+    n_policies = 30
 
     results = perform_experiments(
         model, 
@@ -132,7 +133,7 @@ if __name__ == "__main__":
     
     # Save plant names reference (same for all runs, run once to get the list)
     # IMPORTANT: Must use same HALF setting as the experiments (line 88)
-    HALF_SETTING = True  # Must match Constant("HALF", ...) above
+    HALF_SETTING = False  # Must match Constant("HALF", ...) above
     test_result = simulate_ctbo(data, HALF=HALF_SETTING, VERBOSE=False, debug=False)
     plant_names = test_result['plant_names']
     pd.DataFrame({'plant_index': range(len(plant_names)), 'plant_name': plant_names}).to_csv(

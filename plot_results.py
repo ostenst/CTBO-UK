@@ -25,6 +25,9 @@ def load_results(debug=False):
         "BECCS_capacity_vec",
         "DACCS_capacity_vec",
         "CTBO_cost_lev_vec",
+        "supplied_CO2_vec",
+        "total_emissions_vec",
+        "ctbo_mandate_vec",
         "plant_npv_net",
         "plant_npv_gross",
         "plant_investment_year",
@@ -98,6 +101,52 @@ def plot_timeseries_by_scenario(combined_df, array_data, scenario_col="ETS_SCENA
     plt.ylabel(ylabel or 'Value', fontsize=13)
     plt.title(title or 'Time Series by ETS Scenario', fontsize=14)
     plt.legend(fontsize=11, title='ETS Scenario')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+
+def plot_carbon_balance(combined_df, array_outcomes, start_year=2025, debug=False):
+    """Plot carbon balance time series (supplied, emissions, mandate) with uncertainty bands."""
+    if debug:
+        print("Plotting carbon balance")
+    
+    supplied = array_outcomes.get("supplied_CO2_vec")
+    emissions = array_outcomes.get("total_emissions_vec")
+    mandate = array_outcomes.get("ctbo_mandate_vec")
+    
+    if supplied is None or emissions is None or mandate is None:
+        print("Warning: Missing carbon balance data (supplied_CO2_vec, total_emissions_vec, ctbo_mandate_vec)")
+        return
+    
+    years = np.arange(start_year, start_year + supplied.shape[1])
+    
+    plt.figure(figsize=(10, 6))
+    
+    # Supplied CO2
+    median_sup = np.percentile(supplied, 50, axis=0)
+    p5_sup = np.percentile(supplied, 5, axis=0)
+    p95_sup = np.percentile(supplied, 95, axis=0)
+    plt.plot(years, median_sup, label='Supplied CO2', linewidth=2, color='black', linestyle='-')
+    plt.fill_between(years, p5_sup, p95_sup, alpha=0.15, color='black')
+    
+    # Total emissions
+    median_em = np.percentile(emissions, 50, axis=0)
+    p5_em = np.percentile(emissions, 5, axis=0)
+    p95_em = np.percentile(emissions, 95, axis=0)
+    plt.plot(years, median_em, label='Emissions', linewidth=2, color='#e74c3c', linestyle='--')
+    plt.fill_between(years, p5_em, p95_em, alpha=0.15, color='#e74c3c')
+    
+    # CTBO mandate
+    median_man = np.percentile(mandate, 50, axis=0)
+    p5_man = np.percentile(mandate, 5, axis=0)
+    p95_man = np.percentile(mandate, 95, axis=0)
+    plt.plot(years, median_man, label='CTBO Mandate', linewidth=2, color='#3498db', linestyle=':')
+    plt.fill_between(years, p5_man, p95_man, alpha=0.15, color='#3498db')
+    
+    plt.xlabel('Year', fontsize=13)
+    plt.ylabel('ktCO2/yr', fontsize=13)
+    plt.title('Carbon Balance: Supplied CO2, Emissions, and CTBO Mandate', fontsize=14)
+    plt.legend(fontsize=11)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
 
@@ -465,6 +514,9 @@ if __name__ == "__main__":
     
     # Plot 10: Fraction of positive NPV - fossil plants only
     plot_positive_npv_fraction_boxplot(combined_df, array_outcomes, plant_names, plant_filter="fossil", ETS_filter=None)
+    
+    # Plot 11: Carbon balance (supplied, emissions, mandate)
+    plot_carbon_balance(combined_df, array_outcomes)
     
     plt.show()
 
