@@ -274,7 +274,7 @@ def simulate_ctbo(
     END_YEAR=2055,                  # [year] Simulation end year
     baseline_emissions=None,        # dict: {coal, oil, gas} in [MtCO2/yr]
     DIFFUSE_START_FRACTION=1.0,     # [-] Fraction of diffuse emissions at START_YEAR (0-1)
-    DIFFUSE_END_FRACTION=0.20,      # [-] Fraction of diffuse emissions at DIFFUSE_TARGET_YEAR (0-1)
+    DIFFUSE_END_FRACTION=0.40,      # [-] Fraction of diffuse emissions at DIFFUSE_TARGET_YEAR (0-1)
     DIFFUSE_TARGET_YEAR=2050,       # [year] Target year for diffuse emissions reduction
     DISCOUNT_RATE=0.035,            # [-] Real discount rate for NPV calculations (0-1)
     USE_INVESTMENT_YEAR_AS_BASE=False,  # [-] bool: NPV base year = investment year vs START_YEAR
@@ -624,7 +624,52 @@ def simulate_ctbo(
     
     # Create MACC dataframes
     results_df = pd.DataFrame(results)
-    
+
+    # The plant named "Padeswood-cement" should have total_4OAK = 0
+    if "Padeswood-cement" in results_df['site-stack'].values:
+        print("Added Padeswood-cement that received subsidies and has zero abatement cost")
+        padeswood_cement_idx = results_df[results_df['site-stack'] == 'Padeswood-cement'].index[0]
+        results_df.loc[padeswood_cement_idx, 'total_4OAK'] = 0
+        results_df.loc[padeswood_cement_idx, 'total_FOAK'] = 0
+
+    # Add a new, free W2E plant named "Protos-W2E" at 370 ktCO2/yr zero cost (subsidized)
+    result_protos = create_result_entry(
+        site_stack='Protos-W2E',
+        annual_CO2=370 * 1000 / capture_rate,   # [tCO2/yr] baseline (function divides by 1000)
+        biogenic=1 - w2e_config['fossil_fraction'],                           # 100% biogenic
+        captured_CO2f=370 * w2e_config['fossil_fraction'],                        # [ktCO2/yr] fossil captured
+        captured_CO2bio=370 * (1 - w2e_config['fossil_fraction']),                # [ktCO2/yr] biogenic captured
+        residual_CO2f=370*(1-capture_rate),                        # [ktCO2/yr] residual fossil
+        FLH=FLH_w2e,                            # [h/yr] full load hours
+        CAPEX_4OAK=0,                           # [EUR/tCO2] zero cost (subsidized)
+        CAPEX_FOAK=0,
+        OPEXE=0,
+        OPEX_fixed=0,
+        transtorage=0,
+        distance_km=0
+    )
+    results_df = pd.concat([results_df, pd.DataFrame([result_protos])], ignore_index=True)
+    print(f"Added Protos that captures {370 * w2e_config['fossil_fraction']} ktCO2f/yr and {370 * (1 - w2e_config['fossil_fraction'])} ktCO2bio/yr at a cost of {result_protos['total_4OAK']:.1f} EUR/tCO2")
+
+    # Add a new, free CCGT power plant named "Teeside-CCGT" at 1000 MW zero cost (subsidized)
+    result_teeside = create_result_entry(
+        site_stack='Teeside-CCGT',
+        annual_CO2=2000 * 1000 / capture_rate,  # [tCO2/yr] baseline (function divides by 1000)
+        biogenic=0,                             # 0% biogenic
+        captured_CO2f=2000,                     # [ktCO2/yr] fossil captured
+        captured_CO2bio=0,                      # [ktCO2/yr] biogenic captured
+        residual_CO2f=2000*(1-capture_rate),    # [ktCO2/yr] residual fossil
+        FLH=4000,                               # [h/yr] full load hours
+        CAPEX_4OAK=0,                           # [EUR/tCO2] zero cost (subsidized)
+        CAPEX_FOAK=0,
+        OPEXE=0,
+        OPEX_fixed=0,
+        transtorage=0,
+        distance_km=0
+    )
+    results_df = pd.concat([results_df, pd.DataFrame([result_teeside])], ignore_index=True)
+    print(f"Added Teeside that captures {result_teeside['captured_CO2f']} ktCO2f/yr at a cost of {result_teeside['total_4OAK']:.1f} EUR/tCO2")
+
     # 4OAK MACC
     results_df_4oak = results_df.sort_values('total_4OAK').copy()
     results_df_4oak['captured_total'] = results_df_4oak['captured_CO2f'] + results_df_4oak['captured_CO2bio']
@@ -997,7 +1042,6 @@ if __name__ == "__main__":
     years = results['years']
     ctbo_fraction = results['ctbo_fraction']
     ets_prices = results['ets_prices']
-    DACCS_costs = results['DACCS_costs']
     supplied_CO2_vec = results['supplied_CO2_vec']
     total_emissions_vec = results['total_emissions_vec']
     ctbo_mandate_vec = results['ctbo_mandate_vec']
@@ -1009,11 +1053,7 @@ if __name__ == "__main__":
     CTBO_cost_lev_vec = results['CTBO_cost_lev_vec']
     plant_results = results['plant_results']
     first_DACCS_year = results['first_DACCS_year']
-    pounds_to_EUR = results['pounds_to_EUR']
     fuels = results['fuels']
-    START_YEAR = results['START_YEAR']
-    DISCOUNT_RATE = results['DISCOUNT_RATE']
-    USE_INVESTMENT_YEAR_AS_BASE = results['USE_INVESTMENT_YEAR_AS_BASE']
     plant_npv = results['plant_npv']
     diesel_increase_abs = results['diesel_increase_abs']
     petrol_increase_abs = results['petrol_increase_abs']
@@ -1083,16 +1123,16 @@ if __name__ == "__main__":
     plt.figure(figsize=(10, 6))
     plt.stackplot(years, DACCS_capacity_vec, BECCS_capacity_vec, fCCS_capacity_vec,
                   labels=['DACCS', 'BECCS', 'Fossil CCS'],
-                  colors=[viridis(0.5), viridis(0.65), 'gray'],
-                  alpha=1.0)
-    plt.plot(years, supplied_CO2_vec, label='Supplied CO2 (O&G, coal, cem)', linewidth=2, color='black')
-    plt.plot(years, total_emissions_vec, label='Emitted CO2', linewidth=2, color=viridis(0.40))
+                  colors=[magma(0.30), magma(0.60), 'gray'],
+                  alpha=0.85)
+    plt.plot(years, supplied_CO2_vec, label='Supplied CO2 (O&G, coal, lime)', linewidth=2, color='black')
+    plt.plot(years, total_emissions_vec, label='Gross Emitted CO2', linewidth=2, color=magma(0.50))
     plt.plot(years, ctbo_mandate_vec, label='CTBO Mandate', linewidth=2, color='black', linestyle='--')
     
     if first_DACCS_year is not None:
         daccs_idx = np.where(years == first_DACCS_year)[0][0]
-        plt.plot(first_DACCS_year, DACCS_capacity_vec[daccs_idx], 'o', markersize=6, color=viridis(0.5))
-        plt.plot([], [], 'o', markersize=6, color=viridis(0.5), label='Year when DACCS is marginal')
+        plt.plot(first_DACCS_year, DACCS_capacity_vec[daccs_idx], 'o', markersize=6, color=magma(0.30))
+        plt.plot([], [], 'o', markersize=6, color=magma(0.30), label='Year when DACCS is marginal')
     
     plt.xlabel('Year', fontsize=13)
     plt.ylabel('ktCO2/yr', fontsize=13)

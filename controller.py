@@ -29,16 +29,17 @@ if __name__ == "__main__":
         RealParameter("celc", 200, 300),                    # [EUR/MWh] Electricity cost
         RealParameter("cbio", 80, 160),                     # [EUR/MWh] Biomass fuel cost
         RealParameter("csteam", 3.0, 5.0),                  # [EUR/tsteam] Steam cost
-        RealParameter("amine_cost", 30, 60),                # [SEK/tCO2] Amine makeup cost
+        RealParameter("amine_cost", 30, 50),                # [SEK/tCO2] Amine makeup cost
         RealParameter("extra_transtorage", 20, 40),         # [EUR/tCO2] Transport & storage cost
         # Technology/cost uncertainties
         RealParameter("CEPCI_2025", 880, 980),              # [-] Chemical Engineering Plant Cost Index
-        RealParameter("FOAK_MULTIPLIER", 1.5, 2.0),         # [-] First-of-a-kind cost multiplier
+        RealParameter("NETL", 5.0, 6.0),                # [-] NETL methodology CAPEX multiplier
+        RealParameter("FOAK_MULTIPLIER", 1.75, 1.79),         # [-] First-of-a-kind cost multiplier
         RealParameter("discount_rate_ccs", 0.06, 0.12),     # [-] Discount rate for CCS
         RealParameter("capture_rate", 0.90, 0.95),          # [-] CO2 capture rate
         IntegerParameter("lifetime_ccs", 20, 30),           # [years] CCS project lifetime
         # Technical uncertainties
-        RealParameter("qreb", 3.0, 4.0),                    # [MJ/kgCO2] Reboiler heat duty
+        RealParameter("qreb", 2.5, 3.5),                    # [MJ/kgCO2] Reboiler heat duty
         RealParameter("pcompr", 0.30, 0.45),                # [MJ/kgCO2] Compression power
         RealParameter("fixed", 0.03, 0.05),                 # [-] Fixed OPEX fraction
         RealParameter("emission_factor_bio", 0.28, 0.38),   # [tCO2/MWhfuel] Biomass emission factor
@@ -59,7 +60,7 @@ if __name__ == "__main__":
     model.levers = [
         RealParameter("DIFFUSE_END_FRACTION", 0.10, 0.40),  # [-] Diffuse emissions target
         CategoricalParameter("ETS_SCENARIO", ["Low", "Medium", "High"]),
-        CategoricalParameter("USE_FOAK", [True, False]),
+        # CategoricalParameter("USE_FOAK", [True, False]),
     ]
 
     # Outcomes: metrics we want to track
@@ -83,10 +84,9 @@ if __name__ == "__main__":
     model.constants = [
         Constant("data", data),
         Constant("CTBO_ENABLED", True),
-
         Constant("CTBO_growth_factor", 0.4),
-        Constant("HALF", False), # NOTE, must be a constant otherwise EMA fails to save outcomes
-        # Constant("USE_FOAK", False),
+        Constant("HALF", True), # NOTE, must be a constant otherwise EMA fails to save outcomes
+        Constant("USE_FOAK", False),
 
         Constant("VERBOSE", False),
         Constant("debug", False),
@@ -98,7 +98,6 @@ if __name__ == "__main__":
         Constant("DIFFUSE_START_FRACTION", 1.0),
         Constant("DISCOUNT_RATE", 0.035),
         Constant("USE_INVESTMENT_YEAR_AS_BASE", False),
-        Constant("NETL", 5.509),
         Constant("CEPCI_2023", 798.7),
         Constant("sek_to_eur", 0.091),
         Constant("pounds_to_EUR", 1.15),
@@ -107,7 +106,7 @@ if __name__ == "__main__":
     ]
 
     n_scenarios = 20
-    n_policies = 20
+    n_policies = 10
 
     results = perform_experiments(
         model, 
@@ -132,8 +131,9 @@ if __name__ == "__main__":
         np.save(f"outcomes_{name}.npy", arr)
     
     # Save plant names reference (same for all runs, run once to get the list)
-    # Use same HALF setting as the experiments
-    test_result = simulate_ctbo(data, HALF=False, VERBOSE=False, debug=False)
+    # IMPORTANT: Must use same HALF setting as the experiments (line 88)
+    HALF_SETTING = True  # Must match Constant("HALF", ...) above
+    test_result = simulate_ctbo(data, HALF=HALF_SETTING, VERBOSE=False, debug=False)
     plant_names = test_result['plant_names']
     pd.DataFrame({'plant_index': range(len(plant_names)), 'plant_name': plant_names}).to_csv(
         "plant_names_reference.csv", index=False
