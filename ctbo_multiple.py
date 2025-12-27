@@ -274,7 +274,7 @@ def simulate_ctbo(
     END_YEAR=2055,                  # [year] Simulation end year
     baseline_emissions=None,        # dict: {coal, oil, gas} in [MtCO2/yr]
     DIFFUSE_START_FRACTION=1.0,     # [-] Fraction of diffuse emissions at START_YEAR (0-1)
-    DIFFUSE_END_FRACTION=0.40,      # [-] Fraction of diffuse emissions at DIFFUSE_TARGET_YEAR (0-1)
+    DIFFUSE_END_FRACTION=0.20,      # [-] Fraction of diffuse emissions at DIFFUSE_TARGET_YEAR (0-1)
     DIFFUSE_TARGET_YEAR=2050,       # [year] Target year for diffuse emissions reduction
     DISCOUNT_RATE=0.035,            # [-] Real discount rate for NPV calculations (0-1)
     USE_INVESTMENT_YEAR_AS_BASE=False,  # [-] bool: NPV base year = investment year vs START_YEAR
@@ -785,6 +785,7 @@ def simulate_ctbo(
     marginal_cost_vec = []
     CSU_cost_vec = []
     CTBO_cost_lev_vec = []
+    CTBO_cost_vec = []
     
     plant_results = []
     first_DACCS_year = None
@@ -876,6 +877,7 @@ def simulate_ctbo(
         marginal_cost_vec.append(marginal_cost)
         CSU_cost_vec.append(CSU_cost)
         CTBO_cost_lev_vec.append(CTBO_cost_lev)
+        CTBO_cost_vec.append(CTBO_cost) # [kEUR/yr] total cost of CTBO
         
         # Calculate plant-level costs and profits
         for idx, plant in macc.iterrows():
@@ -991,9 +993,11 @@ def simulate_ctbo(
     results['fCCS_capacity_vec'] = fCCS_capacity_vec
     results['BECCS_capacity_vec'] = BECCS_capacity_vec
     results['DACCS_capacity_vec'] = DACCS_capacity_vec
+    results['CDR_capacity_vec'] = np.array(BECCS_capacity_vec) + np.array(DACCS_capacity_vec)
     results['marginal_cost_vec'] = marginal_cost_vec
     results['CSU_cost_vec'] = CSU_cost_vec
     results['CTBO_cost_lev_vec'] = CTBO_cost_lev_vec
+    results['CTBO_cost_vec'] = CTBO_cost_vec
     results['plant_results'] = plant_results
     results['first_DACCS_year'] = first_DACCS_year
     results['fuels'] = fuels
@@ -1048,6 +1052,7 @@ if __name__ == "__main__":
     fCCS_capacity_vec = results['fCCS_capacity_vec']
     BECCS_capacity_vec = results['BECCS_capacity_vec']
     DACCS_capacity_vec = results['DACCS_capacity_vec']
+    CDR_capacity_vec = results['CDR_capacity_vec']
     marginal_cost_vec = results['marginal_cost_vec']
     CSU_cost_vec = results['CSU_cost_vec']
     CTBO_cost_lev_vec = results['CTBO_cost_lev_vec']

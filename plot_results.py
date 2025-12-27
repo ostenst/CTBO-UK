@@ -24,6 +24,7 @@ def load_results(debug=False):
         "fCCS_capacity_vec",
         "BECCS_capacity_vec",
         "DACCS_capacity_vec",
+        "CDR_capacity_vec",
         "CTBO_cost_lev_vec",
         "supplied_CO2_vec",
         "total_emissions_vec",
@@ -61,7 +62,8 @@ def plot_boxplot_by_scenario(combined_df, outcome_col, scenario_col="ETS_SCENARI
     if debug:
         print(f"Plotting boxplot: {outcome_col} by {scenario_col}")
     
-    ets_colors = {"Low": "#2ecc71", "Medium": "#f39c12", "High": "#e74c3c"}
+    magma = plt.cm.magma
+    ets_colors = {"Low": magma(0.2), "Medium": magma(0.5), "High": magma(0.8)}
     
     plt.figure(figsize=(10, 6))
     sns.boxplot(data=combined_df, x=scenario_col, y=outcome_col, 
@@ -74,12 +76,13 @@ def plot_boxplot_by_scenario(combined_df, outcome_col, scenario_col="ETS_SCENARI
 
 
 def plot_timeseries_by_scenario(combined_df, array_data, scenario_col="ETS_SCENARIO",
-                                 ylabel=None, title=None, start_year=2025, debug=False):
+                                 ylabel=None, title=None, start_year=2025, debug=False, savefig=False):
     """Plot time series with mean and std by scenario."""
     if debug:
         print(f"Plotting time series by {scenario_col}")
     
-    ets_colors = {"Low": "#2ecc71", "Medium": "#f39c12", "High": "#e74c3c"}
+    magma = plt.cm.magma
+    ets_colors = {"Low": magma(0.2), "Medium": magma(0.5), "High": magma(0.8)}
     years = np.arange(start_year, start_year + array_data.shape[1])
     
     plt.figure(figsize=(10, 6))
@@ -103,6 +106,8 @@ def plot_timeseries_by_scenario(combined_df, array_data, scenario_col="ETS_SCENA
     plt.legend(fontsize=11, title='ETS Scenario')
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
+    if savefig:
+        plt.savefig(f'4_{title}.png', dpi=300)
 
 
 def plot_carbon_balance(combined_df, array_outcomes, start_year=2025, debug=False):
@@ -113,6 +118,7 @@ def plot_carbon_balance(combined_df, array_outcomes, start_year=2025, debug=Fals
     supplied = array_outcomes.get("supplied_CO2_vec")
     emissions = array_outcomes.get("total_emissions_vec")
     mandate = array_outcomes.get("ctbo_mandate_vec")
+    CDR = array_outcomes.get("CDR_capacity_vec")
     
     if supplied is None or emissions is None or mandate is None:
         print("Warning: Missing carbon balance data (supplied_CO2_vec, total_emissions_vec, ctbo_mandate_vec)")
@@ -121,27 +127,35 @@ def plot_carbon_balance(combined_df, array_outcomes, start_year=2025, debug=Fals
     years = np.arange(start_year, start_year + supplied.shape[1])
     
     plt.figure(figsize=(10, 6))
+    magma = plt.cm.magma
     
     # Supplied CO2
     median_sup = np.percentile(supplied, 50, axis=0)
     p5_sup = np.percentile(supplied, 5, axis=0)
     p95_sup = np.percentile(supplied, 95, axis=0)
     plt.plot(years, median_sup, label='Supplied CO2', linewidth=2, color='black', linestyle='-')
-    plt.fill_between(years, p5_sup, p95_sup, alpha=0.15, color='black')
+    plt.fill_between(years, p5_sup, p95_sup, alpha=0.25, color='black')
     
     # Total emissions
     median_em = np.percentile(emissions, 50, axis=0)
     p5_em = np.percentile(emissions, 5, axis=0)
     p95_em = np.percentile(emissions, 95, axis=0)
-    plt.plot(years, median_em, label='Emissions', linewidth=2, color='#e74c3c', linestyle='--')
-    plt.fill_between(years, p5_em, p95_em, alpha=0.15, color='#e74c3c')
+    plt.plot(years, median_em, label='Gross Emitted CO2', linewidth=2, color=magma(0.40), linestyle='--')
+    plt.fill_between(years, p5_em, p95_em, alpha=0.25, color=magma(0.40))
     
     # CTBO mandate
     median_man = np.percentile(mandate, 50, axis=0)
     p5_man = np.percentile(mandate, 5, axis=0)
     p95_man = np.percentile(mandate, 95, axis=0)
-    plt.plot(years, median_man, label='CTBO Mandate', linewidth=2, color='#3498db', linestyle=':')
-    plt.fill_between(years, p5_man, p95_man, alpha=0.15, color='#3498db')
+    plt.plot(years, median_man, label='CTBO Mandate (Fossil CCS+BECCS+DACCS)', linewidth=2, color='gray', linestyle=':')
+    plt.fill_between(years, p5_man, p95_man, alpha=0.25, color='gray')
+
+    # CDR capacity
+    median_cdr = np.percentile(CDR, 50, axis=0)
+    p5_cdr = np.percentile(CDR, 5, axis=0)
+    p95_cdr = np.percentile(CDR, 95, axis=0)
+    plt.plot(years, median_cdr, label='BECCS+DACCS', linewidth=2, color=magma(0.80), linestyle='-.')
+    plt.fill_between(years, p5_cdr, p95_cdr, alpha=0.25, color=magma(0.80))
     
     plt.xlabel('Year', fontsize=13)
     plt.ylabel('ktCO2/yr', fontsize=13)
@@ -149,6 +163,7 @@ def plot_carbon_balance(combined_df, array_outcomes, start_year=2025, debug=Fals
     plt.legend(fontsize=11)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
+    plt.savefig('2_carbon_balances_multi.png', dpi=300)
 
 
 def plot_capacity_stack(combined_df, array_outcomes, scenario_col="ETS_SCENARIO",
@@ -157,7 +172,8 @@ def plot_capacity_stack(combined_df, array_outcomes, scenario_col="ETS_SCENARIO"
     if debug:
         print(f"Plotting capacity stack by {scenario_col}")
     
-    ets_colors = {"Low": "#2ecc71", "Medium": "#f39c12", "High": "#e74c3c"}
+    magma = plt.cm.magma
+    ets_colors = {"Low": magma(0.2), "Medium": magma(0.5), "High": magma(0.8)}
     
     fCCS = array_outcomes.get("fCCS_capacity_vec")
     BECCS = array_outcomes.get("BECCS_capacity_vec")
@@ -204,7 +220,8 @@ def plot_plant_npv(combined_df, array_outcomes, plant_names, scenario_col="ETS_S
         print("Warning: Missing plant NPV data")
         return
     
-    ets_colors = {"Low": "#2ecc71", "Medium": "#f39c12", "High": "#e74c3c"}
+    magma = plt.cm.magma
+    ets_colors = {"Low": magma(0.2), "Medium": magma(0.5), "High": magma(0.8)}
     
     # Calculate mean NPV per plant across all experiments
     plt.figure(figsize=(14, 6))
@@ -244,7 +261,8 @@ def plot_npv_vs_investment_year(combined_df, array_outcomes, scenario_col="ETS_S
         print("Warning: Missing plant NPV or investment year data")
         return
     
-    ets_colors = {"Low": "#2ecc71", "Medium": "#f39c12", "High": "#e74c3c"}
+    magma = plt.cm.magma
+    ets_colors = {"Low": magma(0.2), "Medium": magma(0.5), "High": magma(0.8)}
     
     plt.figure(figsize=(10, 6))
     
@@ -393,7 +411,8 @@ def plot_positive_npv_fraction(combined_df, array_outcomes, scenario_col="ETS_SC
         print("Warning: Missing plant NPV or investment year data")
         return
     
-    ets_colors = {"Low": "#2ecc71", "Medium": "#f39c12", "High": "#e74c3c"}
+    magma = plt.cm.magma
+    ets_colors = {"Low": magma(0.2), "Medium": magma(0.5), "High": magma(0.8)}
     
     plt.figure(figsize=(10, 6))
     
@@ -481,7 +500,8 @@ if __name__ == "__main__":
             combined_df,
             array_outcomes["gas_increase_pct"],
             ylabel="Gas Price Increase (%)",
-            title="Gas Price Increase Over Time by ETS Scenario"
+            title="Gas Price Increase Over Time by ETS Scenario",
+            savefig=True
         )
     
     # Plot 3: CTBO levelized cost over time
@@ -490,7 +510,8 @@ if __name__ == "__main__":
             combined_df,
             array_outcomes["CTBO_cost_lev_vec"],
             ylabel="CTBO Cost (EUR/tCO2)",
-            title="Levelized CTBO Cost Over Time by ETS Scenario"
+            title="Levelized CTBO Cost Over Time by ETS Scenario",
+            savefig=True
         )
     
     # # Plot 4: CCS capacity stack
@@ -500,8 +521,8 @@ if __name__ == "__main__":
     if plant_names:
         plot_plant_npv(combined_df, array_outcomes, plant_names)
     
-    # Plot 6: NPV vs Investment Year
-    plot_npv_vs_investment_year(combined_df, array_outcomes)
+    # # Plot 6: NPV vs Investment Year
+    # plot_npv_vs_investment_year(combined_df, array_outcomes)
     
     # Plot 7: Fraction of positive NPV vs Investment Year (by ETS scenario)
     plot_positive_npv_fraction(combined_df, array_outcomes)
@@ -509,8 +530,8 @@ if __name__ == "__main__":
     # Plot 8: Fraction of positive NPV vs Investment Year (boxplot, all data)
     plot_positive_npv_fraction_boxplot(combined_df, array_outcomes, plant_names, plant_filter=None, ETS_filter=None)
     
-    # Plot 9: Fraction of positive NPV - biogenic plants only (W2E/BECCS)
-    plot_positive_npv_fraction_boxplot(combined_df, array_outcomes, plant_names, plant_filter="biogenic", ETS_filter=None)
+    # # Plot 9: Fraction of positive NPV - biogenic plants only (W2E/BECCS)
+    # plot_positive_npv_fraction_boxplot(combined_df, array_outcomes, plant_names, plant_filter="biogenic", ETS_filter=None)
     
     # Plot 10: Fraction of positive NPV - fossil plants only
     plot_positive_npv_fraction_boxplot(combined_df, array_outcomes, plant_names, plant_filter="fossil", ETS_filter=None)

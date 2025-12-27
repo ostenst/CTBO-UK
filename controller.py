@@ -59,7 +59,7 @@ if __name__ == "__main__":
 
     # Levers: policy choices we can control
     model.levers = [
-        RealParameter("DIFFUSE_END_FRACTION", 0.10, 0.40),  # [-] Diffuse emissions target
+        RealParameter("DIFFUSE_END_FRACTION", 0.05, 0.40),  # [-] Diffuse emissions target
         CategoricalParameter("ETS_SCENARIO", ["Low", "Medium", "High"]),
         # CategoricalParameter("USE_FOAK", [True, False]),
     ]
@@ -72,9 +72,11 @@ if __name__ == "__main__":
         ScalarOutcome("gas_increase_abs_2050", ScalarOutcome.MINIMIZE),
         ArrayOutcome("gas_increase_pct"),
         ArrayOutcome("supplied_CO2_vec"),
+        ArrayOutcome("CDR_capacity_vec"),
         ArrayOutcome("total_emissions_vec"),
         ArrayOutcome("ctbo_mandate_vec"),
         ArrayOutcome("CTBO_cost_lev_vec"),
+        ArrayOutcome("CTBO_cost_vec"),
         # Plant-level NPV outcomes (fixed order, NaN for non-invested plants)
         ArrayOutcome("plant_npv_net"),          # [kEUR] Net NPV per plant
         ArrayOutcome("plant_npv_gross"),        # [kEUR] Gross NPV per plant
@@ -107,7 +109,7 @@ if __name__ == "__main__":
     ]
 
     n_scenarios = 30
-    n_policies = 30
+    n_policies = 20
 
     results = perform_experiments(
         model, 
