@@ -376,6 +376,220 @@ def plot_plant_npv(combined_df, array_outcomes, plant_names, scenario_col="ETS_S
 
 
 
+def plot_npv_boxplot_by_plant_type(combined_df, array_outcomes, plant_names=None,
+                                    ETS_filter=None, scenario_col="ETS_SCENARIO", debug=False):
+    """Boxplot of NPV grouped by plant type (based on name suffix)."""
+    if debug:
+        print(f"Plotting NPV boxplot by plant type (ETS={ETS_filter})")
+    
+    plant_npv_net = array_outcomes.get("plant_npv_net")
+    plant_inv_year = array_outcomes.get("plant_investment_year")
+    
+    if plant_npv_net is None or plant_inv_year is None or plant_names is None:
+        print("Warning: Missing plant NPV or investment year data")
+        return
+    
+    # Create ETS mask based on filter
+    if ETS_filter is not None:
+        ets_mask = combined_df[scenario_col] == ETS_filter
+        plant_npv_net = plant_npv_net[ets_mask.values]
+        plant_inv_year = plant_inv_year[ets_mask.values]
+        if debug:
+            print(f"  Filtered to {ets_mask.sum()} experiments with ETS scenario '{ETS_filter}'")
+    
+    # Define plant type categories
+    plant_types = [
+        ("-CCGT", "CCGT"),
+        ("-cement", "Cement"),
+        ("-W2E", "W2E"),
+        ("-BECCS", "BECCS"),
+    ]
+    
+    # Collect NPV data for each plant type
+    boxplot_data = []
+    labels = []
+    fractions_positive = []
+    
+    # Process each defined plant type
+    for suffix, label in plant_types:
+        # Create mask for plants with this suffix
+        plant_mask = np.array([name.endswith(suffix) for name in plant_names])
+        
+        if plant_mask.sum() > 0:
+            # Get NPV data for these plants
+            plant_npv_filtered = plant_npv_net[:, plant_mask]
+            
+            # Flatten and remove NaN
+            npv_flat = plant_npv_filtered.flatten()
+            valid_mask = ~np.isnan(npv_flat)
+            npv_valid = npv_flat[valid_mask] / 1000  # Convert to MEUR
+            
+            if len(npv_valid) > 0:
+                boxplot_data.append(npv_valid)
+                labels.append(label)
+                frac_positive = (npv_valid > 0).sum() / len(npv_valid)
+                fractions_positive.append(frac_positive)
+                if debug:
+                    print(f"  {label}: {plant_mask.sum()} plants, {len(npv_valid)} data points, {frac_positive:.2%} positive")
+    
+    # Process "industry" category (remaining plants)
+    matched_mask = np.zeros(len(plant_names), dtype=bool)
+    for suffix, _ in plant_types:
+        matched_mask |= np.array([name.endswith(suffix) for name in plant_names])
+    
+    industry_mask = ~matched_mask
+    if industry_mask.sum() > 0:
+        plant_npv_filtered = plant_npv_net[:, industry_mask]
+        npv_flat = plant_npv_filtered.flatten()
+        valid_mask = ~np.isnan(npv_flat)
+        npv_valid = npv_flat[valid_mask] / 1000
+        
+        if len(npv_valid) > 0:
+            boxplot_data.append(npv_valid)
+            labels.append("Industry")
+            frac_positive = (npv_valid > 0).sum() / len(npv_valid)
+            fractions_positive.append(frac_positive)
+            if debug:
+                print(f"  Industry: {industry_mask.sum()} plants, {len(npv_valid)} data points, {frac_positive:.2%} positive")
+    
+    magma = plt.cm.magma
+    
+    plt.figure(figsize=(8, 6))
+    bp = plt.boxplot(boxplot_data, labels=labels, patch_artist=True, showfliers=True, sym='o')
+    
+    # Style the boxplot - color based on fraction positive
+    for i, (box, frac_pos) in enumerate(zip(bp['boxes'], fractions_positive)):
+        box.set(facecolor=magma(frac_pos), alpha=0.8)
+    for median in bp['medians']:
+        median.set(color='black', linewidth=2)
+    for flier in bp['fliers']:
+        flier.set(marker='o', markersize=3, alpha=0.3)
+    
+    # Add colorbar to show fraction positive scale
+    sm = plt.cm.ScalarMappable(cmap=magma, norm=plt.Normalize(vmin=0, vmax=1))
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=plt.gca(), pad=0.02)
+    cbar.set_label('Fraction with Positive NPV', fontsize=11)
+    
+    plt.ylabel('NPV Net Profit (MEUR)', fontsize=13)
+    plt.xlabel('Plant Type', fontsize=13)
+    
+    # Title based on filters
+    title = 'NPV by Plant Type'
+    if ETS_filter is not None:
+        title += f' [ETS: {ETS_filter}]'
+    
+    plt.title(title, fontsize=14)
+    plt.axhline(y=0, color='black', linestyle='--', linewidth=0.5, alpha=0.5)
+    plt.grid(True, alpha=0.3, axis='y')
+    plt.tight_layout()
+
+
+def plot_npv_boxplot_by_year_range(combined_df, array_outcomes, plant_names=None,
+                                    plant_suffix="-CCGT", ETS_filter=None, scenario_col="ETS_SCENARIO", debug=False):
+    """Boxplot of NPV for plants with specific suffix, grouped by investment year ranges."""
+    if debug:
+        print(f"Plotting NPV boxplot by year range (suffix={plant_suffix}, ETS={ETS_filter})")
+    
+    plant_npv_net = array_outcomes.get("plant_npv_net")
+    plant_inv_year = array_outcomes.get("plant_investment_year")
+    
+    if plant_npv_net is None or plant_inv_year is None or plant_names is None:
+        print("Warning: Missing plant NPV or investment year data")
+        return
+    
+    # Create ETS mask based on filter
+    if ETS_filter is not None:
+        ets_mask = combined_df[scenario_col] == ETS_filter
+        plant_npv_net = plant_npv_net[ets_mask.values]
+        plant_inv_year = plant_inv_year[ets_mask.values]
+        if debug:
+            print(f"  Filtered to {ets_mask.sum()} experiments with ETS scenario '{ETS_filter}'")
+    
+    # Create plant mask for plants ending with the specified suffix
+    n_plants = plant_npv_net.shape[1]
+    plant_mask = np.zeros(n_plants, dtype=bool)
+    
+    for i, name in enumerate(plant_names):
+        if name.endswith(plant_suffix):
+            plant_mask[i] = True
+    
+    # Apply mask to data
+    plant_npv_net_filtered = plant_npv_net[:, plant_mask]
+    plant_inv_year_filtered = plant_inv_year[:, plant_mask]
+    
+    if debug:
+        print(f"  Found {plant_mask.sum()} plants ending with '{plant_suffix}'")
+    
+    # Define year ranges
+    year_ranges = [
+        ("Before 2035", lambda y: y < 2035),
+        ("2035-2040", lambda y: 2035 <= y < 2040),
+        ("2040-2045", lambda y: 2040 <= y < 2045),
+        ("2045-2050", lambda y: 2045 <= y < 2050)
+    ]
+    
+    # Collect NPV data for each year range
+    boxplot_data = []
+    labels = []
+    fractions_positive = []
+    
+    for label, year_condition in year_ranges:
+        # Flatten all experiments and plants
+        npv_flat = plant_npv_net_filtered.flatten()
+        year_flat = plant_inv_year_filtered.flatten()
+        
+        # Remove NaN pairs
+        valid_mask = ~np.isnan(npv_flat) & ~np.isnan(year_flat)
+        npv_valid = npv_flat[valid_mask] / 1000  # Convert to MEUR
+        year_valid = year_flat[valid_mask]
+        
+        # Apply year condition
+        year_mask = np.array([year_condition(y) for y in year_valid])
+        npv_for_range = npv_valid[year_mask]
+        
+        if len(npv_for_range) > 0:
+            boxplot_data.append(npv_for_range)
+            labels.append(label)
+            frac_positive = (npv_for_range > 0).sum() / len(npv_for_range)
+            fractions_positive.append(frac_positive)
+            if debug:
+                print(f"  {label}: {len(npv_for_range)} data points, {frac_positive:.2%} positive")
+    
+    magma = plt.cm.magma
+    
+    plt.figure(figsize=(6, 6))
+    bp = plt.boxplot(boxplot_data, labels=labels, patch_artist=True, showfliers=True, sym='o')
+    
+    # Style the boxplot - color based on fraction positive
+    for i, (box, frac_pos) in enumerate(zip(bp['boxes'], fractions_positive)):
+        # Use magma colormap: 0 = purple (all negative), 1 = yellow (all positive)
+        box.set(facecolor=magma(frac_pos), alpha=0.8)
+    for median in bp['medians']:
+        median.set(color='black', linewidth=2)
+    for flier in bp['fliers']:
+        flier.set(marker='o', markersize=3, alpha=0.3)
+    
+    # Add colorbar to show fraction positive scale
+    sm = plt.cm.ScalarMappable(cmap=magma, norm=plt.Normalize(vmin=0, vmax=1))
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=plt.gca(), pad=0.02)
+    cbar.set_label('Fraction with Positive NPV', fontsize=11)
+    
+    plt.ylabel('NPV Net Profit (MEUR)', fontsize=13)
+    plt.xlabel('Investment Year Range', fontsize=13)
+    
+    # Title based on filters
+    title = f'NPV by Investment Year Range (Plants ending with {plant_suffix})'
+    if ETS_filter is not None:
+        title += f' [ETS: {ETS_filter}]'
+    
+    plt.title(title, fontsize=14)
+    plt.axhline(y=0, color='black', linestyle='--', linewidth=0.5, alpha=0.5)
+    plt.grid(True, alpha=0.3, axis='y')
+    plt.tight_layout()
+
+
 def plot_npv_vs_investment_year(combined_df, array_outcomes, plant_names=None,
                                  plant_filter="fossil", scenario_col="ETS_SCENARIO", debug=False):
     """Scatter plot of NPV vs investment year for individual plants across experiments."""
@@ -679,10 +893,13 @@ if __name__ == "__main__":
     if plant_names:
         plot_plant_npv(combined_df, array_outcomes, plant_names)
     
-    # # Plot 6: NPV vs Investment Year
-    plot_npv_vs_investment_year(combined_df, array_outcomes, plant_names, plant_filter="fossil")
+    # Plot 7: NPV boxplot by year range for CCGT plants
+    plot_npv_boxplot_by_year_range(combined_df, array_outcomes, plant_names, plant_suffix="-CCGT", ETS_filter="Low", debug=True)
     
-    # Plot 7: Fraction of positive NPV vs Investment Year (by ETS scenario)
+    # Plot 8: NPV boxplot by plant type
+    plot_npv_boxplot_by_plant_type(combined_df, array_outcomes, plant_names, ETS_filter="High", debug=True)
+    
+    # # Plot 9: Fraction of positive NPV vs Investment Year (by ETS scenario)
     # plot_positive_npv_fraction(combined_df, array_outcomes)
     
     # # Plot 8: Fraction of positive NPV vs Investment Year (boxplot, all data)
