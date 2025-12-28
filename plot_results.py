@@ -26,6 +26,9 @@ def load_results(debug=False):
         "DACCS_capacity_vec",
         "CDR_capacity_vec",
         "CTBO_cost_lev_vec",
+        "CSU_cost_vec",
+        "ets_prices",
+        "CTBO_cost_vec",
         "supplied_CO2_vec",
         "total_emissions_vec",
         "ctbo_mandate_vec",
@@ -82,10 +85,10 @@ def plot_timeseries_by_scenario(combined_df, array_data, scenario_col="ETS_SCENA
         print(f"Plotting time series by {scenario_col}")
     
     magma = plt.cm.magma
-    ets_colors = {"Low": magma(0.2), "Medium": magma(0.5), "High": magma(0.8)}
+    ets_colors = {"Low": magma(0.1), "Medium": magma(0.5), "High": magma(0.9)}
     years = np.arange(start_year, start_year + array_data.shape[1])
     
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(5, 6))
     for category in ["Low", "Medium", "High"]:
         mask = combined_df[scenario_col] == category
         if mask.sum() == 0:
@@ -108,6 +111,100 @@ def plot_timeseries_by_scenario(combined_df, array_data, scenario_col="ETS_SCENA
     plt.tight_layout()
     if savefig:
         plt.savefig(f'4_{title}.png', dpi=300)
+
+
+def plot_ctbo_total_cost(combined_df, array_outcomes, scenario_col="ETS_SCENARIO",
+                          ylabel=None, title=None, start_year=2025, debug=False):
+    """Plot CTBO total cost time series with uncertainty bands by scenario."""
+    if debug:
+        print(f"Plotting CTBO total cost by {scenario_col}")
+    
+    ctbo_cost = array_outcomes.get("CTBO_cost_vec")/1000
+    
+    if ctbo_cost is None:
+        print("Warning: Missing CTBO_cost_vec data")
+        return
+    
+    magma = plt.cm.magma
+    ets_colors = {"Low": magma(0.1), "Medium": magma(0.5), "High": magma(0.9)}
+    years = np.arange(start_year, start_year + ctbo_cost.shape[1])
+    
+    plt.figure(figsize=(5, 6))
+    for category in ["Low", "Medium", "High"]:
+        mask = combined_df[scenario_col] == category
+        if mask.sum() == 0:
+            continue
+        category_data = ctbo_cost[mask.values]
+        
+        mean_vals = category_data.mean(axis=0)
+        std_vals = category_data.std(axis=0)
+        color = ets_colors[category]
+        
+        plt.plot(years, mean_vals, label=category, linewidth=2, color=color)
+        plt.fill_between(years, mean_vals - std_vals, mean_vals + std_vals, 
+                         alpha=0.2, color=color)
+    
+    plt.xlabel('Year', fontsize=13)
+    plt.ylabel(ylabel or 'Total CTBO Cost (MEUR/yr)', fontsize=13)
+    plt.title(title or 'Total CTBO Cost Over Time by ETS Scenario', fontsize=14)
+    plt.legend(fontsize=11, title='ETS Scenario')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+
+def plot_csu_cost_with_ets(combined_df, array_outcomes, scenario_col="ETS_SCENARIO",
+                            ylabel=None, title=None, start_year=2025, debug=False):
+    """Plot CSU cost time series with uncertainty bands and ETS prices overlay."""
+    if debug:
+        print(f"Plotting CSU cost with ETS prices by {scenario_col}")
+    
+    csu_cost = array_outcomes.get("CSU_cost_vec")
+    ets_prices = array_outcomes.get("ets_prices")
+    
+    if csu_cost is None:
+        print("Warning: Missing CSU_cost_vec data")
+        return
+    
+    magma = plt.cm.magma
+    ets_colors = {"Low": magma(0.1), "Medium": magma(0.5), "High": magma(0.9)}
+    years = np.arange(start_year, start_year + csu_cost.shape[1])
+    
+    plt.figure(figsize=(10, 6))
+    
+    # Plot CSU costs with uncertainty bands
+    for category in ["Low", "Medium", "High"]:
+        mask = combined_df[scenario_col] == category
+        if mask.sum() == 0:
+            continue
+        category_data = csu_cost[mask.values]
+        
+        mean_vals = category_data.mean(axis=0)
+        std_vals = category_data.std(axis=0)
+        color = ets_colors[category]
+        
+        plt.plot(years, mean_vals, label=f'CSU Cost ({category})', linewidth=2, color=color)
+        plt.fill_between(years, mean_vals - std_vals, mean_vals + std_vals, 
+                         alpha=0.2, color=color)
+    
+    # Overlay ETS prices
+    if ets_prices is not None:
+        for category in ["Low", "Medium", "High"]:
+            mask = combined_df[scenario_col] == category
+            if mask.sum() == 0:
+                continue
+            category_ets = ets_prices[mask.values]
+            mean_ets = category_ets.mean(axis=0)
+            color = ets_colors[category]
+            
+            plt.plot(years, mean_ets, label=f'ETS Price ({category})', 
+                     linewidth=2, linestyle='--', color=color, alpha=0.7)
+    
+    plt.xlabel('Year', fontsize=13)
+    plt.ylabel(ylabel or 'Cost (EUR/tCO2)', fontsize=13)
+    plt.title(title or 'CSU Cost and ETS Price Over Time by ETS Scenario', fontsize=14)
+    plt.legend(fontsize=10, title='Scenario', ncol=2)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
 
 
 def plot_carbon_balance(combined_df, array_outcomes, start_year=2025, debug=False):
@@ -140,8 +237,8 @@ def plot_carbon_balance(combined_df, array_outcomes, start_year=2025, debug=Fals
     median_em = np.percentile(emissions, 50, axis=0)
     p5_em = np.percentile(emissions, 5, axis=0)
     p95_em = np.percentile(emissions, 95, axis=0)
-    plt.plot(years, median_em, label='Gross Emitted CO2', linewidth=2, color=magma(0.40), linestyle='--')
-    plt.fill_between(years, p5_em, p95_em, alpha=0.25, color=magma(0.40))
+    plt.plot(years, median_em, label='Gross Emitted CO2', linewidth=2, color=magma(0.30), linestyle='--')
+    plt.fill_between(years, p5_em, p95_em, alpha=0.25, color=magma(0.30))
     
     # CTBO mandate
     median_man = np.percentile(mandate, 50, axis=0)
@@ -154,8 +251,8 @@ def plot_carbon_balance(combined_df, array_outcomes, start_year=2025, debug=Fals
     median_cdr = np.percentile(CDR, 50, axis=0)
     p5_cdr = np.percentile(CDR, 5, axis=0)
     p95_cdr = np.percentile(CDR, 95, axis=0)
-    plt.plot(years, median_cdr, label='BECCS+DACCS', linewidth=2, color=magma(0.80), linestyle='-.')
-    plt.fill_between(years, p5_cdr, p95_cdr, alpha=0.25, color=magma(0.80))
+    plt.plot(years, median_cdr, label='BECCS+DACCS', linewidth=2, color=magma(0.60), linestyle='-.')
+    plt.fill_between(years, p5_cdr, p95_cdr, alpha=0.25, color=magma(0.60))
     
     plt.xlabel('Year', fontsize=13)
     plt.ylabel('ktCO2/yr', fontsize=13)
@@ -246,34 +343,86 @@ def plot_plant_npv(combined_df, array_outcomes, plant_names, scenario_col="ETS_S
     plt.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
     plt.grid(True, alpha=0.3, axis='y')
     plt.tight_layout()
-
-
-def plot_npv_vs_investment_year(combined_df, array_outcomes, scenario_col="ETS_SCENARIO",
-                                 debug=False):
-    """Plot NPV vs investment year with uncertainty bands by ETS scenario."""
+    
+    # Create table of NPV statistics (all scenarios combined)
+    table_data = []
+    for i, plant_name in enumerate(plant_names):
+        plant_npv_all = plant_npv_net[:, i]  # All experiments for this plant
+        valid_npv = plant_npv_all[~np.isnan(plant_npv_all)]
+        
+        if len(valid_npv) > 0:
+            median_npv = np.median(valid_npv) / 1000  # Convert to MEUR
+            p5_npv = np.percentile(valid_npv, 5) / 1000
+            p95_npv = np.percentile(valid_npv, 95) / 1000
+            frac_positive = (valid_npv > 0).sum() / len(valid_npv)
+        else:
+            median_npv = np.nan
+            p5_npv = np.nan
+            p95_npv = np.nan
+            frac_positive = np.nan
+        
+        table_data.append({
+            'plant': plant_name,
+            'median_npv_MEUR': median_npv,
+            'p5_npv_MEUR': p5_npv,
+            'p95_npv_MEUR': p95_npv,
+            'fraction_positive': frac_positive
+        })
+    
+    npv_table = pd.DataFrame(table_data)
+    npv_table.to_csv('plant_npv_statistics.csv', index=False)
     if debug:
-        print(f"Plotting NPV vs investment year by {scenario_col}")
+        print("  Saved: plant_npv_statistics.csv")
+
+
+
+def plot_npv_vs_investment_year(combined_df, array_outcomes, plant_names=None,
+                                 plant_filter="fossil", scenario_col="ETS_SCENARIO", debug=False):
+    """Scatter plot of NPV vs investment year for individual plants across experiments."""
+    if debug:
+        print(f"Plotting NPV vs investment year scatter (filter={plant_filter})")
     
     plant_npv_net = array_outcomes.get("plant_npv_net")
     plant_inv_year = array_outcomes.get("plant_investment_year")
     
-    if plant_npv_net is None or plant_inv_year is None:
+    if plant_npv_net is None or plant_inv_year is None or plant_names is None:
         print("Warning: Missing plant NPV or investment year data")
         return
     
+    # Create plant mask based on filter
+    n_plants = plant_npv_net.shape[1]
+    plant_mask = np.zeros(n_plants, dtype=bool)
+    
+    if plant_filter is not None and plant_names is not None:
+        for i, name in enumerate(plant_names):
+            is_biogenic = name.endswith("W2E") or name.endswith("BECCS")
+            if plant_filter == "biogenic":
+                plant_mask[i] = is_biogenic
+            elif plant_filter == "fossil":
+                plant_mask[i] = not is_biogenic
+            else:
+                plant_mask[i] = True
+    else:
+        plant_mask[:] = True
+    
+    # Apply mask to data
+    plant_npv_net_filtered = plant_npv_net[:, plant_mask]
+    plant_inv_year_filtered = plant_inv_year[:, plant_mask]
+    
     magma = plt.cm.magma
-    ets_colors = {"Low": magma(0.2), "Medium": magma(0.5), "High": magma(0.8)}
+    ets_colors = {"Low": magma(0.1), "Medium": magma(0.5), "High": magma(0.9)}
     
     plt.figure(figsize=(10, 6))
     
+    # Plot each scenario with different colors
     for category in ["Low", "Medium", "High"]:
         mask = combined_df[scenario_col] == category
         if mask.sum() == 0:
             continue
         
         # Get data for this category
-        cat_npv = plant_npv_net[mask.values]      # shape: (n_exp, n_plants)
-        cat_year = plant_inv_year[mask.values]    # shape: (n_exp, n_plants)
+        cat_npv = plant_npv_net_filtered[mask.values]      # shape: (n_exp, n_plants_filtered)
+        cat_year = plant_inv_year_filtered[mask.values]    # shape: (n_exp, n_plants_filtered)
         
         # Flatten and remove NaN pairs
         npv_flat = cat_npv.flatten()
@@ -282,27 +431,16 @@ def plot_npv_vs_investment_year(combined_df, array_outcomes, scenario_col="ETS_S
         npv_valid = npv_flat[valid_mask] / 1000  # Convert to MEUR
         year_valid = year_flat[valid_mask].astype(int)
         
-        # Group by year and calculate mean/std
-        unique_years = np.sort(np.unique(year_valid))
-        mean_npv = []
-        std_npv = []
-        
-        for yr in unique_years:
-            yr_npv = npv_valid[year_valid == yr]
-            mean_npv.append(np.mean(yr_npv))
-            std_npv.append(np.std(yr_npv))
-        
-        mean_npv = np.array(mean_npv)
-        std_npv = np.array(std_npv)
         color = ets_colors[category]
-        
-        plt.plot(unique_years, mean_npv, label=category, linewidth=2, color=color)
-        plt.fill_between(unique_years, mean_npv - std_npv, mean_npv + std_npv,
-                         alpha=0.2, color=color)
+        plt.scatter(year_valid, npv_valid, s=10, alpha=0.3, color=color, label=category)
+    
+    # Title based on filter
+    filter_labels = {"biogenic": " (W2E/BECCS only)", "fossil": " (Fossil only)", None: ""}
+    title_suffix = filter_labels.get(plant_filter, "")
     
     plt.xlabel('Investment Year', fontsize=13)
     plt.ylabel('NPV Net Profit (MEUR)', fontsize=13)
-    plt.title('NPV vs Investment Year by ETS Scenario', fontsize=14)
+    plt.title(f'NPV vs Investment Year{title_suffix}', fontsize=14)
     plt.legend(fontsize=11, title='ETS Scenario')
     plt.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
     plt.grid(True, alpha=0.3)
@@ -514,21 +652,41 @@ if __name__ == "__main__":
             savefig=True
         )
     
+    # Plot 4: CTBO total cost over time
+    if "CTBO_cost_vec" in array_outcomes:
+        print("Plotting CTBO total cost over time")
+        plot_ctbo_total_cost(
+            combined_df,
+            array_outcomes,
+            ylabel="Total CTBO Cost (MEUR/yr)",
+            title="Total CTBO Cost Over Time by ETS Scenario"
+        )
+    
+    # Plot 5: CSU cost with ETS prices overlay
+    if "CSU_cost_vec" in array_outcomes:
+        print("Plotting CSU cost with ETS prices overlay")
+        plot_csu_cost_with_ets(
+            combined_df,
+            array_outcomes,
+            ylabel="Cost (EUR/tCO2)",
+            title="CSU Cost and ETS Price Over Time by ETS Scenario"
+        )
+    
     # # Plot 4: CCS capacity stack
     # plot_capacity_stack(combined_df, array_outcomes)
     
-    # Plot 5: Plant-level NPV
+    # Plot 6: Plant-level NPV
     if plant_names:
         plot_plant_npv(combined_df, array_outcomes, plant_names)
     
     # # Plot 6: NPV vs Investment Year
-    # plot_npv_vs_investment_year(combined_df, array_outcomes)
+    plot_npv_vs_investment_year(combined_df, array_outcomes, plant_names, plant_filter="fossil")
     
     # Plot 7: Fraction of positive NPV vs Investment Year (by ETS scenario)
-    plot_positive_npv_fraction(combined_df, array_outcomes)
+    # plot_positive_npv_fraction(combined_df, array_outcomes)
     
-    # Plot 8: Fraction of positive NPV vs Investment Year (boxplot, all data)
-    plot_positive_npv_fraction_boxplot(combined_df, array_outcomes, plant_names, plant_filter=None, ETS_filter=None)
+    # # Plot 8: Fraction of positive NPV vs Investment Year (boxplot, all data)
+    # plot_positive_npv_fraction_boxplot(combined_df, array_outcomes, plant_names, plant_filter=None, ETS_filter=None)
     
     # # Plot 9: Fraction of positive NPV - biogenic plants only (W2E/BECCS)
     # plot_positive_npv_fraction_boxplot(combined_df, array_outcomes, plant_names, plant_filter="biogenic", ETS_filter=None)

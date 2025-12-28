@@ -75,6 +75,8 @@ if __name__ == "__main__":
         ArrayOutcome("CDR_capacity_vec"),
         ArrayOutcome("total_emissions_vec"),
         ArrayOutcome("ctbo_mandate_vec"),
+        ArrayOutcome("CSU_cost_vec"),
+        ArrayOutcome("ets_prices"),
         ArrayOutcome("CTBO_cost_lev_vec"),
         ArrayOutcome("CTBO_cost_vec"),
         # Plant-level NPV outcomes (fixed order, NaN for non-invested plants)
