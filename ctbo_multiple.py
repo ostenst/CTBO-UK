@@ -935,9 +935,9 @@ def simulate_ctbo(
                 'ctbo_gross_profit': ctbo_gross_profit,
                 'ctbo_net_profit': ctbo_net_profit
             })
-    # Calculate NPV for each plant (fixed-order arrays based on MACC)
+    # Calculate NPV for each plant (fixed alphabetical order for consistent array indexing)
     plant_results = pd.DataFrame(plant_results)
-    all_plants = macc['site-stack'].tolist()  # Fixed order from MACC
+    all_plants = sorted(results_df['site-stack'].tolist())  # Alphabetical order (consistent across experiments)
     n_plants = len(all_plants)
     
     # Initialize arrays with NaN (for plants that didn't invest)
@@ -970,6 +970,26 @@ def simulate_ctbo(
             'npv_net_profit': npv_net_profit,
             'investment_year': investment_year,
         })
+    # DEBUG: Trace negative Drax NPV
+    drax_idx = all_plants.index('Drax-BECCS') if 'Drax-BECCS' in all_plants else None
+    if drax_idx is not None and plant_npv_net[drax_idx] < 0:
+        drax_data = plant_results[plant_results['plant'] == 'Drax-BECCS'].copy()
+        drax_cost = macc[macc['site-stack'] == 'Drax-BECCS']['EUR/tCO2'].values[0]
+        
+        print(f"\n{'='*60}")
+        print(f"DEBUG: Drax-BECCS has NEGATIVE NPV = {plant_npv_net[drax_idx]/1000:.1f} MEUR")
+        print(f"Drax CCS cost: {drax_cost:.1f} EUR/tCO2")
+        print(f"Drax investment year: {plant_investment_year[drax_idx]:.0f}")
+        print(f"DACCS cost (2025): {DACCS_costs[0]:.1f} EUR/tCO2")
+        print(f"DACCS cost (2050): {DACCS_costs[25]:.1f} EUR/tCO2")
+        
+        # Show years with negative ctbo_net_profit
+        neg_years = drax_data[drax_data['ctbo_net_profit'] < 0]
+        if len(neg_years) > 0:
+            print(f"\nYears with NEGATIVE ctbo_net_profit ({len(neg_years)} years):")
+            print(neg_years[['year', 'ETS_price', 'CSU_cost', 'CCS_cost', 
+                            'csu_gross_profit', 'csu_net_profit', 'ctbo_net_profit']].to_string())
+        print(f"{'='*60}\n")
 
     # Calculate consumer fuel price impacts
     carbon_price = np.array(CTBO_cost_lev_vec) / pounds_to_EUR  # [GBP/tCO2]

@@ -110,8 +110,8 @@ if __name__ == "__main__":
         Constant("elc_eff", 0.33),
     ]
 
-    n_scenarios = 30
-    n_policies = 20
+    n_scenarios = 20
+    n_policies = 10
 
     results = perform_experiments(
         model, 

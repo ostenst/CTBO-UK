@@ -590,6 +590,101 @@ def plot_npv_boxplot_by_year_range(combined_df, array_outcomes, plant_names=None
     plt.tight_layout()
 
 
+def plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names,
+                                   plant_suffix="-BECCS", ETS_filter=None, 
+                                   scenario_col="ETS_SCENARIO", debug=False):
+    """
+    Plot cumulative distribution curves of NPV for plants matching a suffix.
+    
+    Parameters:
+        plant_suffix: str, e.g. "-BECCS", "-W2E", "-CCGT", "-cement"
+        ETS_filter: None (all), or "Low"/"Medium"/"High"
+    """
+    if debug:
+        print(f"Plotting NPV cumulative curves (suffix={plant_suffix}, ETS={ETS_filter})")
+    
+    plant_npv_net = array_outcomes.get("plant_npv_net")
+    
+    if plant_npv_net is None or plant_names is None:
+        print("Warning: Missing plant NPV data")
+        return
+    
+    # Apply ETS filter if specified
+    if ETS_filter is not None:
+        ets_mask = combined_df[scenario_col] == ETS_filter
+        plant_npv_net = plant_npv_net[ets_mask.values]
+        if debug:
+            print(f"  Filtered to {ets_mask.sum()} experiments with ETS scenario '{ETS_filter}'")
+    
+    # Find plants matching the suffix
+    matching_indices = []
+    matching_names = []
+    for i, name in enumerate(plant_names):
+        if name.endswith(plant_suffix):
+            matching_indices.append(i)
+            matching_names.append(name)
+    
+    if len(matching_indices) == 0:
+        print(f"Warning: No plants found with suffix '{plant_suffix}'")
+        return
+    
+    if debug:
+        print(f"  Found {len(matching_indices)} plants with suffix '{plant_suffix}'")
+    
+    # Create color palette
+    n_plants = len(matching_indices)
+    colors = plt.cm.viridis(np.linspace(0.1, 0.9, n_plants))
+    
+    plt.figure(figsize=(10, 6))
+    
+    for idx, (plant_idx, plant_name) in enumerate(zip(matching_indices, matching_names)):
+        # Get NPV data for this plant across all (filtered) experiments
+        npv_data = plant_npv_net[:, plant_idx]
+        
+        # Remove NaN values (plant didn't invest in that experiment)
+        valid_npv = npv_data[~np.isnan(npv_data)] / 1000  # Convert to MEUR
+        
+        if len(valid_npv) == 0:
+            if debug:
+                print(f"    {plant_name}: No valid NPV data (never invested)")
+            continue
+        
+        # Sort for cumulative curve
+        sorted_npv = np.sort(valid_npv)
+        cumulative_frac = np.arange(1, len(sorted_npv) + 1) / len(sorted_npv)
+        
+        # Shorten plant name for legend (remove suffix)
+        short_name = plant_name.replace(plant_suffix, "")
+        
+        plt.plot(sorted_npv, cumulative_frac, label=short_name, 
+                 linewidth=2, color=colors[idx], alpha=0.8)
+        
+        if debug:
+            frac_positive = (valid_npv > 0).sum() / len(valid_npv)
+            print(f"    {plant_name}: {len(valid_npv)} experiments, "
+                  f"median={np.median(valid_npv):.1f} MEUR, {frac_positive:.0%} positive")
+    
+    # Add vertical line at NPV=0
+    plt.axvline(x=0, color='black', linestyle='--', linewidth=1, alpha=0.7)
+    
+    # Add horizontal line at 50%
+    plt.axhline(y=0.5, color='gray', linestyle=':', linewidth=0.5, alpha=0.5)
+    
+    plt.xlabel('NPV Net Profit (MEUR)', fontsize=13)
+    plt.ylabel('Cumulative Fraction of Scenarios', fontsize=13)
+    
+    # Title based on filters
+    title = f'NPV Cumulative Distribution ({plant_suffix} plants)'
+    if ETS_filter is not None:
+        title += f' [ETS: {ETS_filter}]'
+    
+    plt.title(title, fontsize=14)
+    plt.legend(fontsize=10, loc='lower right')
+    plt.ylim(0, 1.02)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+
 def plot_npv_vs_investment_year(combined_df, array_outcomes, plant_names=None,
                                  plant_filter="fossil", scenario_col="ETS_SCENARIO", debug=False):
     """Scatter plot of NPV vs investment year for individual plants across experiments."""
@@ -829,6 +924,26 @@ if __name__ == "__main__":
     # Load results
     combined_df, array_outcomes, plant_names = load_results(debug=True)
 
+    # Debug: Check Drax NPV directly
+    drax_idx = plant_names.index("Drax-BECCS") if "Drax-BECCS" in plant_names else None
+    if drax_idx is not None:
+        drax_npv = array_outcomes["plant_npv_net"][:, drax_idx]
+        drax_year = array_outcomes["plant_investment_year"][:, drax_idx]
+        
+        # Filter by ETS scenario
+        for ets in ["Low", "Medium", "High"]:
+            mask = combined_df["ETS_SCENARIO"] == ets
+            drax_npv_ets = drax_npv[mask.values]
+            valid = ~np.isnan(drax_npv_ets)
+            
+            print(f"\nDrax-BECCS NPV [{ets} ETS]:")
+            print(f"  N experiments: {valid.sum()}")
+            if valid.sum() > 0:
+                print(f"  Min: {drax_npv_ets[valid].min()/1000:.1f} MEUR")
+                print(f"  Max: {drax_npv_ets[valid].max()/1000:.1f} MEUR")
+                print(f"  Mean: {drax_npv_ets[valid].mean()/1000:.1f} MEUR")
+                print(f"  Negative count: {(drax_npv_ets[valid] < 0).sum()}")
+
     # In array_outcomes, check how many scenarios have negative gas_increase_pct in any year
     negative_gas_increase_pct = array_outcomes["gas_increase_pct"] < 0
     print(f"Number of scenarios with negative gas increase in any year: {negative_gas_increase_pct.sum()}")
@@ -894,10 +1009,18 @@ if __name__ == "__main__":
         plot_plant_npv(combined_df, array_outcomes, plant_names)
     
     # Plot 7: NPV boxplot by year range for CCGT plants
-    plot_npv_boxplot_by_year_range(combined_df, array_outcomes, plant_names, plant_suffix="-CCGT", ETS_filter="Low", debug=True)
+    plot_npv_boxplot_by_year_range(combined_df, array_outcomes, plant_names, plant_suffix="-CCGT", ETS_filter="High", debug=True)
     
     # Plot 8: NPV boxplot by plant type
     plot_npv_boxplot_by_plant_type(combined_df, array_outcomes, plant_names, ETS_filter="High", debug=True)
+    
+    # Plot 9: NPV cumulative distribution for BECCS plants
+    plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, plant_suffix="-BECCS", ETS_filter=None, debug=True)
+    
+    # Plot 10: NPV cumulative distribution for W2E plants
+    plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, plant_suffix="-W2E", ETS_filter=None, debug=True)
+    plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, plant_suffix="-CCGT", ETS_filter="Low", debug=True)
+
     
     # # Plot 9: Fraction of positive NPV vs Investment Year (by ETS scenario)
     # plot_positive_npv_fraction(combined_df, array_outcomes)
