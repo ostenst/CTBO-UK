@@ -592,6 +592,7 @@ def plot_npv_boxplot_by_year_range(combined_df, array_outcomes, plant_names=None
 
 def plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names,
                                    plant_suffix="-BECCS", ETS_filter=None, 
+                                   investment_year_filter=None, year_threshold=2040,
                                    scenario_col="ETS_SCENARIO", debug=False):
     """
     Plot cumulative distribution curves of NPV for plants matching a suffix.
@@ -599,11 +600,14 @@ def plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names,
     Parameters:
         plant_suffix: str, e.g. "-BECCS", "-W2E", "-CCGT", "-cement"
         ETS_filter: None (all), or "Low"/"Medium"/"High"
+        investment_year_filter: None (all), "before" (< threshold), or "after" (>= threshold)
+        year_threshold: int, year threshold for investment_year_filter (default 2040)
     """
     if debug:
-        print(f"Plotting NPV cumulative curves (suffix={plant_suffix}, ETS={ETS_filter})")
+        print(f"Plotting NPV cumulative curves (suffix={plant_suffix}, ETS={ETS_filter}, year_filter={investment_year_filter})")
     
     plant_npv_net = array_outcomes.get("plant_npv_net")
+    plant_inv_year = array_outcomes.get("plant_investment_year")
     
     if plant_npv_net is None or plant_names is None:
         print("Warning: Missing plant NPV data")
@@ -613,6 +617,8 @@ def plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names,
     if ETS_filter is not None:
         ets_mask = combined_df[scenario_col] == ETS_filter
         plant_npv_net = plant_npv_net[ets_mask.values]
+        if plant_inv_year is not None:
+            plant_inv_year = plant_inv_year[ets_mask.values]
         if debug:
             print(f"  Filtered to {ets_mask.sum()} experiments with ETS scenario '{ETS_filter}'")
     
@@ -641,12 +647,26 @@ def plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names,
         # Get NPV data for this plant across all (filtered) experiments
         npv_data = plant_npv_net[:, plant_idx]
         
-        # Remove NaN values (plant didn't invest in that experiment)
+        # Apply investment year filter if specified
+        if investment_year_filter is not None and plant_inv_year is not None:
+            inv_year_data = plant_inv_year[:, plant_idx]
+            
+            if investment_year_filter == "before":
+                year_mask = inv_year_data < year_threshold
+            elif investment_year_filter == "after":
+                year_mask = inv_year_data >= year_threshold
+            else:
+                year_mask = np.ones(len(inv_year_data), dtype=bool)
+            
+            # Apply mask (keep NaN as NaN)
+            npv_data = np.where(year_mask | np.isnan(inv_year_data), npv_data, np.nan)
+        
+        # Remove NaN values (plant didn't invest or filtered out by year)
         valid_npv = npv_data[~np.isnan(npv_data)] / 1000  # Convert to MEUR
         
         if len(valid_npv) == 0:
             if debug:
-                print(f"    {plant_name}: No valid NPV data (never invested)")
+                print(f"    {plant_name}: No valid NPV data (never invested or filtered out)")
             continue
         
         # Sort for cumulative curve
@@ -677,6 +697,11 @@ def plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names,
     title = f'NPV Cumulative Distribution ({plant_suffix} plants)'
     if ETS_filter is not None:
         title += f' [ETS: {ETS_filter}]'
+    if investment_year_filter is not None:
+        if investment_year_filter == "before":
+            title += f' [Invest < {year_threshold}]'
+        elif investment_year_filter == "after":
+            title += f' [Invest ≥ {year_threshold}]'
     
     plt.title(title, fontsize=14)
     plt.legend(fontsize=10, loc='lower right')
@@ -1015,26 +1040,36 @@ if __name__ == "__main__":
     plot_npv_boxplot_by_plant_type(combined_df, array_outcomes, plant_names, ETS_filter="High", debug=True)
     
     # Plot 9: NPV cumulative distribution for BECCS plants
-    plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, plant_suffix="-BECCS", ETS_filter=None, debug=True)
+    plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, 
+                                   plant_suffix="-BECCS", ETS_filter=None, debug=True)
     
     # Plot 10: NPV cumulative distribution for W2E plants
-    plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, plant_suffix="-W2E", ETS_filter=None, debug=True)
-    plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, plant_suffix="-CCGT", ETS_filter="Low", debug=True)
+    plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, 
+                                   plant_suffix="-W2E", ETS_filter=None, debug=True)
+    
+    # Plot 11: NPV cumulative distribution for CCGT plants (High ETS)
+    plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, 
+                                   plant_suffix="-CCGT", ETS_filter="High", debug=True)
+    
+    # Plot 12: NPV cumulative distribution for CCGT plants invested before 2040
+    plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, 
+                                   plant_suffix="-CCGT", ETS_filter=None, 
+                                   investment_year_filter="after", year_threshold=2040, debug=True)
 
     
-    # # Plot 9: Fraction of positive NPV vs Investment Year (by ETS scenario)
+    # # Fraction of positive NPV vs Investment Year (by ETS scenario)
     # plot_positive_npv_fraction(combined_df, array_outcomes)
     
-    # # Plot 8: Fraction of positive NPV vs Investment Year (boxplot, all data)
+    # # Fraction of positive NPV vs Investment Year (boxplot, all data)
     # plot_positive_npv_fraction_boxplot(combined_df, array_outcomes, plant_names, plant_filter=None, ETS_filter=None)
     
-    # # Plot 9: Fraction of positive NPV - biogenic plants only (W2E/BECCS)
+    # # Fraction of positive NPV - biogenic plants only (W2E/BECCS)
     # plot_positive_npv_fraction_boxplot(combined_df, array_outcomes, plant_names, plant_filter="biogenic", ETS_filter=None)
     
-    # Plot 10: Fraction of positive NPV - fossil plants only
+    # Fraction of positive NPV - fossil plants only
     plot_positive_npv_fraction_boxplot(combined_df, array_outcomes, plant_names, plant_filter="fossil", ETS_filter=None)
     
-    # Plot 11: Carbon balance (supplied, emissions, mandate)
+    # Carbon balance (supplied, emissions, mandate)
     plot_carbon_balance(combined_df, array_outcomes)
     
     plt.show()
