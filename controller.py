@@ -83,6 +83,7 @@ if __name__ == "__main__":
         ArrayOutcome("plant_npv_net"),          # [kEUR] Net NPV per plant
         ArrayOutcome("plant_npv_gross"),        # [kEUR] Gross NPV per plant
         ArrayOutcome("plant_investment_year"),  # [year] Investment year per plant
+        ArrayOutcome("plant_captured_total"),   # [ktCO2/yr] Total captured CO2 per plant
     ]
 
     # Constants: fixed parameters for all runs
@@ -110,8 +111,8 @@ if __name__ == "__main__":
         Constant("elc_eff", 0.33),
     ]
 
-    n_scenarios = 20
-    n_policies = 10
+    n_scenarios = 10
+    n_policies = 5
 
     results = perform_experiments(
         model, 

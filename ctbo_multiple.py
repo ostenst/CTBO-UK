@@ -944,6 +944,7 @@ def simulate_ctbo(
     plant_npv_net = np.full(n_plants, np.nan)
     plant_npv_gross = np.full(n_plants, np.nan)
     plant_investment_year = np.full(n_plants, np.nan)
+    plant_captured_total = np.full(n_plants, np.nan)
     
     plant_npv = []  # Keep dict version for backwards compatibility
     for i, plant_name in enumerate(all_plants):
@@ -962,6 +963,7 @@ def simulate_ctbo(
         plant_npv_net[i] = npv_net_profit
         plant_npv_gross[i] = npv_gross_profit
         plant_investment_year[i] = investment_year
+        plant_captured_total[i] = plant_data['CO2_captured_fossil'].sum() + plant_data['CO2_captured_bio'].sum()
         
         # Keep dict version
         plant_npv.append({
@@ -1027,6 +1029,7 @@ def simulate_ctbo(
     results['plant_npv_net'] = plant_npv_net                 # [kEUR] NPV net profit per plant
     results['plant_npv_gross'] = plant_npv_gross             # [kEUR] NPV gross profit per plant
     results['plant_investment_year'] = plant_investment_year # [year] Investment year per plant
+    results['plant_captured_total'] = plant_captured_total # [ktCO2/yr] Total captured CO2 per plant
     # Fuel price impacts
     results['diesel_increase_abs'] = diesel_increase_abs  # [pence/L] time series
     results['petrol_increase_abs'] = petrol_increase_abs  # [pence/L] time series
