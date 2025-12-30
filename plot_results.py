@@ -710,6 +710,157 @@ def plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names,
     plt.tight_layout()
 
 
+def plot_npv_cumulative_by_suffixes(combined_df, array_outcomes, plant_names,
+                                     plant_suffixes=["-cement", "-crackers"], 
+                                     ETS_filter=None, investment_year_filter=None, 
+                                     year_threshold=2040, scenario_col="ETS_SCENARIO", debug=False):
+    """
+    Plot cumulative distribution curves of NPV for plants matching multiple suffixes.
+    
+    Parameters:
+        plant_suffixes: list of str, e.g. ["-cement", "-crackers", "-distillation"]
+        ETS_filter: None (all), or "Low"/"Medium"/"High"
+        investment_year_filter: None (all), "before" (< threshold), or "after" (>= threshold)
+        year_threshold: int, year threshold for investment_year_filter (default 2040)
+    """
+    if debug:
+        print(f"Plotting NPV cumulative curves (suffixes={plant_suffixes}, ETS={ETS_filter}, year_filter={investment_year_filter})")
+    
+    plant_npv_net = array_outcomes.get("plant_npv_net")
+    plant_inv_year = array_outcomes.get("plant_investment_year")
+    
+    if plant_npv_net is None or plant_names is None:
+        print("Warning: Missing plant NPV data")
+        return
+    
+    # Apply ETS filter if specified
+    if ETS_filter is not None:
+        ets_mask = combined_df[scenario_col] == ETS_filter
+        plant_npv_net = plant_npv_net[ets_mask.values]
+        if plant_inv_year is not None:
+            plant_inv_year = plant_inv_year[ets_mask.values]
+        if debug:
+            print(f"  Filtered to {ets_mask.sum()} experiments with ETS scenario '{ETS_filter}'")
+    
+    # Find plants matching any of the suffixes
+    matching_indices = []
+    matching_names = []
+    matching_suffixes = []
+    for i, name in enumerate(plant_names):
+        for suffix in plant_suffixes:
+            if name.endswith(suffix):
+                matching_indices.append(i)
+                matching_names.append(name)
+                matching_suffixes.append(suffix)
+                break
+    
+    if len(matching_indices) == 0:
+        print(f"Warning: No plants found with suffixes {plant_suffixes}")
+        return
+    
+    if debug:
+        print(f"  Found {len(matching_indices)} plant-stacks with suffixes {plant_suffixes}")
+    
+    # Define color scheme by sector
+    refinery_suffixes = ["-crackers", "-distillation", "-power", "-smr", "-remaining"]
+    cement_suffixes = ["-cement"]
+    ironSteel_suffixes = ["-stove", "-chp", "-sinter"]
+    
+    def get_color_for_suffix(suffix):
+        if suffix in refinery_suffixes:
+            return 'red'
+        elif suffix in cement_suffixes:
+            return 'green'
+        elif suffix in ironSteel_suffixes:
+            return 'blue'
+        else:
+            return 'gray'
+    
+    plt.figure(figsize=(12, 7))
+    
+    # Track which sector types have been added to legend
+    legend_added = set()
+    
+    for plant_idx, plant_name, suffix in zip(matching_indices, matching_names, matching_suffixes):
+        color = get_color_for_suffix(suffix)
+        
+        # Determine sector label for legend
+        if suffix in refinery_suffixes:
+            sector_label = "Refinery stacks with CCS"
+        elif suffix in cement_suffixes:
+            sector_label = "Cement stacks with CCS"
+        elif suffix in ironSteel_suffixes:
+            sector_label = "Scunthorpe stacks with CCS"
+        else:
+            sector_label = "Other"
+        # Get NPV data for this plant-stack across all (filtered) experiments
+        npv_data = plant_npv_net[:, plant_idx]
+        
+        # Apply investment year filter if specified
+        if investment_year_filter is not None and plant_inv_year is not None:
+            inv_year_data = plant_inv_year[:, plant_idx]
+            
+            if investment_year_filter == "before":
+                year_mask = inv_year_data < year_threshold
+            elif investment_year_filter == "after":
+                year_mask = inv_year_data >= year_threshold
+            else:
+                year_mask = np.ones(len(inv_year_data), dtype=bool)
+            
+            # Apply mask (keep NaN as NaN)
+            npv_data = np.where(year_mask | np.isnan(inv_year_data), npv_data, np.nan)
+        
+        # Remove NaN values (plant didn't invest or filtered out by year)
+        valid_npv = npv_data[~np.isnan(npv_data)] / 1000  # Convert to MEUR
+        
+        if len(valid_npv) == 0:
+            if debug:
+                print(f"    {plant_name}: No valid NPV data (never invested or filtered out)")
+            continue
+        
+        # Sort for cumulative curve
+        sorted_npv = np.sort(valid_npv)
+        cumulative_frac = np.arange(1, len(sorted_npv) + 1) / len(sorted_npv)
+        
+        # Add to legend only once per sector
+        label = sector_label if sector_label not in legend_added else None
+        if sector_label not in legend_added:
+            legend_added.add(sector_label)
+        
+        plt.plot(sorted_npv, cumulative_frac, label=label, 
+                 linewidth=2, color=color, alpha=0.6)
+        
+        if debug:
+            frac_positive = (valid_npv > 0).sum() / len(valid_npv)
+            print(f"    {plant_name}: {len(valid_npv)} experiments, "
+                  f"median={np.median(valid_npv):.1f} MEUR, {frac_positive:.0%} positive")
+    
+    # Add vertical line at NPV=0
+    plt.axvline(x=0, color='black', linestyle='--', linewidth=1, alpha=0.7)
+    
+    # Add horizontal line at 50%
+    plt.axhline(y=0.5, color='gray', linestyle=':', linewidth=0.5, alpha=0.5)
+    
+    plt.xlabel('NPV Net Profit (MEUR)', fontsize=13)
+    plt.ylabel('Cumulative Fraction of Scenarios', fontsize=13)
+    
+    # Title based on filters
+    title = f'NPV Cumulative Distribution (Industrial plants)'
+    if ETS_filter is not None:
+        title += f' [ETS: {ETS_filter}]'
+    if investment_year_filter is not None:
+        if investment_year_filter == "before":
+            title += f' [Invest < {year_threshold}]'
+        elif investment_year_filter == "after":
+            title += f' [Invest ≥ {year_threshold}]'
+    
+    plt.title(title, fontsize=14)
+    plt.legend(fontsize=11, loc='lower right')
+    plt.ylim(0, 1.02)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+
 def plot_npv_vs_investment_year(combined_df, array_outcomes, plant_names=None,
                                  plant_filter="fossil", scenario_col="ETS_SCENARIO", debug=False):
     """Scatter plot of NPV vs investment year for individual plants across experiments."""
@@ -978,13 +1129,13 @@ if __name__ == "__main__":
     if plant_names:
         print(f"Plants: {len(plant_names)}")
     
-    # Plot 1: Boxplot of gas increase in 2040
-    plot_boxplot_by_scenario(
-        combined_df, 
-        outcome_col="gas_increase_pct_2040",
-        ylabel="Gas Price Increase (%) in 2040",
-        title="Gas Price Increase in 2040 by ETS Scenario"
-    )
+    # # Plot 1: Boxplot of gas increase in 2040
+    # plot_boxplot_by_scenario(
+    #     combined_df, 
+    #     outcome_col="gas_increase_pct_2040",
+    #     ylabel="Gas Price Increase (%) in 2040",
+    #     title="Gas Price Increase in 2040 by ETS Scenario"
+    # )
     
     # Plot 2: Gas increase percentage over time
     if "gas_increase_pct" in array_outcomes:
@@ -1029,9 +1180,9 @@ if __name__ == "__main__":
     # # Plot 4: CCS capacity stack
     # plot_capacity_stack(combined_df, array_outcomes)
     
-    # Plot 6: Plant-level NPV
-    if plant_names:
-        plot_plant_npv(combined_df, array_outcomes, plant_names)
+    # # Plot 6: Plant-level NPV
+    # if plant_names:
+    #     plot_plant_npv(combined_df, array_outcomes, plant_names)
     
     # Plot 7: NPV boxplot by year range for CCGT plants
     plot_npv_boxplot_by_year_range(combined_df, array_outcomes, plant_names, plant_suffix="-CCGT", ETS_filter="High", debug=True)
@@ -1055,6 +1206,13 @@ if __name__ == "__main__":
     plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, 
                                    plant_suffix="-CCGT", ETS_filter=None, 
                                    investment_year_filter="after", year_threshold=2040, debug=True)
+    
+    # Plot 13: NPV cumulative distribution for industrial plants (refineries, iron & steel, cement)
+    industrial_suffixes = ["-cement", "-crackers", "-distillation", "-power", "-remaining", 
+                          "-smr", "-stove", "-chp", "-sinter"]
+    plot_npv_cumulative_by_suffixes(combined_df, array_outcomes, plant_names, 
+                                     plant_suffixes=industrial_suffixes, 
+                                     ETS_filter=None, debug=True)
 
     
     # # Fraction of positive NPV vs Investment Year (by ETS scenario)
