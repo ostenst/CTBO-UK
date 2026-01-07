@@ -401,13 +401,15 @@ def plot_npv_boxplot_by_plant_type(combined_df, array_outcomes, plant_names=None
         if debug:
             print(f"  Filtered to {ets_mask.sum()} experiments with ETS scenario '{ETS_filter}'")
     
-    # Calculate average captured CO2 per plant across all experiments
-    avg_captured_per_plant = np.nanmean(plant_captured_total, axis=0)
+    # Calculate median captured CO2 per plant across all experiments
+    avg_captured_per_plant = np.nanmedian(plant_captured_total, axis=0)
+    avg_npv_per_plant = np.nanmedian(plant_npv_net, axis=0)
+    avg_inv_year_per_plant = np.nanmedian(plant_inv_year, axis=0)
     
     # Define plant type categories
     plant_types = [
         ("-CCGT", "CCGT"),
-        ("-cement", "Cement"),
+        # ("other"),
         ("-W2E", "W2E"),
         ("-BECCS", "BECCS"),
     ]
@@ -482,53 +484,53 @@ def plot_npv_boxplot_by_plant_type(combined_df, array_outcomes, plant_names=None
                 if debug:
                     print(f"  {label}: 1 plant, {frac_positive:.2%} positive")
     
-    # Process "industry" category (remaining plants), also split by size
-    matched_mask = np.zeros(len(plant_names), dtype=bool)
-    for suffix, _ in plant_types:
-        matched_mask |= np.array([name.endswith(suffix) for name in plant_names])
+    # # Process "industry" category (remaining plants), also split by size
+    # matched_mask = np.zeros(len(plant_names), dtype=bool)
+    # for suffix, _ in plant_types:
+    #     matched_mask |= np.array([name.endswith(suffix) for name in plant_names])
     
-    industry_mask = ~matched_mask
-    if industry_mask.sum() > 1:
-        captured_for_industry = avg_captured_per_plant[industry_mask]
-        median_captured = np.nanmedian(captured_for_industry)
+    # industry_mask = ~matched_mask
+    # if industry_mask.sum() > 1:
+    #     captured_for_industry = avg_captured_per_plant[industry_mask]
+    #     median_captured = np.nanmedian(captured_for_industry)
         
-        industry_indices = np.where(industry_mask)[0]
-        small_indices = [i for i in industry_indices if avg_captured_per_plant[i] < median_captured]
-        large_indices = [i for i in industry_indices if avg_captured_per_plant[i] >= median_captured]
+    #     industry_indices = np.where(industry_mask)[0]
+    #     small_indices = [i for i in industry_indices if avg_captured_per_plant[i] < median_captured]
+    #     large_indices = [i for i in industry_indices if avg_captured_per_plant[i] >= median_captured]
         
-        # Process small industry plants
-        if len(small_indices) > 0:
-            small_mask = np.zeros(len(plant_names), dtype=bool)
-            small_mask[small_indices] = True
-            plant_npv_filtered = plant_npv_net[:, small_mask]
-            npv_flat = plant_npv_filtered.flatten()
-            valid_mask = ~np.isnan(npv_flat)
-            npv_valid = npv_flat[valid_mask] / 1000
+    #     # Process small industry plants
+    #     if len(small_indices) > 0:
+    #         small_mask = np.zeros(len(plant_names), dtype=bool)
+    #         small_mask[small_indices] = True
+    #         plant_npv_filtered = plant_npv_net[:, small_mask]
+    #         npv_flat = plant_npv_filtered.flatten()
+    #         valid_mask = ~np.isnan(npv_flat)
+    #         npv_valid = npv_flat[valid_mask] / 1000
             
-            if len(npv_valid) > 0:
-                boxplot_data.append(npv_valid)
-                labels.append(f"Industry\n<{median_captured:.0f} ktCO2/yr")
-                frac_positive = (npv_valid > 0).sum() / len(npv_valid)
-                fractions_positive.append(frac_positive)
-                if debug:
-                    print(f"  Industry (<{median_captured:.0f} ktCO2/yr): {len(small_indices)} plants, {frac_positive:.2%} positive")
+    #         if len(npv_valid) > 0:
+    #             boxplot_data.append(npv_valid)
+    #             labels.append(f"Industry\n<{median_captured:.0f} ktCO2/yr")
+    #             frac_positive = (npv_valid > 0).sum() / len(npv_valid)
+    #             fractions_positive.append(frac_positive)
+    #             if debug:
+    #                 print(f"  Industry (<{median_captured:.0f} ktCO2/yr): {len(small_indices)} plants, {frac_positive:.2%} positive")
         
-        # Process large industry plants
-        if len(large_indices) > 0:
-            large_mask = np.zeros(len(plant_names), dtype=bool)
-            large_mask[large_indices] = True
-            plant_npv_filtered = plant_npv_net[:, large_mask]
-            npv_flat = plant_npv_filtered.flatten()
-            valid_mask = ~np.isnan(npv_flat)
-            npv_valid = npv_flat[valid_mask] / 1000
+    #     # Process large industry plants
+    #     if len(large_indices) > 0:
+    #         large_mask = np.zeros(len(plant_names), dtype=bool)
+    #         large_mask[large_indices] = True
+    #         plant_npv_filtered = plant_npv_net[:, large_mask]
+    #         npv_flat = plant_npv_filtered.flatten()
+    #         valid_mask = ~np.isnan(npv_flat)
+    #         npv_valid = npv_flat[valid_mask] / 1000
             
-            if len(npv_valid) > 0:
-                boxplot_data.append(npv_valid)
-                labels.append(f"Industry\n≥{median_captured:.0f} ktCO2/yr")
-                frac_positive = (npv_valid > 0).sum() / len(npv_valid)
-                fractions_positive.append(frac_positive)
-                if debug:
-                    print(f"  Industry (≥{median_captured:.0f} ktCO2/yr): {len(large_indices)} plants, {frac_positive:.2%} positive")
+    #         if len(npv_valid) > 0:
+    #             boxplot_data.append(npv_valid)
+    #             labels.append(f"Industry\n≥{median_captured:.0f} ktCO2/yr")
+    #             frac_positive = (npv_valid > 0).sum() / len(npv_valid)
+    #             fractions_positive.append(frac_positive)
+    #             if debug:
+    #                 print(f"  Industry (≥{median_captured:.0f} ktCO2/yr): {len(large_indices)} plants, {frac_positive:.2%} positive")
     
     magma = plt.cm.magma
     
@@ -562,7 +564,169 @@ def plot_npv_boxplot_by_plant_type(combined_df, array_outcomes, plant_names=None
     plt.grid(True, alpha=0.3, axis='y')
     plt.tight_layout()
 
+def plot_npv_bubbles(combined_df, array_outcomes, plant_names=None,
+                                    ETS_filter=None, scenario_col="ETS_SCENARIO", debug=False):
+    """Scatter plot of NPV vs investment year for individual plants across experiments."""
+    if debug:
+        print(f"Plotting NPV boxplot by plant type and size (ETS={ETS_filter})")
+    
+    plant_npv_net = array_outcomes.get("plant_npv_net")
+    plant_inv_year = array_outcomes.get("plant_investment_year")
+    plant_captured_total = array_outcomes.get("plant_captured_total")
+    
+    if plant_npv_net is None or plant_captured_total is None or plant_names is None:
+        print("Warning: Missing plant NPV or captured CO2 data")
+        return
+    
+    # Create ETS mask based on filter
+    if ETS_filter is not None:
+        ets_mask = combined_df[scenario_col] == ETS_filter
+        plant_npv_net = plant_npv_net[ets_mask.values]
+        if plant_inv_year is not None:
+            plant_inv_year = plant_inv_year[ets_mask.values]
+        plant_captured_total = plant_captured_total[ets_mask.values]
+        if debug:
+            print(f"  Filtered to {ets_mask.sum()} experiments with ETS scenario '{ETS_filter}'")
+    
+    # Calculate median captured CO2 per plant across all experiments
+    avg_captured_per_plant = np.nanmean(plant_captured_total, axis=0)
+    avg_npv_per_plant = np.nanmean(plant_npv_net, axis=0)
+    avg_inv_year_per_plant = np.nanmean(plant_inv_year, axis=0)
+    
+    # Define plant type categories
+    plant_types = [
+        ("-CCGT", "CCGT"),
+        # ("other"),
+        ("-W2E", "W2E"),
+        # ("-BECCS", "BECCS"),
+    ]
+ 
+    # Collect NPV data for each plant type, split by size
+    boxplot_data = []
+    labels = []
+    fractions_positive = []
 
+    fig, ax = plt.subplots(figsize=(10, 7))
+
+    # Explicitly included plant types (BECCS intentionally omitted)
+    plant_types = [
+        ("-CCGT", "CCGT"),
+        ("-W2E", "W2E"),
+    ]
+
+    remainder_label = "Industry stacks"
+    magma = plt.cm.magma
+    remainder_color = magma(0.6)
+
+    plant_type_colors = {
+        "CCGT": magma(0.2),
+        "W2E": magma(1.0),
+        remainder_label: remainder_color,
+    }
+
+    assigned_mask = np.zeros(len(plant_names), dtype=bool)
+
+    size_scale = 0.025
+
+    # Plot explicitly defined plant types
+    for suffix, label in plant_types:
+        plant_mask = np.array([name.endswith(suffix) for name in plant_names])
+        if not plant_mask.any():
+            continue
+
+        assigned_mask |= plant_mask
+
+        ax.scatter(
+            avg_inv_year_per_plant[plant_mask],   # x = investment year
+            avg_npv_per_plant[plant_mask],        # y = NPV
+            s=avg_captured_per_plant[plant_mask] * size_scale,
+            alpha=0.6,
+            color=plant_type_colors[label],
+            edgecolor="black",
+            linewidth=0.5,
+            label=label
+        )
+
+    # ------------------------------------------------------------------
+    # Remainder category (excluding BECCS)
+    # ------------------------------------------------------------------
+
+    beccs_mask = np.array([name.endswith("-BECCS") for name in plant_names])
+    remainder_mask = (~assigned_mask) & (~beccs_mask)
+
+    if remainder_mask.any():
+        ax.scatter(
+            avg_inv_year_per_plant[remainder_mask],
+            avg_npv_per_plant[remainder_mask],
+            s=avg_captured_per_plant[remainder_mask] * size_scale,
+            alpha=0.6,
+            color=remainder_color,
+            edgecolor="black",
+            linewidth=0.5,
+            label=remainder_label
+        )
+
+    # ------------------------------------------------------------------
+    # Formatting
+    # ------------------------------------------------------------------
+
+    ax.set_xlabel("Mean investment year")
+    ax.set_ylabel("Mean NPV")
+    ax.set_title("Plant-level NPV vs Investment Year\nBubble size = median captured CO₂")
+
+    ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5, alpha=0.9)
+
+    xticks = np.arange(2025, 2051, 5)
+    ax.set_xticks(xticks)
+    ax.set_xticklabels([str(y) for y in xticks])
+
+    ax.set_xlim(2024, 2051)
+
+    ax.legend(title="Plant type")
+    ax.grid(True, linestyle="--", alpha=0.4)
+
+    plt.tight_layout()
+
+    # Add one for Drax BECCS
+    if beccs_mask.any():
+        fig_beccs, ax_beccs = plt.subplots(figsize=(10, 7))
+
+        ax_beccs.scatter(
+            avg_inv_year_per_plant[beccs_mask],
+            avg_npv_per_plant[beccs_mask],
+            s=avg_captured_per_plant[beccs_mask] * size_scale,
+            alpha=0.6,
+            color=magma(0.9),
+            edgecolor="black",
+            linewidth=0.5,
+            label="BECCS"
+        )
+
+        # Axis formatting (match main figure)
+        beccs_years = avg_inv_year_per_plant[beccs_mask]
+        beccs_years = beccs_years[~np.isnan(beccs_years)]
+
+        if len(beccs_years) > 0:
+            min_year = int(np.floor(beccs_years.min() / 5) * 5)
+            max_year = int(np.ceil(beccs_years.max() / 5) * 5)
+
+            xticks = np.arange(min_year, max_year + 1, 5)
+            ax_beccs.set_xticks(xticks)
+            ax_beccs.set_xticklabels([str(y) for y in xticks])
+            ax_beccs.set_xlim(min_year - 1, max_year + 1)
+
+        ax_beccs.set_xlabel("Median investment year")
+        ax_beccs.set_ylabel("Median NPV")
+        ax_beccs.set_title(
+            "BECCS plants: NPV vs Investment Year\n"
+            "Bubble size = median captured CO₂"
+        )
+
+        ax_beccs.legend()
+        ax_beccs.grid(True, linestyle="--", alpha=0.4)
+
+        plt.tight_layout()
+    
 def plot_npv_boxplot_by_year_range(combined_df, array_outcomes, plant_names=None,
                                     plant_suffix="-CCGT", ETS_filter=None, scenario_col="ETS_SCENARIO", debug=False):
     """Boxplot of NPV for plants with specific suffix, grouped by investment year ranges."""
@@ -1269,6 +1433,8 @@ if __name__ == "__main__":
     
     # Plot 8: NPV boxplot by plant type
     plot_npv_boxplot_by_plant_type(combined_df, array_outcomes, plant_names, ETS_filter="High", debug=True)
+
+    plot_npv_bubbles(combined_df, array_outcomes, plant_names, ETS_filter="Low", debug=True)
     
     # Plot 9: NPV cumulative distribution for BECCS plants
     plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, 
