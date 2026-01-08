@@ -89,7 +89,7 @@ def plot_timeseries_by_scenario(combined_df, array_data, scenario_col="ETS_SCENA
     ets_colors = {"Low": magma(0.1), "Medium": magma(0.5), "High": magma(0.9)}
     years = np.arange(start_year, start_year + array_data.shape[1])
     
-    plt.figure(figsize=(5, 6))
+    plt.figure(figsize=(10, 6))
     for category in ["Low", "Medium", "High"]:
         mask = combined_df[scenario_col] == category
         if mask.sum() == 0:
@@ -100,18 +100,19 @@ def plot_timeseries_by_scenario(combined_df, array_data, scenario_col="ETS_SCENA
         std_vals = category_data.std(axis=0)
         color = ets_colors[category]
         
-        plt.plot(years, mean_vals, label=category, linewidth=2, color=color)
+        label_dict = {"Low": "ETS=200", "Medium": "ETS=300", "High": "ETS=400"}
+        plt.plot(years, mean_vals, label=f'If {label_dict[category]}£ by 2050', linewidth=2, color=color)
         plt.fill_between(years, mean_vals - std_vals, mean_vals + std_vals, 
                          alpha=0.2, color=color)
     
     plt.xlabel('Year', fontsize=13)
     plt.ylabel(ylabel or 'Value', fontsize=13)
+    plt.xlim(start_year, 2050)
     plt.title(title or 'Time Series by ETS Scenario', fontsize=14)
-    plt.legend(fontsize=11, title='ETS Scenario')
+    plt.legend(fontsize=11)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    if savefig:
-        plt.savefig(f'4_{title}.png', dpi=300)
+    plt.savefig(f'7_{title}.png', dpi=400)
 
 
 def plot_ctbo_total_cost(combined_df, array_outcomes, scenario_col="ETS_SCENARIO",
@@ -130,7 +131,7 @@ def plot_ctbo_total_cost(combined_df, array_outcomes, scenario_col="ETS_SCENARIO
     ets_colors = {"Low": magma(0.1), "Medium": magma(0.5), "High": magma(0.9)}
     years = np.arange(start_year, start_year + ctbo_cost.shape[1])
     
-    plt.figure(figsize=(5, 6))
+    plt.figure(figsize=(10, 6))
     for category in ["Low", "Medium", "High"]:
         mask = combined_df[scenario_col] == category
         if mask.sum() == 0:
@@ -141,16 +142,19 @@ def plot_ctbo_total_cost(combined_df, array_outcomes, scenario_col="ETS_SCENARIO
         std_vals = category_data.std(axis=0)
         color = ets_colors[category]
         
-        plt.plot(years, mean_vals, label=category, linewidth=2, color=color)
+        label_dict = {"Low": "ETS=200", "Medium": "ETS=300", "High": "ETS=400"}
+        plt.plot(years, mean_vals, label=f'If {label_dict[category]}£ by 2050', linewidth=2, color=color)
         plt.fill_between(years, mean_vals - std_vals, mean_vals + std_vals, 
                          alpha=0.2, color=color)
     
     plt.xlabel('Year', fontsize=13)
-    plt.ylabel(ylabel or 'Total CTBO Cost (MEUR/yr)', fontsize=13)
+    plt.ylabel(ylabel or 'Fuel supplier costs [MEUR/yr]', fontsize=13)
+    plt.xlim(start_year, 2050)
     plt.title(title or 'Total CTBO Cost Over Time by ETS Scenario', fontsize=14)
-    plt.legend(fontsize=11, title='ETS Scenario')
+    plt.legend(fontsize=11)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
+    plt.savefig(f'8_{title}.png', dpi=400)
 
 
 def plot_csu_cost_with_ets(combined_df, array_outcomes, scenario_col="ETS_SCENARIO",
@@ -167,7 +171,7 @@ def plot_csu_cost_with_ets(combined_df, array_outcomes, scenario_col="ETS_SCENAR
         return
     
     magma = plt.cm.magma
-    ets_colors = {"Low": magma(0.1), "Medium": '#107E7D', "High": magma(0.9)}
+    ets_colors = {"Low": magma(0.1), "Medium": magma(0.5), "High": magma(0.9)}
     years = np.arange(start_year, start_year + csu_cost.shape[1])
     
     plt.figure(figsize=(10, 6))
@@ -183,7 +187,8 @@ def plot_csu_cost_with_ets(combined_df, array_outcomes, scenario_col="ETS_SCENAR
         std_vals = category_data.std(axis=0)
         color = ets_colors[category]
         
-        plt.plot(years, mean_vals, label=f'CSU Cost ({category})', linewidth=2, color=color)
+        label_dict = {"Low": "ETS=200", "Medium": "ETS=300", "High": "ETS=400"}
+        plt.plot(years, mean_vals, label=f'CSU cost if {label_dict[category]}£', linewidth=2, color=color)
         plt.fill_between(years, mean_vals - std_vals, mean_vals + std_vals, 
                          alpha=0.2, color=color)
     
@@ -197,15 +202,17 @@ def plot_csu_cost_with_ets(combined_df, array_outcomes, scenario_col="ETS_SCENAR
             mean_ets = category_ets.mean(axis=0)
             color = ets_colors[category]
             
-            plt.plot(years, mean_ets, label=f'ETS Price ({category})', 
+            plt.plot(years, mean_ets, label=f'{label_dict[category]}£ by 2050', 
                      linewidth=2, linestyle='--', color=color, alpha=0.7)
     
     plt.xlabel('Year', fontsize=13)
-    plt.ylabel(ylabel or 'Cost (EUR/tCO2)', fontsize=13)
+    plt.ylabel('CSU/ETS price [€/tCO2]', fontsize=13)
+    plt.xlim(start_year, 2050)
     plt.title(title or 'CSU Cost and ETS Price Over Time by ETS Scenario', fontsize=14)
-    plt.legend(fontsize=10, title='Scenario', ncol=2)
+    plt.legend(fontsize=10, title=None, ncol=2)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
+    plt.savefig(f'9_{title}.png', dpi=400)
 
 
 def plot_carbon_balance(combined_df, array_outcomes, start_year=2025, debug=False):
@@ -213,10 +220,11 @@ def plot_carbon_balance(combined_df, array_outcomes, start_year=2025, debug=Fals
     if debug:
         print("Plotting carbon balance")
     
-    supplied = array_outcomes.get("supplied_CO2_vec")
-    emissions = array_outcomes.get("total_emissions_vec")
-    mandate = array_outcomes.get("ctbo_mandate_vec")
-    CDR = array_outcomes.get("CDR_capacity_vec")
+    # Divide by 1000 to convert to MtCO2/yr
+    supplied = array_outcomes.get("supplied_CO2_vec") / 1000
+    emissions = array_outcomes.get("total_emissions_vec") / 1000
+    mandate = array_outcomes.get("ctbo_mandate_vec") / 1000
+    CDR = array_outcomes.get("CDR_capacity_vec") / 1000
     
     if supplied is None or emissions is None or mandate is None:
         print("Warning: Missing carbon balance data (supplied_CO2_vec, total_emissions_vec, ctbo_mandate_vec)")
@@ -238,14 +246,14 @@ def plot_carbon_balance(combined_df, array_outcomes, start_year=2025, debug=Fals
     median_em = np.percentile(emissions, 50, axis=0)
     p5_em = np.percentile(emissions, 5, axis=0)
     p95_em = np.percentile(emissions, 95, axis=0)
-    plt.plot(years, median_em, label='Gross Emitted CO2', linewidth=2, color=magma(0.30), linestyle='--')
+    plt.plot(years, median_em, label='Gross emitted CO2', linewidth=2, color=magma(0.30), linestyle='--')
     plt.fill_between(years, p5_em, p95_em, alpha=0.25, color=magma(0.30))
     
     # CTBO mandate
     median_man = np.percentile(mandate, 50, axis=0)
     p5_man = np.percentile(mandate, 5, axis=0)
     p95_man = np.percentile(mandate, 95, axis=0)
-    plt.plot(years, median_man, label='CTBO Mandate (Fossil CCS+BECCS+DACCS)', linewidth=2, color='gray', linestyle=':')
+    plt.plot(years, median_man, label='CTBO mandate (CCS+BECCS+DACCS)', linewidth=2, color='gray', linestyle=':')
     plt.fill_between(years, p5_man, p95_man, alpha=0.25, color='gray')
 
     # CDR capacity
@@ -256,7 +264,7 @@ def plot_carbon_balance(combined_df, array_outcomes, start_year=2025, debug=Fals
     plt.fill_between(years, p5_cdr, p95_cdr, alpha=0.25, color=magma(0.60))
     
     plt.xlabel('Year', fontsize=13)
-    plt.ylabel('ktCO2/yr', fontsize=13)
+    plt.ylabel('Carbon [MtCO2/yr]', fontsize=13)
     plt.title('Carbon Balance: Supplied CO2, Emissions, and CTBO Mandate', fontsize=14)
     plt.legend(fontsize=11)
     plt.grid(True, alpha=0.3)
@@ -570,7 +578,7 @@ def plot_npv_bubbles(combined_df, array_outcomes, plant_names=None,
     if debug:
         print(f"Plotting NPV boxplot by plant type and size (ETS={ETS_filter})")
     
-    plant_npv_net = array_outcomes.get("plant_npv_net")
+    plant_npv_net = array_outcomes.get("plant_npv_net") /1000
     plant_inv_year = array_outcomes.get("plant_investment_year")
     plant_captured_total = array_outcomes.get("plant_captured_total")
     
@@ -670,9 +678,9 @@ def plot_npv_bubbles(combined_df, array_outcomes, plant_names=None,
     # Formatting
     # ------------------------------------------------------------------
 
-    ax.set_xlabel("Mean investment year")
-    ax.set_ylabel("Mean NPV")
-    ax.set_title("Plant-level NPV vs Investment Year\nBubble size = median captured CO₂")
+    ax.set_xlabel("Average investment year", fontsize=13)
+    ax.set_ylabel("Average NPV [M€] due to CSU profits/costs", fontsize=13)
+    ax.set_title("Plant-level NPV vs Investment Year\nBubble size = median captured CO₂", fontsize=13)
 
     ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5, alpha=0.9)
 
@@ -681,11 +689,13 @@ def plot_npv_bubbles(combined_df, array_outcomes, plant_names=None,
     ax.set_xticklabels([str(y) for y in xticks])
 
     ax.set_xlim(2024, 2051)
+    ax.set_ylim(-300, 1000)
 
     ax.legend(title="Plant type")
     ax.grid(True, linestyle="--", alpha=0.4)
 
     plt.tight_layout()
+    plt.savefig(f'10_npv_bubbles.png', dpi=400)
 
     # Add one for Drax BECCS
     if beccs_mask.any():
@@ -726,6 +736,7 @@ def plot_npv_bubbles(combined_df, array_outcomes, plant_names=None,
         ax_beccs.grid(True, linestyle="--", alpha=0.4)
 
         plt.tight_layout()
+        
     
 def plot_npv_boxplot_by_year_range(combined_df, array_outcomes, plant_names=None,
                                     plant_suffix="-CCGT", ETS_filter=None, scenario_col="ETS_SCENARIO", debug=False):
@@ -1386,18 +1397,8 @@ if __name__ == "__main__":
         plot_timeseries_by_scenario(
             combined_df,
             array_outcomes["gas_increase_pct"],
-            ylabel="Gas Price Increase (%)",
-            title="Gas Price Increase Over Time by ETS Scenario",
-            savefig=True
-        )
-    
-    # Plot 3: CTBO levelized cost over time
-    if "CTBO_cost_lev_vec" in array_outcomes:
-        plot_timeseries_by_scenario(
-            combined_df,
-            array_outcomes["CTBO_cost_lev_vec"],
-            ylabel="CTBO Cost (EUR/tCO2)",
-            title="Levelized CTBO Cost Over Time by ETS Scenario",
+            ylabel="Gas price increase (%)",
+            title="Gas increase relative to 6_3 pence per kwh",
             savefig=True
         )
     
@@ -1407,7 +1408,7 @@ if __name__ == "__main__":
         plot_ctbo_total_cost(
             combined_df,
             array_outcomes,
-            ylabel="Total CTBO Cost (MEUR/yr)",
+            ylabel="Fuel supplier costs [M€/yr]",
             title="Total CTBO Cost Over Time by ETS Scenario"
         )
     
@@ -1417,7 +1418,7 @@ if __name__ == "__main__":
         plot_csu_cost_with_ets(
             combined_df,
             array_outcomes,
-            ylabel="Cost (EUR/tCO2)",
+            ylabel="CSU/ETS price [€/tCO2]",
             title="CSU Cost and ETS Price Over Time by ETS Scenario"
         )
     
@@ -1434,31 +1435,31 @@ if __name__ == "__main__":
     # Plot 8: NPV boxplot by plant type
     plot_npv_boxplot_by_plant_type(combined_df, array_outcomes, plant_names, ETS_filter="High", debug=True)
 
-    plot_npv_bubbles(combined_df, array_outcomes, plant_names, ETS_filter="Low", debug=True)
+    plot_npv_bubbles(combined_df, array_outcomes, plant_names, ETS_filter="High", debug=True)
     
-    # Plot 9: NPV cumulative distribution for BECCS plants
-    plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, 
-                                   plant_suffix="-BECCS", ETS_filter=None, debug=True)
+    # # Plot 9: NPV cumulative distribution for BECCS plants
+    # plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, 
+    #                                plant_suffix="-BECCS", ETS_filter=None, debug=True)
     
-    # Plot 10: NPV cumulative distribution for W2E plants
-    plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, 
-                                   plant_suffix="-W2E", ETS_filter=None, debug=True)
+    # # Plot 10: NPV cumulative distribution for W2E plants
+    # plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, 
+    #                                plant_suffix="-W2E", ETS_filter=None, debug=True)
     
-    # Plot 11: NPV cumulative distribution for CCGT plants (High ETS)
-    plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, 
-                                   plant_suffix="-CCGT", ETS_filter="High", debug=True)
+    # # Plot 11: NPV cumulative distribution for CCGT plants (High ETS)
+    # plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, 
+    #                                plant_suffix="-CCGT", ETS_filter="High", debug=True)
     
-    # Plot 12: NPV cumulative distribution for CCGT plants invested before 2040
-    plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, 
-                                   plant_suffix="-CCGT", ETS_filter=None, 
-                                   investment_year_filter="after", year_threshold=2040, debug=True)
+    # # Plot 12: NPV cumulative distribution for CCGT plants invested before 2040
+    # plot_npv_cumulative_by_suffix(combined_df, array_outcomes, plant_names, 
+    #                                plant_suffix="-CCGT", ETS_filter=None, 
+    #                                investment_year_filter="after", year_threshold=2040, debug=True)
     
-    # Plot 13: NPV cumulative distribution for industrial plants (refineries, iron & steel, cement)
-    industrial_suffixes = ["-cement", "-crackers", "-distillation", "-power", "-remaining", 
-                          "-smr", "-stove", "-chp", "-sinter"]
-    plot_npv_cumulative_by_suffixes(combined_df, array_outcomes, plant_names, 
-                                     plant_suffixes=industrial_suffixes, 
-                                     ETS_filter=None, debug=True)
+    # # Plot 13: NPV cumulative distribution for industrial plants (refineries, iron & steel, cement)
+    # industrial_suffixes = ["-cement", "-crackers", "-distillation", "-power", "-remaining", 
+    #                       "-smr", "-stove", "-chp", "-sinter"]
+    # plot_npv_cumulative_by_suffixes(combined_df, array_outcomes, plant_names, 
+    #                                  plant_suffixes=industrial_suffixes, 
+    #                                  ETS_filter=None, debug=True)
 
     
     # # Fraction of positive NPV vs Investment Year (by ETS scenario)
@@ -1470,8 +1471,8 @@ if __name__ == "__main__":
     # # Fraction of positive NPV - biogenic plants only (W2E/BECCS)
     # plot_positive_npv_fraction_boxplot(combined_df, array_outcomes, plant_names, plant_filter="biogenic", ETS_filter=None)
     
-    # Fraction of positive NPV - fossil plants only
-    plot_positive_npv_fraction_boxplot(combined_df, array_outcomes, plant_names, plant_filter="fossil", ETS_filter=None)
+    # # Fraction of positive NPV - fossil plants only
+    # plot_positive_npv_fraction_boxplot(combined_df, array_outcomes, plant_names, plant_filter="fossil", ETS_filter=None)
     
     # Carbon balance (supplied, emissions, mandate)
     plot_carbon_balance(combined_df, array_outcomes)

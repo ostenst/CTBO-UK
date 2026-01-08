@@ -627,7 +627,7 @@ def simulate_ctbo(
 
     # The plant named "Padeswood-cement" should have total_4OAK = 0
     if "Padeswood-cement" in results_df['site-stack'].values:
-        print("Added Padeswood-cement that received subsidies and has zero abatement cost")
+        # print("Added Padeswood-cement that received subsidies and has zero abatement cost")
         padeswood_cement_idx = results_df[results_df['site-stack'] == 'Padeswood-cement'].index[0]
         results_df.loc[padeswood_cement_idx, 'total_4OAK'] = 0
         results_df.loc[padeswood_cement_idx, 'total_FOAK'] = 0
@@ -649,7 +649,7 @@ def simulate_ctbo(
         distance_km=0
     )
     results_df = pd.concat([results_df, pd.DataFrame([result_protos])], ignore_index=True)
-    print(f"Added Protos that captures {370 * w2e_config['fossil_fraction']} ktCO2f/yr and {370 * (1 - w2e_config['fossil_fraction'])} ktCO2bio/yr at a cost of {result_protos['total_4OAK']:.1f} EUR/tCO2")
+    # print(f"Added Protos that captures {370 * w2e_config['fossil_fraction']} ktCO2f/yr and {370 * (1 - w2e_config['fossil_fraction'])} ktCO2bio/yr at a cost of {result_protos['total_4OAK']:.1f} EUR/tCO2")
 
     # Add a new, free CCGT power plant named "Teeside-CCGT" at 1000 MW zero cost (subsidized)
     result_teeside = create_result_entry(
@@ -668,7 +668,7 @@ def simulate_ctbo(
         distance_km=0
     )
     results_df = pd.concat([results_df, pd.DataFrame([result_teeside])], ignore_index=True)
-    print(f"Added Teeside that captures {result_teeside['captured_CO2f']} ktCO2f/yr at a cost of {result_teeside['total_4OAK']:.1f} EUR/tCO2")
+    # print(f"Added Teeside that captures {result_teeside['captured_CO2f']} ktCO2f/yr at a cost of {result_teeside['total_4OAK']:.1f} EUR/tCO2")
 
     # 4OAK MACC
     results_df_4oak = results_df.sort_values('total_4OAK').copy()
@@ -1135,12 +1135,12 @@ if __name__ == "__main__":
     # Plot 1: MACC curves
     plt.figure(figsize=(10, 6))
     plt.plot(macc_4oak['ktCO2_yr_cumulative'], macc_4oak['EUR/tCO2'],
-             color=viridis(0.65), label='4th-of-a-kind costs', linewidth=2)
+             color='gray', label='CO2 storage costs', linewidth=2.5)
     plt.plot(macc_foak['ktCO2_yr_cumulative'], macc_foak['EUR/tCO2'],
-             color='crimson', label='First-of-a-kind costs', linewidth=2)
-    plt.xlabel('Cumulative Captured CO2 (ktCO2/yr)', fontsize=13)
-    plt.ylabel('Marginal Abatement Cost (EUR/tCO2)', fontsize=13)
-    plt.title('MACC of point source CCS (fossil + biogenic)', fontsize=14)
+             color=magma(0.60), label='CO2 storage costs (First-of-a-kind CAPEX)', linewidth=2.5)
+    plt.xlabel('Cumulative captured CO2 [ktCO2/yr]', fontsize=13)
+    plt.ylabel('Marginal abatement cost [EUR/tCO2]', fontsize=13)
+    plt.title('MACC of fossil CCS and BECCS projects', fontsize=14)
     plt.legend(fontsize=11)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()

@@ -51,7 +51,6 @@ if __name__ == "__main__":
         RealParameter("w2e_xCO2", 0.09, 0.13),              # [-] CO2 concentration in W2E flue gas
         RealParameter("drax_xCO2", 0.11, 0.15),             # [-] CO2 concentration in Drax flue gas
         RealParameter("drax_efficiency_penalty", 0.20, 0.28), # [-] Efficiency penalty from CCS on Drax
-        RealParameter("cement_process_fraction", 0.58, 0.68), # [-] Fraction of cement CO2 from process
         RealParameter("FLH_industry", 8400, 8600),
         # Scenario uncertainties
         CategoricalParameter("DACCS_EXPENSIVE", [True, False]),  # [-] DACCS cost scenario
@@ -109,10 +108,11 @@ if __name__ == "__main__":
         Constant("pounds_to_EUR", 1.15),
         Constant("evaporation_enthalpy", 2257),
         Constant("elc_eff", 0.33),
+        Constant("cement_process_fraction", 0.63), # [-] Fraction of cement CO2 from process
     ]
 
-    n_scenarios = 10
-    n_policies = 5
+    n_scenarios = 50
+    n_policies = 20
 
     results = perform_experiments(
         model, 
