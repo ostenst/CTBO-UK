@@ -1132,16 +1132,21 @@ if __name__ == "__main__":
     viridis = plt.cm.viridis
     magma = plt.cm.magma
     
-    # Plot 1: MACC curves
+    # Plot 1: MACC curves (horizontal lines, excluding first three entries)
     plt.figure(figsize=(10, 6))
-    plt.plot(macc_4oak['ktCO2_yr_cumulative'], macc_4oak['EUR/tCO2'],
-             color='gray', label='CO2 storage costs', linewidth=2.5)
-    plt.plot(macc_foak['ktCO2_yr_cumulative'], macc_foak['EUR/tCO2'],
-             color=magma(0.60), label='CO2 storage costs (First-of-a-kind CAPEX)', linewidth=2.5)
+
+    plt.step(
+        macc_4oak['ktCO2_yr_cumulative'].iloc[3:],
+        macc_4oak['EUR/tCO2'].iloc[3:],
+        where='post',          # horizontal line first, then vertical jump
+        color='gray',
+        label='Fossil CCS and BECCS projects',
+        linewidth=2.5
+    )
     plt.xlabel('Cumulative captured CO2 [ktCO2/yr]', fontsize=13)
     plt.ylabel('Marginal abatement cost [EUR/tCO2]', fontsize=13)
     plt.title('MACC of fossil CCS and BECCS projects', fontsize=14)
-    plt.legend(fontsize=11)
+    plt.legend(fontsize=12)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig('1_maccs.png', dpi=300)
