@@ -1,0 +1,9 @@
+hub_name,latitude,longitude,ktCO2,km_shipping,km_offshore,references
+Peterhead,57.50693588711837,-1.7708622395424245,10000,None,170,Acorn - NZIP assumptions and CATF storage project tracker
+Teeside,54.61907305526694,-1.1076748564723147,23000,None,145,Endurance - NZIP assumptions and CATF storage project tracker
+Humberside,53.619933627125654,0.1407669862304769,23000,None,85,Endurance/Orion - NZIP assumptions and CATF storage project tracker
+Bacton,52.85955300633846,1.4665222972139549,40000,None,38,Poseidon - NZIP assumptions and CATF storage project tracker
+Hynet,53.3461503558293,-3.3158170124892816,10000,None,13,Hynet/Point of Ayr Gas terminal - NZIP assumptions and CATF storage project tracker
+Pembroke,51.691091085150425,-5.031336997577814,None,320,None,Pembroke - NZIP assumptions and CATF storage project tracker
+Bristol,51.51285537877145,-2.7015804595606663,None,490,None,Bristol 7CO₂: The Severnside - NZIP assumptions and CATF storage project tracker
+London,51.50186231729019,0.16780323929425145,None,243,None,Bacton/Thames Net Zero - NZIP assumptions and CATF storage project tracker
