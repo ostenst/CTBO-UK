@@ -1,0 +1,114 @@
+sector,site,stack,ktCO2,xCO2,energy_strategy,latitude,longitude,hub,km_hub,land_transport,sea_transport,ccgt_capacity
+steel,Scunthorpe Blast Furnaces,Scunthorpe Blast Furnaces-blast,1046.557701918,0.21,Class III-NG,53.581045946433846,-0.6175496731909877,Humberside,50.22332465598372,truck,,
+steel,Scunthorpe Power Station,Scunthorpe Power Station-power,1644.48358347,0.23,Class III-NG,53.58691465659562,-0.6213464952743631,Humberside,50.41772917367051,truck,,
+steel,Scunthorpe Sinter,Scunthorpe Sinter-sinter,666.9501546120001,0.08,Class III-NG,53.575472236280504,-0.611297510505455,Humberside,49.87320886980328,pipeline,,
+refinery,Eastham,Eastham-HPU,59.48869606420063,0.24,Class I-HCN,53.31138413929123,-2.94551372499051,Hynet,24.893120488171363,pipeline,,
+refinery,Eastham,Eastham-FCC,123.50370595937304,0.17,Class I-HRSG,53.31138413929123,-2.94551372499051,Hynet,24.893120488171363,pipeline,,
+refinery,Eastham,Eastham-distillation,144.19542632952977,0.11,Class III-NG,53.31138413929123,-2.94551372499051,Hynet,24.893120488171363,pipeline,,
+refinery,Eastham,Eastham-scattered,233.42847042583074,0.08,Class III-NG,53.31138413929123,-2.94551372499051,Hynet,24.893120488171363,pipeline,,
+refinery,Eastham,Eastham-power3%,58.19546354106583,0.03,None,53.31138413929123,-2.94551372499051,Hynet,24.893120488171363,pipeline,,
+refinery,Fawley Refinery,Fawley Refinery-HPU,303.8586137113731,0.24,Class I-HCN,50.830584248212844,-1.3517555371775485,Bristol,120.87514601320966,truck,ship to Hynet,
+refinery,Fawley Refinery,Fawley Refinery-FCC,630.8369045529593,0.17,Class I-HRSG,50.830584248212844,-1.3517555371775485,Bristol,120.87514601320966,truck,ship to Hynet,
+refinery,Fawley Refinery,Fawley Refinery-distillation,736.5268571482195,0.11,Class III-NG,50.830584248212844,-1.3517555371775485,Bristol,120.87514601320966,truck,ship to Hynet,
+refinery,Fawley Refinery,Fawley Refinery-scattered,1192.3147777152792,0.08,Class III-NG,50.830584248212844,-1.3517555371775485,Bristol,120.87514601320966,truck,ship to Hynet,
+refinery,Fawley Refinery,Fawley Refinery-power3%,297.2529916741693,0.03,None,50.830584248212844,-1.3517555371775485,Bristol,120.87514601320966,truck,ship to Hynet,
+refinery,Pembroke Refinery,Pembroke Refinery-HPU,229.28792678435116,0.24,Class I-HCN,51.686080550234294,-5.027121705048526,Pembroke,0.6283676445376166,pipeline,ship to Hynet,
+refinery,Pembroke Refinery,Pembroke Refinery-FCC,476.0216740849028,0.17,Class I-HRSG,51.686080550234294,-5.027121705048526,Pembroke,0.6283676445376166,pipeline,ship to Hynet,
+refinery,Pembroke Refinery,Pembroke Refinery-distillation,555.7739964446772,0.11,Class III-NG,51.686080550234294,-5.027121705048526,Pembroke,0.6283676445376166,pipeline,ship to Hynet,
+refinery,Pembroke Refinery,Pembroke Refinery-scattered,899.705886621204,0.08,Class III-NG,51.686080550234294,-5.027121705048526,Pembroke,0.6283676445376166,pipeline,ship to Hynet,
+refinery,Pembroke Refinery,Pembroke Refinery-power3%,224.30340663686525,0.03,None,51.686080550234294,-5.027121705048526,Pembroke,0.6283676445376166,pipeline,ship to Hynet,
+refinery,South Killingholme,South Killingholme-HPU,192.95854619611288,0.24,Class I-HCN,53.63315124460131,-0.25217000275928014,Humberside,25.953334865878816,pipeline,,
+refinery,South Killingholme,South Killingholme-FCC,400.5987209071473,0.17,Class I-HRSG,53.63315124460131,-0.25217000275928014,Humberside,25.953334865878816,pipeline,,
+refinery,South Killingholme,South Killingholme-distillation,467.7147369753605,0.11,Class III-NG,53.63315124460131,-0.25217000275928014,Humberside,25.953334865878816,pipeline,,
+refinery,South Killingholme,South Killingholme-scattered,757.1525562695299,0.08,Class III-NG,53.63315124460131,-0.25217000275928014,Humberside,25.953334865878816,pipeline,,
+refinery,South Killingholme,South Killingholme-power3%,188.76379519184954,0.03,None,53.63315124460131,-0.25217000275928014,Humberside,25.953334865878816,pipeline,,
+refinery,Stanlow Refinery,Stanlow Refinery-HPU,178.4660881926019,0.24,Class I-HCN,53.27755202744339,-2.8420354847831546,Hynet,32.38642099518374,pipeline,,
+refinery,Stanlow Refinery,Stanlow Refinery-FCC,370.51111787811914,0.17,Class I-HRSG,53.27755202744339,-2.8420354847831546,Hynet,32.38642099518374,pipeline,,
+refinery,Stanlow Refinery,Stanlow Refinery-distillation,432.58627898858936,0.11,Class III-NG,53.27755202744339,-2.8420354847831546,Hynet,32.38642099518374,pipeline,,
+refinery,Stanlow Refinery,Stanlow Refinery-scattered,700.2854112774922,0.08,Class III-NG,53.27755202744339,-2.8420354847831546,Hynet,32.38642099518374,pipeline,,
+refinery,Stanlow Refinery,Stanlow Refinery-power3%,174.5863906231975,0.03,None,53.27755202744339,-2.8420354847831546,Hynet,32.38642099518374,pipeline,,
+cement,Aberthaw,Aberthaw-cement,357.43855135079997,0.2,Biomass,51.39871420184746,-3.3912710625728666,Bristol,49.443522170475084,pipeline,ship to Hynet,
+cement,Cauldon Cement,Cauldon Cement-cement,537.1638143700001,0.2,Biomass,53.043719808232346,-1.8748034004789338,Hynet,101.712691925278,truck,,
+cement,Dunbar Works,Dunbar Works-cement,443.21561914200004,0.2,Biomass,55.97884706230757,-2.471103117694486,Teeside,174.09145768166724,truck,,
+cement,Hope Cement Works,Hope Cement Works-cement,1056.290602302,0.2,Biomass,53.337492541529556,-1.7525428619825802,Hynet,103.78471141645261,truck,,
+cement,Ketton,Ketton-cement,668.926674294,0.2,Biomass,52.63653680776998,-0.5473766230597855,Humberside,118.59507338910258,truck,,
+cement,New Rugby,New Rugby-cement,911.7928532640001,0.2,Biomass,52.37628309513931,-1.2860373692845457,Bristol,136.4930299833787,truck,ship to Hynet,
+cement,Padeswood,Padeswood-cement,495.368655552,0.2,Biomass,53.15219612793139,-3.0616410920335166,Hynet,27.40615654676479,pipeline,,
+cement,Ribblesdale,Ribblesdale-cement,513.44298105,0.2,Biomass,53.88888385048366,-2.378810233387536,Hynet,86.37931047920607,truck,,
+cement,Tunstead Cement,Tunstead Cement-cement,654.1254498300001,0.2,Biomass,53.27681872270008,-1.8570587591240366,Hynet,97.21705964287547,truck,,
+drax,Drax Power Station,Drax-power,11500.0,0.14,Drax,53.73871,-0.99303,Humberside,75.83135007272924,truck,,
+waste,Allerton Park,Allerton Park-waste,265.58,0.12,Waste-HRSG,54.034603,-1.382335,Teeside,67.38618521974306,truck,,
+waste,Allington,Allington-waste,458.64,0.12,Waste-HRSG,51.292797,0.494085,London,32.44714930213132,pipeline,ship to Bacton,
+waste,Ardley,Ardley-waste,333.2,0.12,Waste-HRSG,51.923004,-1.214435,London,106.12100538992266,truck,ship to Bacton,
+waste,Avonmouth,Avonmouth-waste,383.18,0.12,Waste-HRSG,51.532093,-2.669222,Bristol,3.096436531433871,pipeline,ship to Hynet,
+waste,Baldovie,Baldovie-waste,184.24,0.12,Waste-HRSG,56.485726,-2.90312,Peterhead,132.65038969501012,truck,,
+waste,Beddington Lane,Beddington Lane-waste,324.38,0.12,Waste-HRSG,51.385852,-0.143323,London,25.12682921179084,pipeline,ship to Bacton,
+waste,Belfast ACT,Belfast ACT-waste,109.75999999999999,0.12,Waste-HRSG,54.61983,-5.881097,Dublin,147.77014101419846,truck,,
+waste,Chineham,Chineham-waste,100.94,0.12,Waste-HRSG,51.292723,-1.036684,London,86.73735002768615,truck,ship to Bacton,
+waste,Cornwall,Cornwall-waste,234.22,0.12,Waste-HRSG,50.376888,-4.891549,Pembroke,146.45918905583156,truck,ship to Hynet,
+waste,Coventry,Coventry-waste,286.15999999999997,0.12,Waste-HRSG,52.396146,-1.492423,Bristol,128.49775145454478,truck,ship to Hynet,
+waste,Devonport,Devonport-waste,251.85999999999999,0.12,Waste-HRSG,50.395227,-4.180192,Pembroke,155.89401570529898,truck,ship to Hynet,
+waste,Dunbar,Dunbar-waste,348.88,0.12,Waste-HRSG,55.975055,-2.464255,Teeside,173.51256657624347,truck,,
+waste,Eastcroft,Eastcroft-waste,182.28,0.12,Waste-HRSG,52.946399,-1.136157,Humberside,113.2008386841096,truck,,
+waste,Edmonton,Edmonton-waste,474.32,0.12,Waste-HRSG,51.613387,-0.039917,London,18.97372207736689,pipeline,ship to Bacton,
+waste,Ferrybridge FM1,Ferrybridge FM1-waste,645.8199999999999,0.12,Waste-HRSG,53.719365,-1.287615,Humberside,94.7422307012799,truck,,
+waste,Ferrybridge FM2,Ferrybridge FM2-waste,641.9,0.12,Waste-HRSG,53.719365,-1.287615,Humberside,94.7422307012799,truck,,
+waste,Four Ashes,Four Ashes-waste,324.38,0.12,Waste-HRSG,52.672989,-2.116001,Hynet,109.75375509815846,truck,,
+waste,Glasgow ACT,Glasgow ACT-waste,137.2,0.12,Waste-HRSG,55.834585,-4.245209,Peterhead,239.62008587703158,truck,,
+waste,Great Blakenham,Great Blakenham-waste,289.1,0.12,Waste-HRSG,52.105101,1.099744,Bacton,87.49052488267348,truck,,
+waste,Greatmoor,Greatmoor-waste,270.48,0.12,Waste-HRSG,51.8958,-0.976672,London,90.2207174826211,truck,ship to Bacton,
+waste,Hanford,Hanford-waste,181.29999999999998,0.12,Waste-HRSG,52.989244,-2.18323,Hynet,85.2906701100392,truck,,
+waste,Hartlebury,Hartlebury-waste,205.79999999999998,0.12,Waste-HRSG,52.325553,-2.207717,Bristol,96.50603758731263,truck,ship to Hynet,
+waste,Javelin Park,Javelin Park-waste,184.24,0.12,Waste-HRSG,51.792294,-2.289581,Bristol,42.11112681731947,pipeline,ship to Hynet,
+waste,Kemsley,Kemsley-waste,554.68,0.12,Waste-HRSG,51.366744,0.758076,London,43.58887461505531,pipeline,ship to Bacton,
+waste,Kirklees,Kirklees-waste,129.35999999999999,0.12,Waste-HRSG,53.656862,-1.777803,Hynet,107.42715023371586,truck,,
+waste,Lakeside,Lakeside-waste,404.74,0.12,Waste-HRSG,51.484106,-0.506603,London,46.731464554806905,pipeline,ship to Bacton,
+waste,Leeds,Leeds-waste,174.44,0.12,Waste-HRSG,53.787978,-1.502882,Teeside,95.92116314798909,truck,,
+waste,Marchwood,Marchwood-waste,204.82,0.12,Waste-HRSG,50.933089,-1.437252,Bristol,109.12356708033076,truck,ship to Hynet,
+waste,Millerhill,Millerhill-waste,159.74,0.12,Waste-HRSG,55.924703,-3.086797,Teeside,191.80330767908788,truck,,
+waste,Newhaven,Newhaven-waste,207.76,0.12,Waste-HRSG,50.801991,0.049797,London,78.25614867918262,truck,ship to Bacton,
+waste,Newhurst,Newhurst-waste,292.04,0.12,Waste-HRSG,52.75843,-1.27661,Humberside,134.50979709735006,truck,,
+waste,North Hykeham,North Hykeham-waste,173.46,0.12,Waste-HRSG,53.200006,-0.607789,Humberside,68.13163424920108,truck,,
+waste,Parc Adfer,Parc Adfer-waste,202.85999999999999,0.12,Waste-HRSG,53.237243,-3.034834,Hynet,22.25834081549111,pipeline,,
+waste,Portsmouth,Portsmouth-waste,186.2,0.12,Waste-HRSG,50.822483,-1.053922,London,113.86027123786984,truck,ship to Bacton,
+waste,Riverside,Riverside-waste,774.1999999999999,0.12,Waste-HRSG,51.505735,0.15477,London,0.9996026183802426,pipeline,ship to Bacton,
+waste,Rookery South C,Rookery South C-waste,578.2,0.12,Waste-HRSG,52.059275,-0.52298,London,78.10162898735736,truck,ship to Bacton,
+waste,Runcorn,Runcorn-waste,931.98,0.12,Waste-HRSG,53.329067,-2.758472,Hynet,37.05318957081401,pipeline,,
+waste,SELCHP,SELCHP-waste,383.18,0.12,Waste-HRSG,51.485384,-0.04608,London,14.920102237929717,pipeline,ship to Bacton,
+waste,Severnside,Severnside-waste,392.98,0.12,Waste-HRSG,51.541435,-2.669496,Bristol,3.876291017518253,pipeline,ship to Hynet,
+waste,Sheffield,Sheffield-waste,226.38,0.12,Waste-HRSG,53.386759,-1.448888,Humberside,108.28088763724762,truck,,
+waste,Tees Valley,Tees Valley-waste,688.9399999999999,0.12,Waste-HRSG,54.595654,-1.257639,Teeside,10.002822779004717,pipeline,,
+waste,Trident Park,Trident Park-waste,402.78,0.12,Waste-HRSG,51.470048,-3.150368,Bristol,31.43354713761837,pipeline,ship to Hynet,
+waste,Tyseley,Tyseley-waste,355.74,0.12,Waste-HRSG,52.460134,-1.843213,Bristol,120.6215589369456,truck,ship to Hynet,
+waste,Wilton 11,Wilton 11-waste,404.74,0.12,Waste-HRSG,54.587267,-1.12862,Teeside,3.7852278185710175,pipeline,,
+ccgt,Ballylumford,Ballylumford-ccgt,1098.1275788159999,0.04,LP steam,54.858047566704045,-5.7737053226608275,Dublin,174.9215641033434,truck,,616.0
+ccgt,Carrington CCGT,Carrington CCGT-ccgt,1761.6960277500002,0.04,LP steam,53.43343261982753,-2.4035392747522497,Hynet,61.269074631343955,truck,,884.0
+ccgt,Connahs Quay Power Station,Connahs Quay Power Station-ccgt,1371.5286758940001,0.04,LP steam,53.23328083346329,-3.091363380023658,Hynet,19.49607356065278,pipeline,,1380.0
+ccgt,Coolkeeragh,Coolkeeragh-ccgt,760.2091978259999,0.04,LP steam,55.044101605460725,-7.2456004745938865,Dublin,206.9382765476166,truck,,413.0
+ccgt,Coryton,Coryton-ccgt,538.75672506,0.04,LP steam,51.512140099503746,0.5090066094419239,London,23.64224531023853,pipeline,ship to Bacton,800.0
+ccgt,Cottam Development Centre,Cottam Development Centre-ccgt,579.25373385,0.04,LP steam,53.30618410036946,-0.778383386348365,Humberside,70.13802046051339,truck,,455.0
+ccgt,Damhead Creek Power Station,Damhead Creek Power Station-ccgt,1025.0580541560003,0.04,LP steam,51.42522509273347,0.6014895994557659,London,31.22909290403437,pipeline,ship to Bacton,805.0
+ccgt,Didcot B,Didcot B-ccgt,2803.31215761,0.04,LP steam,51.62318652213568,-1.267868251014206,Bristol,99.84892444889702,truck,ship to Hynet,1450.0
+ccgt,Enfield Power Station,Enfield Power Station-ccgt,848.83069347,0.04,LP steam,51.66143955914186,-0.023550682342986733,London,22.128553053020763,pipeline,ship to Bacton,408.0
+ccgt,Fellside CHP Plant,Fellside CHP Plant-ccgt,155.6532535776,0.04,LP steam,54.418652141461465,-3.488647529267285,Hynet,119.79344697797968,truck,,155.0
+ccgt,Grain CCGT,Grain CCGT-ccgt,1642.807148286,0.04,LP steam,51.44437508488588,0.7128215829851873,London,38.28598218948935,pipeline,ship to Bacton,1517.0
+ccgt,Great Yarmouth Power Station,Great Yarmouth Power Station-ccgt,596.2897949400001,0.04,LP steam,52.58475327895021,1.7322365370249377,Bacton,35.4109313165537,pipeline,,420.0
+ccgt,Immingham,Immingham-ccgt,2293.466727078,0.04,LP steam,53.640254058823096,-0.2338749902271056,Humberside,24.806291225732203,pipeline,,1252.0
+ccgt,Keadby,Keadby-ccgt,1190.6262548340003,0.04,LP steam,53.595052855649655,-0.7398470712086915,Humberside,58.16262324172439,truck,,735.0
+ccgt,Kilroot,Kilroot-ccgt,1115.515014546,0.04,LP steam,54.70396100626593,-5.8121666159452,Dublin,157.61149109226932,truck,,700.0
+ccgt,Kings Lynn Power Station,Kings Lynn Power Station-ccgt,639.545885214,0.04,LP steam,52.72759626869043,0.38198879668071806,Bacton,74.38294661700822,truck,,395.0
+ccgt,Langage Energy Centre,Langage Energy Centre-ccgt,1157.633406996,0.04,LP steam,50.38775766284455,-4.010261204448252,Bristol,155.0936855056466,truck,ship to Hynet,905.0
+ccgt,Little Barford,Little Barford-ccgt,922.3704161339999,0.04,LP steam,52.205256220057045,-0.26805992023555575,London,83.74664529897461,truck,ship to Bacton,735.0
+ccgt,Marchwood  Power  Station,Marchwood  Power  Station-ccgt,1911.319309962,0.04,LP steam,50.89802698035226,-1.4382716639819555,Bristol,111.44138547948756,truck,ship to Hynet,898.0
+ccgt,Medway,Medway-ccgt,644.05898949,0.04,LP steam,51.44042103001953,0.6892738255620992,London,36.7596598403478,pipeline,ship to Bacton,755.0
+ccgt,Pembroke Power Station,Pembroke Power Station-ccgt,5291.35873746,0.04,LP steam,51.68379516090135,-5.00018696626738,Pembroke,2.295479893599402,pipeline,ship to Hynet,2200.0
+ccgt,Peterhead Power Station,Peterhead Power Station-ccgt,1350.8951019840001,0.04,LP steam,57.47788541945565,-1.7883750054288607,Peterhead,3.3955571470515302,pipeline,,1180.0
+ccgt,Rocksavage,Rocksavage-ccgt,481.80682494,0.04,LP steam,53.314717600426086,-2.72643825485286,Hynet,39.2936439731737,pipeline,,810.0
+ccgt,Rye House,Rye House-ccgt,483.424019364,0.04,LP steam,51.76103947108868,0.010358049841330525,London,30.799921554881706,pipeline,ship to Bacton,715.0
+ccgt,Saltend,Saltend-ccgt,2294.461504098,0.04,LP steam,53.73551706592096,-0.24443846832663457,Humberside,28.44061957646665,pipeline,,1200.0
+ccgt,Seabank,Seabank-ccgt,1712.020816098,0.04,LP steam,51.53947337080543,-2.671862448108801,Bristol,3.6037634685711564,pipeline,ship to Hynet,1234.0
+ccgt,Shoreham Power Station,Shoreham Power Station-ccgt,614.802741792,0.04,LP steam,50.82811976382598,-0.21604904743326497,London,79.55408683247131,truck,ship to Bacton,420.0
+ccgt,South Humber,South Humber-ccgt,1489.9096699680001,0.04,LP steam,53.60278178029131,-0.14566212958784272,Humberside,18.990987810049496,pipeline,,1365.0
+ccgt,Spalding,Spalding-ccgt,1402.98969039,0.04,LP steam,52.80783869569706,-0.13219205837988007,Humberside,92.11163422598214,truck,,950.0
+ccgt,Staythorpe Power Station,Staythorpe Power Station-ccgt,3574.179279096,0.04,LP steam,53.07101921429117,-0.8598410977734393,Humberside,90.20592817477137,truck,,1828.0
+ccgt,West Burton B CCGT Power Station,West Burton B CCGT Power Station-ccgt,2345.307607212,0.04,LP steam,53.360723899716795,-0.811536325938544,Humberside,69.2803556616752,truck,,1332.0
