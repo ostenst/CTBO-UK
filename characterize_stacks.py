@@ -10,7 +10,7 @@ stacks_clean = pd.DataFrame(columns=[
     'latitude', 'longitude', 'hub', 'km_hub', 'land_transport', 'sea_transport'
 ])
 
-# Read all data into dataframes - NOTE MISSING DRAX
+# Read all data into dataframes
 point_sources = pd.read_csv('data/point_sources_NAEI_2022.csv')
 power_capacities = pd.read_csv('data/power_capacities_clean.csv')
 refinery_example = pd.read_csv('data/refinery_emissions.csv')
@@ -289,39 +289,27 @@ def create_all_plants_map(europe, plants_gdf, bubble_scaling=1.0, remaining_gdf=
 clean_names = stacks_clean['site'].unique()
 remaining_plants = point_sources[~point_sources['Site'].isin(clean_names)].copy()
 
-# Load Europe shapefile
 print("\nLoading Europe shapefile...")
 europe = gpd.read_file("data/shapefiles/Europe/Europe_merged.shp").to_crs("EPSG:4326")
 
-# Create GeoDataFrame for stacks_clean (already has latitude/longitude in WGS84)
-print("\nCreating GeoDataFrame for cleaned stacks...")
 plants_gdf = gpd.GeoDataFrame(
     stacks_clean, 
     geometry=gpd.points_from_xy(stacks_clean['longitude'], stacks_clean['latitude'], crs="EPSG:4326")
 )
-
-# Create GeoDataFrame for remaining plants (need to convert from OSGB36)
 remaining_valid = remaining_plants[
     remaining_plants['Easting'].notna() & remaining_plants['Northing'].notna()
 ].copy()
-print(f"Remaining plants with valid coordinates: {len(remaining_valid)}")
 remaining_gdf = gpd.GeoDataFrame(
     remaining_valid, 
     geometry=gpd.points_from_xy(remaining_valid['Easting'], remaining_valid['Northing'], crs="EPSG:27700")
 ).to_crs("EPSG:4326")
 
-# Clean km_shipping so we can color hubs
 transport_hubs['km_shipping_clean'] = pd.to_numeric(transport_hubs['km_shipping'], errors='coerce')
-
-# Create GeoDataFrame for transport hubs
-print("\nCreating GeoDataFrame for transport hubs...")
 hubs_gdf = gpd.GeoDataFrame(
     transport_hubs,
     geometry=gpd.points_from_xy(transport_hubs['longitude'], transport_hubs['latitude'], crs="EPSG:4326")
 )
 
-# Create the map
-print("\nCreating map...")
 fig, ax = create_all_plants_map(
     europe,
     plants_gdf,
@@ -331,7 +319,6 @@ fig, ax = create_all_plants_map(
     debug=True
 )
 
-# Save the figure
 output_file = 'results/map_concentrations.png'
 plt.savefig(output_file, dpi=400, bbox_inches='tight')
 plt.show()

@@ -1,6 +1,6 @@
 sector,site,stack,ktCO2,xCO2,energy_strategy,latitude,longitude,hub,km_hub,land_transport,sea_transport,ccgt_capacity
-steel,Scunthorpe Blast Furnaces,Scunthorpe Blast Furnaces-blast,1046.557701918,0.21,Class III-NG,53.581045946433846,-0.6175496731909877,Humberside,50.22332465598372,truck,,
-steel,Scunthorpe Power Station,Scunthorpe Power Station-power,1644.48358347,0.23,Class III-NG,53.58691465659562,-0.6213464952743631,Humberside,50.41772917367051,truck,,
+steel,Scunthorpe Blast Furnaces,Scunthorpe Blast Furnaces-blast,1046.557701918,0.21,Class III-NG,53.575472236280504,-0.611297510505455,Humberside,49.87320886980328,pipeline,,
+steel,Scunthorpe Power Station,Scunthorpe Power Station-power,1644.48358347,0.23,Class III-NG,53.575472236280504,-0.611297510505455,Humberside,49.87320886980328,pipeline,,
 steel,Scunthorpe Sinter,Scunthorpe Sinter-sinter,666.9501546120001,0.08,Class III-NG,53.575472236280504,-0.611297510505455,Humberside,49.87320886980328,pipeline,,
 refinery,Eastham,Eastham-HPU,59.48869606420063,0.24,Class I-HCN,53.31138413929123,-2.94551372499051,Hynet,24.893120488171363,pipeline,,
 refinery,Eastham,Eastham-FCC,123.50370595937304,0.17,Class I-HRSG,53.31138413929123,-2.94551372499051,Hynet,24.893120488171363,pipeline,,

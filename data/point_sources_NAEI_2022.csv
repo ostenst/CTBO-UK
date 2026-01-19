@@ -1384,10 +1384,10 @@ Year,PollutantID,Pollutant_Name,PlantID,Site,Easting,Northing,Operator,SectorID,
 2022,2,Carbon Dioxide as Carbon,40544,Port Talbot COG Flaring,277110.0,185810.0,Tata Steel Ltd,13.0,Iron & steel industries,2727.06726,Tonnes,Wales,O
 2022,2,Carbon Dioxide as Carbon,40545,Port Talbot BFG Flaring,277270.0,187990.0,Tata Steel Ltd,13.0,Iron & steel industries,131151.3666,Tonnes,Wales,O
 2022,2,Carbon Dioxide as Carbon,40546,Scunthorpe Sinter,492050.0,409660.0,British Steel Ltd,13.0,Iron & steel industries,182226.8182,Tonnes,England,O
-2022,2,Carbon Dioxide as Carbon,40547,Scunthorpe Blast Furnaces,491624.0,410272.0,British Steel Ltd,13.0,Iron & steel industries,285944.7273,Tonnes,England,O
+2022,2,Carbon Dioxide as Carbon,40547,Scunthorpe Blast Furnaces,492050.0,409660.0,British Steel Ltd,13.0,Iron & steel industries,285944.7273,Tonnes,England,O
 2022,2,Carbon Dioxide as Carbon,40548,Scunthorpe Oxygen Furnaces,492990.0,408610.0,British Steel Ltd,13.0,Iron & steel industries,12675.27273,Tonnes,England,O
 2022,2,Carbon Dioxide as Carbon,40549,Scunthorpe Appleby Coke Ovens,491655.0,410975.0,British Steel Ltd,13.0,Iron & steel industries,25412.18182,Tonnes,England,O
-2022,2,Carbon Dioxide as Carbon,40552,Scunthorpe Power Station,491360.0,410920.0,British Steel Ltd,13.0,Iron & steel industries,449312.4545,Tonnes,England,O
+2022,2,Carbon Dioxide as Carbon,40552,Scunthorpe Power Station,492050.0,409660.0,British Steel Ltd,13.0,Iron & steel industries,449312.4545,Tonnes,England,O
 2022,2,Carbon Dioxide as Carbon,40553,Scunthorpe Rolling Mill Furnaces,491350.0,411210.0,British Steel Ltd,13.0,Iron & steel industries,83444.72727,Tonnes,England,O
 2022,2,Carbon Dioxide as Carbon,40554,Scunthorpe COG Flaring,491770.0,410820.0,British Steel Ltd,13.0,Iron & steel industries,1.636363636,Tonnes,England,O
 2022,2,Carbon Dioxide as Carbon,40555,Scunthorpe BFG Flaring,491600.0,410570.0,British Steel Ltd,13.0,Iron & steel industries,45627.81818,Tonnes,England,O
