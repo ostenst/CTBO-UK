@@ -147,14 +147,14 @@ for site_name, site_data in cement_stacks.groupby('Site'):
     site = site_name
     stack = site_name+'-cement'
     ktCO2 = site_data['ktCO2'].sum()
-    xCO2 = 0.20
+    xCO2 = 0.22
     energy_strategy = 'Biomass'
     latitude = site_data['Latitude'].iloc[0]
     longitude = site_data['Longitude'].iloc[0]
     hub, km_hub, land_transport, sea_transport = assign_hub(latitude, longitude, transport_hubs)
     stacks_clean.loc[len(stacks_clean)] = [sector, site, stack, ktCO2, xCO2, energy_strategy, latitude, longitude, hub, km_hub, land_transport, sea_transport]
 
-# Clean Drax and waste incinerator stacks above 100 ktCO2
+# Clean Drax and waste incinerator stacks above 100 ktCO2 (emissions from drax.com, xCO2 from pellet calculation)
 latitude = 53.738710
 longitude = -0.993030
 hub, km_hub, land_transport, sea_transport = assign_hub(latitude, longitude, transport_hubs)
@@ -169,7 +169,7 @@ for site_name, site_data in waste_incinerators.groupby('Name'):
     stack = site_name+'-waste'
     ktCO2 = site_data['ktCO2'].sum()
     xCO2 = 0.12
-    energy_strategy = 'Waste-HRSG'
+    energy_strategy = 'Waste-HCN'
     latitude = site_data['Latitude'].iloc[0]
     longitude = site_data['Longitude'].iloc[0]
     hub, km_hub, land_transport, sea_transport = assign_hub(latitude, longitude, transport_hubs)
