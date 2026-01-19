@@ -377,6 +377,8 @@ def simulate_ctbo(
         ccgt_even = ccgt_plants.iloc[::2]
         plants_clean = pd.concat([plants_clean[plants_clean['sector'] != 'ccgt'], ccgt_even])
     plants_clean = plants_clean[plants_clean['energy_strategy'].notna()]
+    print("Number of plants =", len(plants_clean))
+    print("Total CO2 capture capacity =", plants_clean['ktCO2'].sum(), "ktCO2/y")
 
     MACC = pd.DataFrame(columns=[
         'sector', 'site', 'stack', 'ktCO2f', 'ktCO2cem', 'ktCO2b',
