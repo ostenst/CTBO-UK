@@ -512,7 +512,7 @@ def simulate_ctbo(
         'drax_efficiency_loss': drax_efficiency_loss,
     }
     
-    # Specify whether plants defossilize. And omit low-concentration refinery stacks that have NaN as energy_strategy.
+    # Specify whether plants defossilize. Omit low-concentration refinery stacks that have NaN as energy_strategy.
     if DEFOSSILIZE:
         plants_clean = plants_clean[~plants_clean['sector'].isin(['steel', 'refinery'])]
         ccgt_plants = plants_clean[plants_clean['sector'] == 'ccgt']
@@ -522,6 +522,7 @@ def simulate_ctbo(
     print("Number of plants =", len(plants_clean))
     print("Total CO2 capture capacity =", plants_clean['ktCO2'].sum(), "ktCO2/y")
 
+    # Construct the MACC
     MACC = pd.DataFrame(columns=[
         'sector', 'site', 'stack', 'ktCO2f', 'ktCO2cem', 'ktCO2b',
         'MAC', 'CAPEX', 'OPEX', 'year_invest', 
@@ -817,7 +818,6 @@ def plot_ts_costs_by_sector(plants_clean, ts_results, bins=30, ncols=2, debug=Fa
     if debug:
         print(f"plot_ts_costs_by_sector output: sectors_plotted={plotted}")
     return plotted
-
 
 def plot_macc_curve(macc, savefig=False, debug=False):
     """
