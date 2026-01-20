@@ -17,7 +17,7 @@ klem    = {"name":"klem", "mCO2": 52, "xCO2": 0.11}
 norcem  = {"name":"norcem", "mCO2": 55, "xCO2": 0.20}
 sherman = {"name":"sherman", "mCO2": 129, "xCO2": 0.06}
 
-for plant in [dam, nova, shand, klem, norcem]:
+for plant in [dam, nova, shand, klem, norcem, sherman]:
     mCO2 = plant["mCO2"]             # [tCO2/h]
     xCO2 = plant["xCO2"]             # [-]
 
