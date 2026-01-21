@@ -10,7 +10,8 @@ def capture_condition(stack, x, liquefy=False):
     if stack['energy_strategy'] == 'Class III-NG':
         ktCO2f = stack['ktCO2']
         ktCO2cem = 0
-        ktCO2b = 0
+        ktCO2pl = 0
+        ktCO2b = 0  
         FLH = x['FLH_industry']
 
         # Qfuel = mCO2*CR*qreb + mCO2_chp*CR*qreb, and Qfuel=mCO2_chp/emission_factor_gas (Sunny et al., 2022)
@@ -41,21 +42,25 @@ def capture_condition(stack, x, liquefy=False):
         ktCO2_dict = {
             'ktCO2f': ktCO2f,
             'ktCO2cem': ktCO2cem,
+            'ktCO2pl': ktCO2pl,
             'ktCO2b': ktCO2b,
             'ktCO2f_inc': mCO2_extra * FLH /1000,
             'ktCO2f_ccs': mCO2_total * FLH /1000 * x['capture_rate'],
             'ktCO2cem_ccs': 0,
+            'ktCO2pl_ccs': 0,
             'ktCO2b_ccs': 0,
             'ktCO2f_res': mCO2_total * FLH /1000 * (1 - x['capture_rate']),
             'ktCO2cem_res': 0,
+            'ktCO2pl_res': 0,
         }
-        ktCO2_dict['ktCO2tot_ccs'] = ktCO2_dict['ktCO2f_ccs'] + ktCO2_dict['ktCO2cem_ccs'] + ktCO2_dict['ktCO2b_ccs']
+        ktCO2_dict['ktCO2tot_ccs'] = ktCO2_dict['ktCO2f_ccs'] + ktCO2_dict['ktCO2cem_ccs'] + ktCO2_dict['ktCO2pl_ccs'] + ktCO2_dict['ktCO2b_ccs']
 
         return ktCO2_dict, FLH, mCO2_total, xCO2, OPEXE, Qgas_boiler, Qbio_boiler 
     
     if stack['energy_strategy'] == 'Biomass':
         ktCO2f = stack['ktCO2'] * (1 - x['fraction_limestone'])
         ktCO2cem = stack['ktCO2'] * x['fraction_limestone']
+        ktCO2pl = 0
         ktCO2b = 0
         FLH = x['FLH_industry']
 
@@ -87,21 +92,25 @@ def capture_condition(stack, x, liquefy=False):
         ktCO2_dict = {
             'ktCO2f': ktCO2f,
             'ktCO2cem': ktCO2cem,
+            'ktCO2pl': ktCO2pl,
             'ktCO2b': ktCO2b,
             'ktCO2f_inc': 0,
             'ktCO2f_ccs': ktCO2f * x['capture_rate'],
             'ktCO2cem_ccs': ktCO2cem * x['capture_rate'],
+            'ktCO2pl_ccs': 0,
             'ktCO2b_ccs': mCO2_extra * FLH /1000 * x['capture_rate'],
             'ktCO2f_res': ktCO2f * (1 - x['capture_rate']),
             'ktCO2cem_res': ktCO2cem * (1 - x['capture_rate']),
+            'ktCO2pl_res': 0,
         }
-        ktCO2_dict['ktCO2tot_ccs'] = ktCO2_dict['ktCO2f_ccs'] + ktCO2_dict['ktCO2cem_ccs'] + ktCO2_dict['ktCO2b_ccs']
+        ktCO2_dict['ktCO2tot_ccs'] = ktCO2_dict['ktCO2f_ccs'] + ktCO2_dict['ktCO2cem_ccs'] + ktCO2_dict['ktCO2pl_ccs'] + ktCO2_dict['ktCO2b_ccs']
 
         return ktCO2_dict, FLH, mCO2_total, xCO2, OPEXE, Qgas_boiler, Qbio_boiler 
     
     if stack['energy_strategy'] == 'Class I-HCN' or stack['energy_strategy'] == 'Class I-HRSG':
         ktCO2f = stack['ktCO2']
         ktCO2cem = 0
+        ktCO2pl = 0
         ktCO2b = 0
         FLH = x['FLH_industry']
         mCO2 = ktCO2f * 1000 / FLH # [tCO2/h]
@@ -127,22 +136,26 @@ def capture_condition(stack, x, liquefy=False):
         OPEXE += power_demand/3.6 * x['celc'] # [€/tCO2]
 
         ktCO2_dict = {
-                'ktCO2f': ktCO2f,
-                'ktCO2cem': ktCO2cem,
-                'ktCO2b': ktCO2b,
-                'ktCO2f_inc': 0,
-                'ktCO2f_ccs': ktCO2f * x['capture_rate'],
-                'ktCO2cem_ccs': 0,
-                'ktCO2b_ccs': 0,
-                'ktCO2f_res': ktCO2f * (1 - x['capture_rate']),
-                'ktCO2cem_res': 0,
-            }
-        ktCO2_dict['ktCO2tot_ccs'] = ktCO2_dict['ktCO2f_ccs'] + ktCO2_dict['ktCO2cem_ccs'] + ktCO2_dict['ktCO2b_ccs']
+            'ktCO2f': ktCO2f,
+            'ktCO2cem': ktCO2cem,
+            'ktCO2pl': ktCO2pl,
+            'ktCO2b': ktCO2b,
+            'ktCO2f_inc': 0,
+            'ktCO2f_ccs': ktCO2f * x['capture_rate'],
+            'ktCO2cem_ccs': 0,
+            'ktCO2pl_ccs': 0,
+            'ktCO2b_ccs': 0,
+            'ktCO2f_res': ktCO2f * (1 - x['capture_rate']),
+            'ktCO2cem_res': 0,
+            'ktCO2pl_res': 0,
+        }
+        ktCO2_dict['ktCO2tot_ccs'] = ktCO2_dict['ktCO2f_ccs'] + ktCO2_dict['ktCO2cem_ccs'] + ktCO2_dict['ktCO2pl_ccs'] + ktCO2_dict['ktCO2b_ccs']
         return ktCO2_dict, FLH, mCO2, stack['xCO2'], OPEXE, Qgas_boiler, Qbio_boiler 
     
     if stack['energy_strategy'] == 'Drax':
         ktCO2f = 0
         ktCO2cem = 0
+        ktCO2pl = 0
         ktCO2b = stack['ktCO2']
         Qfuel = x['drax_capacity'] / (x['drax_efficiency']/100) # [MW]
         FLH = ktCO2b*1000 / (Qfuel * x['emission_factor_pellets']) 
@@ -166,23 +179,27 @@ def capture_condition(stack, x, liquefy=False):
         ktCO2_dict = {
             'ktCO2f': 0,
             'ktCO2cem': 0,
+            'ktCO2pl': 0,
             'ktCO2b': ktCO2b,
             'ktCO2f_inc': 0,
             'ktCO2f_ccs': 0,
             'ktCO2cem_ccs': 0,
+            'ktCO2pl_ccs': 0,
             'ktCO2b_ccs': ktCO2b * x['capture_rate'],
             'ktCO2f_res': 0,
             'ktCO2cem_res': 0,
+            'ktCO2pl_res': 0,
         }
-        ktCO2_dict['ktCO2tot_ccs'] = ktCO2_dict['ktCO2f_ccs'] + ktCO2_dict['ktCO2cem_ccs'] + ktCO2_dict['ktCO2b_ccs']
+        ktCO2_dict['ktCO2tot_ccs'] = ktCO2_dict['ktCO2f_ccs'] + ktCO2_dict['ktCO2cem_ccs'] + ktCO2_dict['ktCO2pl_ccs'] + ktCO2_dict['ktCO2b_ccs']
         return ktCO2_dict, FLH, mCO2, stack['xCO2'], OPEXE, Qgas_boiler, Qbio_boiler 
     
     if stack['energy_strategy'] == 'Waste-HCN':
-        ktCO2f = stack['ktCO2'] * x['fraction_fossil_waste']
+        ktCO2f = 0
         ktCO2cem = 0
+        ktCO2pl = stack['ktCO2'] * x['fraction_fossil_waste']
         ktCO2b = stack['ktCO2'] * (1 - x['fraction_fossil_waste'])
         FLH = x['FLH_waste']
-        mCO2 = (ktCO2b + ktCO2f) * 1000 / FLH # [tCO2/h]
+        mCO2 = (ktCO2b + ktCO2pl) * 1000 / FLH # [tCO2/h]
 
         # Calculate OPEXE
         Qgas_boiler = 0
@@ -201,20 +218,24 @@ def capture_condition(stack, x, liquefy=False):
         ktCO2_dict = {
             'ktCO2f': ktCO2f,
             'ktCO2cem': ktCO2cem,
+            'ktCO2pl': ktCO2pl,
             'ktCO2b': ktCO2b,
             'ktCO2f_inc': 0,
-            'ktCO2f_ccs': ktCO2f * x['capture_rate'],
+            'ktCO2f_ccs': 0,
             'ktCO2cem_ccs': 0,
+            'ktCO2pl_ccs': ktCO2pl * x['capture_rate'],
             'ktCO2b_ccs': ktCO2b * x['capture_rate'],
-            'ktCO2f_res': ktCO2f * (1 - x['capture_rate']),
+            'ktCO2f_res': 0,
             'ktCO2cem_res': 0,
+            'ktCO2pl_res': ktCO2pl * (1 - x['capture_rate']),
         }
-        ktCO2_dict['ktCO2tot_ccs'] = ktCO2_dict['ktCO2f_ccs'] + ktCO2_dict['ktCO2cem_ccs'] + ktCO2_dict['ktCO2b_ccs']
+        ktCO2_dict['ktCO2tot_ccs'] = ktCO2_dict['ktCO2f_ccs'] + ktCO2_dict['ktCO2cem_ccs'] + ktCO2_dict['ktCO2pl_ccs'] + ktCO2_dict['ktCO2b_ccs']
         return ktCO2_dict, FLH, mCO2, stack['xCO2'], OPEXE, Qgas_boiler, Qbio_boiler 
 
     if stack['energy_strategy'] == 'LP steam':
         ktCO2f = stack['ktCO2']
         ktCO2cem = 0
+        ktCO2pl = 0
         ktCO2b = 0
         Qfuel = stack['ccgt_capacity'] / (x['ccgt_efficiency']) # [MW]
         mCO2 = Qfuel * x['emission_factor_gas'] # [tCO2/h]
@@ -235,15 +256,18 @@ def capture_condition(stack, x, liquefy=False):
         ktCO2_dict = {
             'ktCO2f': ktCO2f,
             'ktCO2cem': ktCO2cem,
+            'ktCO2pl': ktCO2pl,
             'ktCO2b': ktCO2b,
             'ktCO2f_inc': 0,
             'ktCO2f_ccs': ktCO2f * x['capture_rate'],
             'ktCO2cem_ccs': 0,
+            'ktCO2pl_ccs': 0,
             'ktCO2b_ccs': 0,
             'ktCO2f_res': ktCO2f * (1 - x['capture_rate']),
             'ktCO2cem_res': 0,
+            'ktCO2pl_res': 0,
         }
-        ktCO2_dict['ktCO2tot_ccs'] = ktCO2_dict['ktCO2f_ccs'] + ktCO2_dict['ktCO2cem_ccs'] + ktCO2_dict['ktCO2b_ccs']
+        ktCO2_dict['ktCO2tot_ccs'] = ktCO2_dict['ktCO2f_ccs'] + ktCO2_dict['ktCO2cem_ccs'] + ktCO2_dict['ktCO2pl_ccs'] + ktCO2_dict['ktCO2b_ccs']
         return ktCO2_dict, FLH, mCO2, stack['xCO2'], OPEXE, Qgas_boiler, Qbio_boiler 
 
 def approximate_CAPEX(mCO2, xCO2, fixate_CAPEX, CEPCI_2025, CEPCI_base=798.7, NETL=5.509, debug=False):
@@ -354,16 +378,17 @@ def adjust_outliers(MACC, capture_rate, x):
 
     # 2. Add new-built waste incinerator with CCS (Protos)
     protos_ktco2 = 370  # [ktCO2/y]
-    protos_fossil = protos_ktco2 * x['fraction_fossil_waste']
+    protos_plastic = protos_ktco2 * x['fraction_fossil_waste']
     protos_bio = protos_ktco2 * (1 - x['fraction_fossil_waste'])
-    protos_residual_fossil = protos_fossil / capture_rate * (1 - capture_rate)
+    protos_residual_plastic = protos_plastic * (1 - capture_rate)
     
     MACC.loc[len(MACC)] = {
         'sector': 'waste',
         'site': 'Protos',
         'stack': 'Protos-waste',
-        'ktCO2f': protos_fossil / capture_rate,
+        'ktCO2f': 0,
         'ktCO2cem': 0,
+        'ktCO2pl': protos_plastic / capture_rate,
         'ktCO2b': protos_bio / capture_rate,
         'MAC': 0,  # New-build, MAC=0
         'CAPEX': 0,
@@ -371,12 +396,14 @@ def adjust_outliers(MACC, capture_rate, x):
         'invested': False,
         'year_invest': None,
         'ktCO2f_inc': 0,
-        'ktCO2f_ccs': protos_fossil,
+        'ktCO2f_ccs': 0,
         'ktCO2cem_ccs': 0,
+        'ktCO2pl_ccs': protos_plastic,
         'ktCO2b_ccs': protos_bio,
         'ktCO2tot_ccs': protos_ktco2,
-        'ktCO2f_res': protos_residual_fossil,
+        'ktCO2f_res': 0,
         'ktCO2cem_res': 0,
+        'ktCO2pl_res': protos_residual_plastic,
     }
 
     # 3. Add new-built CCGT with CCS (Teeside)
@@ -389,6 +416,7 @@ def adjust_outliers(MACC, capture_rate, x):
         'stack': 'Teeside-ccgt',
         'ktCO2f': teeside_ktco2 / capture_rate,
         'ktCO2cem': 0,
+        'ktCO2pl': 0,
         'ktCO2b': 0,
         'MAC': 0,  # New-build, MAC=0
         'CAPEX': 0,
@@ -398,10 +426,12 @@ def adjust_outliers(MACC, capture_rate, x):
         'ktCO2f_inc': 0,
         'ktCO2f_ccs': teeside_ktco2,
         'ktCO2cem_ccs': 0,
+        'ktCO2pl_ccs': 0,
         'ktCO2b_ccs': 0,
         'ktCO2tot_ccs': teeside_ktco2,
         'ktCO2f_res': teeside_residual_fossil,
         'ktCO2cem_res': 0,
+        'ktCO2pl_res': 0,
     }
 
     return MACC
@@ -526,22 +556,22 @@ def simulate_ctbo(
         'drax_efficiency': drax_efficiency,
         'drax_efficiency_loss': drax_efficiency_loss,
     }
-    # Calculate the point-source carbon supply by subtracting waste emissions, Drax, and limestone emissions
+    # Calculate the point-source carbon supply. Low-concentration refinery stacks that have NaN as energy_strategy are considered "diffuse" and excluded. Also subtract waste emissions, Drax, and limestone emissions
+    plants_clean = plants_clean[plants_clean['energy_strategy'].notna()]
     total_ktCO2 = plants_clean['ktCO2'].sum()
     print(f"Total CO2 capture capacity = {total_ktCO2:.2f} ktCO2/y")
     waste_ktCO2 = plants_clean[plants_clean['sector'] == 'waste']['ktCO2'].sum()
     drax_ktCO2 = plants_clean[plants_clean['sector'] == 'drax']['ktCO2'].sum()
     cement_ktCO2 = plants_clean[plants_clean['sector'] == 'cement']['ktCO2'].sum() * fraction_limestone
-    pointsources_ktCO2f = total_ktCO2 - waste_ktCO2 - drax_ktCO2 - cement_ktCO2 # [ktCO2f] supplied and emitted in 2023
-    print(f"Point-source carbon supply = {pointsources_ktCO2f:.2f} ktCO2/y")
+    pointsources_ktCO2f = total_ktCO2 - (waste_ktCO2 + drax_ktCO2 + cement_ktCO2) # [ktCO2f] supplied and emitted in 2023
+    print(f"Point-source fossil FUEL carbon supply = {pointsources_ktCO2f:.2f} ktCO2/y")
     
-    # Specify whether plants defossilize. Omit low-concentration refinery stacks that have NaN as energy_strategy.
+    # Specify whether plants defossilize. 
     if DEFOSSILIZE:
         plants_clean = plants_clean[~plants_clean['sector'].isin(['steel', 'refinery'])]
         ccgt_plants = plants_clean[plants_clean['sector'] == 'ccgt']
         ccgt_even = ccgt_plants.iloc[::2]
         plants_clean = pd.concat([plants_clean[plants_clean['sector'] != 'ccgt'], ccgt_even])
-    plants_clean = plants_clean[plants_clean['energy_strategy'].notna()]
     print("Number of plants =", len(plants_clean))
     print("Total CO2 capture capacity =", plants_clean['ktCO2'].sum(), "ktCO2/y")
 
@@ -549,9 +579,9 @@ def simulate_ctbo(
     # NOTE: Maybe include PLASTIC and CEMENT in the mandate? To ensure full CTBO coverage when fraction=100%?
     # NOTE: ALTERNATIVE: Calculate only O,G,C emissions, implying that waste have zero fossil emissions, and cement as 33% emissions...
     MACC = pd.DataFrame(columns=[
-        'sector', 'site', 'stack', 'ktCO2f', 'ktCO2cem', 'ktCO2b',
+        'sector', 'site', 'stack', 'ktCO2f', 'ktCO2cem', 'ktCO2pl', 'ktCO2b',
         'MAC', 'CAPEX', 'OPEX', 'invested', 'year_invest', 
-        'ktCO2f_inc', 'ktCO2f_ccs', 'ktCO2cem_ccs', 'ktCO2b_ccs', 'ktCO2tot_ccs', 'ktCO2f_res', 'ktCO2cem_res', 
+        'ktCO2f_inc', 'ktCO2f_ccs', 'ktCO2cem_ccs', 'ktCO2pl_ccs', 'ktCO2b_ccs', 'ktCO2tot_ccs', 'ktCO2f_res', 'ktCO2cem_res', 'ktCO2pl_res', 
         ])
 
     OPEX_results = {}
@@ -596,6 +626,7 @@ def simulate_ctbo(
             'stack': stack['stack'],  
             'ktCO2f': ktCO2_dict['ktCO2f'], 
             'ktCO2cem': ktCO2_dict['ktCO2cem'], 
+            'ktCO2pl': ktCO2_dict['ktCO2pl'], 
             'ktCO2b': ktCO2_dict['ktCO2b'], 
             'MAC': MAC, 
             'CAPEX': CAPEX,
@@ -605,15 +636,17 @@ def simulate_ctbo(
             'ktCO2f_inc': ktCO2_dict['ktCO2f_inc'], 
             'ktCO2f_ccs': ktCO2_dict['ktCO2f_ccs'], 
             'ktCO2cem_ccs': ktCO2_dict['ktCO2cem_ccs'], 
+            'ktCO2pl_ccs': ktCO2_dict['ktCO2pl_ccs'], 
             'ktCO2b_ccs': ktCO2_dict['ktCO2b_ccs'], 
             'ktCO2tot_ccs': ktCO2_dict['ktCO2tot_ccs'],
             'ktCO2f_res': ktCO2_dict['ktCO2f_res'], 
             'ktCO2cem_res': ktCO2_dict['ktCO2cem_res'],
+            'ktCO2pl_res': ktCO2_dict['ktCO2pl_res'],
         }
     MACC = adjust_outliers(MACC, capture_rate, x)
     MACC = MACC.sort_values(by='MAC', ascending=True)
 
-    print(MACC[MACC['sector'] == 'steel'][['stack', 'MAC', 'ktCO2tot_ccs', 'invested', 'ktCO2f', 'ktCO2f_inc', 'ktCO2f_ccs', 'ktCO2f_res']])
+    print(MACC[MACC['sector'] == 'cement'][['stack', 'MAC', 'ktCO2f', 'ktCO2cem', 'ktCO2b', 'ktCO2f_ccs', 'ktCO2cem_ccs', 'ktCO2b_ccs', 'ktCO2f_res']])
     for sector in MACC['sector'].unique():
         median_MAC = MACC[MACC['sector'] == sector]['MAC'].median()
         print(f"Median MAC for sector {sector} = {median_MAC:.2f} €/tCO2")
@@ -652,11 +685,11 @@ def simulate_ctbo(
     ) * pounds_to_EUR
     ctbo_trajectory = ((years - START_YEAR) * CTBO_QUADRATIC)**2 / 100
 
-    # Initialize results arrays for carbon (indifferent of cement/plastic), policies, and plants
+    # Initialize results arrays for carbon (f=fuels, cem=cement, pl=plastic, g=f+cem+pl, b=biomass)
     _supply_ktCO2f = []
     _emitted_ktCO2f = []
     _mandate_ktCO2 = []
-    _stored_ktCO2f = []
+    _stored_ktCO2g = []
     _stored_ktCO2b = []
     _stored_ktCO2daccs = []
 
@@ -706,47 +739,37 @@ def simulate_ctbo(
                     print(f"   ETS price = {ets_price:.0f} €/tCO2 and MAC = {plant['MAC']:.0f} €/tCO2")
                     print(f"   Extra fossil costs = {costs_extra:.0f} €/tCO2")
 
-        # Calculate current carbon balances 
-        total_ktCO2f = MACC['ktCO2f'].sum() + MACC['ktCO2f_inc'].where(MACC['invested'], 0).sum() # [ktCO2f] NOTE: Maybe remove cement
-        print("---------------------------------------------------------------------------------> WEIRD, REDO CARBON LOGIC")
-        waste_ktCO2f = MACC[MACC['sector'] == 'waste']['ktCO2f'].sum()
-        cement_ktCO2f = MACC[MACC['sector'] == 'cement']['ktCO2f'].sum() * fraction_limestone
-        pointsource_supply = total_ktCO2f - waste_ktCO2f - cement_ktCO2f
+        # Base the CTBO mandate on coal, oil, and gas supply (ktCO2f)
+        pointsource_supply = MACC['ktCO2f'].sum() + MACC['ktCO2f_inc'].where(MACC['invested'], 0).sum()
         supply_ktCO2f = pointsource_supply + diffuse_supply
-        print(" ")
-        print(supply_ktCO2f)
 
-        pointsource_emissions = MACC['ktCO2f'].where(~MACC['invested'], 0).sum() + MACC['ktCO2cem'].where(~MACC['invested'], 0).sum()
-        pointsource_residuals = MACC['ktCO2f_res'].where(MACC['invested'], 0).sum() + MACC['ktCO2cem_res'].where(MACC['invested'], 0).sum()
-        emitted_ktCO2f = pointsource_emissions + pointsource_residuals + diffuse_supply
-        print(emitted_ktCO2f)
-
-        cdr = MACC['ktCO2b_ccs'].where(MACC['invested'], 0).sum() + stored_ktCO2daccs
-        print(cdr)
-        print("CDR does not add up to CO2 emissions since the mandate doesnt concern limestone or plastic... how to handle?")
+        pointsource_emissions = MACC['ktCO2f'].where(~MACC['invested'], 0).sum() + MACC['ktCO2f_res'].where(MACC['invested'], 0).sum()
+        emitted_ktCO2f = pointsource_emissions + diffuse_supply
 
         # Mandate CTBO compliance
         ctbo_mandate = supply_ktCO2f * ctbo_fraction
-        stored_ktCO2f = MACC['ktCO2f_ccs'].where(MACC['invested'], 0).sum() + MACC['ktCO2cem_ccs'].where(MACC['invested'], 0).sum()
+        stored_ktCO2f = MACC['ktCO2f_ccs'].where(MACC['invested'], 0).sum()
+        stored_ktCO2cem = MACC['ktCO2cem_ccs'].where(MACC['invested'], 0).sum()
+        stored_ktCO2pl = MACC['ktCO2pl_ccs'].where(MACC['invested'], 0).sum()
         stored_ktCO2b = MACC['ktCO2b_ccs'].where(MACC['invested'], 0).sum()
 
-        stored_missing = ctbo_mandate - (stored_ktCO2f + stored_ktCO2b + stored_ktCO2daccs)
+        stored_missing = ctbo_mandate - (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs)
+
         j = 0
-        print(" Endless loop? ")
         while stored_missing > 0 and j < len(MACC):
             plant = MACC.iloc[j]
             if not plant['invested']:
-                print(plant['stack'])
-
                 # Consider this plant for the CTBO if it's chepar than DACCS (ignoring extra ETS costs)
                 if plant['MAC'] > cost_DACCS:
                     print(f"DACCS is cheaper than plant {plant['stack']}: {plant['MAC']:.0f} €/tCO2 > {cost_DACCS:.0f} €/tCO2")
                     break
                 MACC.loc[MACC.index[j], 'invested'] = True
                 MACC.loc[MACC.index[j], 'year_invest'] = year
-                stored_ktCO2f += plant['ktCO2f_ccs'] + plant['ktCO2cem_ccs']
+                stored_ktCO2f += plant['ktCO2f_ccs']
+                stored_ktCO2cem += plant['ktCO2cem_ccs']
+                stored_ktCO2pl += plant['ktCO2pl_ccs']
                 stored_ktCO2b += plant['ktCO2b_ccs']
-                stored_missing = ctbo_mandate - (stored_ktCO2f + stored_ktCO2b + stored_ktCO2daccs)
+                stored_missing = ctbo_mandate - (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs)
             j += 1
         
         # Calculate costs
@@ -756,21 +779,25 @@ def simulate_ctbo(
             cost_marginal = plant_marginal['MAC']
 
         if stored_missing > 0:
-            stored_ktCO2daccs = stored_missing
+            stored_ktCO2daccs += stored_missing
             cost_marginal = cost_DACCS
             if year_DACCS_marginal is None:
                 year_DACCS_marginal = year
+        
+        print("\nWhen ctbo_mandate=supply_ktCO2f, we expect stored_ktCO2b+stored_ktCO2daccs to equal emitted_ktCO2f!?!?")
+        print(ctbo_mandate/supply_ktCO2f)
+        print((stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) / supply_ktCO2f)
+        print((stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) / emitted_ktCO2f)
 
         cost_CSU = max(0, cost_marginal - ets_price) # [€/tCO2]
-        cost_CTBO_producers = cost_CSU * (stored_ktCO2f + stored_ktCO2b + stored_ktCO2daccs) # [k€/y] 
+        cost_CTBO_producers = cost_CSU * (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) # [k€/y] 
         cost_CSU_embedded = cost_CTBO_producers / supply_ktCO2f # [€/tCO2]
-        print('CSU =',cost_CSU_embedded)
         
         _supply_ktCO2f.append(supply_ktCO2f)
         _emitted_ktCO2f.append(emitted_ktCO2f)
         _mandate_ktCO2.append(ctbo_mandate)
-        _stored_ktCO2f.append(stored_ktCO2f)
-        _stored_ktCO2b.append(stored_ktCO2b)
+        _stored_ktCO2g.append(stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl)
+        _stored_ktCO2b.append(stored_ktCO2b + stored_ktCO2cem + stored_ktCO2pl) # NOTE: WE CONSIDER CEMENT+PLASTIC AS "BECCS" ISH 
         _stored_ktCO2daccs.append(stored_ktCO2daccs)
         _cost_marginal.append(cost_marginal)
         _price_ETS.append(ets_price)
@@ -784,7 +811,7 @@ def simulate_ctbo(
         _supply_ktCO2f, 
         _emitted_ktCO2f, 
         _mandate_ktCO2, 
-        _stored_ktCO2f, 
+        _stored_ktCO2g, 
         _stored_ktCO2b, 
         _stored_ktCO2daccs,
         savefig=save_macc
@@ -1054,7 +1081,7 @@ def plot_macc(macc, savefig=False, debug=False):
 
     return len(macc_plot)
 
-def plot_carbon_trajectories(years, supply, emitted, mandate, stored_f, stored_b, stored_daccs, savefig=False, debug=False):
+def plot_carbon_trajectories(years, supply, emitted, mandate, stored_g, stored_b, stored_daccs, savefig=False, debug=False):
     """
     Plot carbon supply, emissions, mandate, and storage trajectories over time.
     """
@@ -1065,19 +1092,19 @@ def plot_carbon_trajectories(years, supply, emitted, mandate, stored_f, stored_b
     supply_arr = np.array(supply) / 1000
     emitted_arr = np.array(emitted) / 1000
     mandate_arr = np.array(mandate) / 1000
-    stored_f_arr = np.array(stored_f) / 1000
+    stored_g_arr = np.array(stored_g) / 1000
     stored_removal_arr = (np.array(stored_b) + np.array(stored_daccs)) / 1000
     
     fig, ax = plt.subplots(figsize=(12, 7))
     
     # Plot supply, emitted, and mandate
-    ax.plot(years, supply_arr, linewidth=2.5, label='Supply', color='tab:blue', linestyle='-')
-    ax.plot(years, emitted_arr, linewidth=2.5, label='Emitted', color='tab:red', linestyle='-')
-    ax.plot(years, mandate_arr, linewidth=2.5, label='CTBO Mandate', color='tab:purple', linestyle='--')
+    ax.plot(years, supply_arr, linewidth=2.5, label='Supply CO₂ (fossil fuels)', color='tab:blue', linestyle='-')
+    ax.plot(years, emitted_arr, linewidth=2.5, label='Gross emitted CO₂ (fossil fuels)', color='tab:red', linestyle='-')
+    ax.plot(years, mandate_arr, linewidth=2.5, label='CTBO mandate', color='tab:purple', linestyle='--')
     
     # Plot stored fossil and stored removals
-    ax.plot(years, stored_f_arr, linewidth=2.5, label='Stored Fossil CO₂', color='tab:orange', linestyle='-')
-    ax.plot(years, stored_removal_arr, linewidth=2.5, label='Stored Removals (Bio+DACCS)', color='tab:green', linestyle='-')
+    ax.plot(years, stored_g_arr, linewidth=2.5, label='Stored geological CO₂ (fossil fuels, cement, plastic)', color='tab:orange', linestyle='-')
+    ax.plot(years, stored_removal_arr, linewidth=2.5, label='Stored removals (BECCS and DACCS)', color='tab:green', linestyle='-')
     
     ax.set_xlabel("Year", fontsize=14)
     ax.set_ylabel("MtCO₂", fontsize=14)
