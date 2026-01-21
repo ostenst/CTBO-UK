@@ -687,7 +687,7 @@ def simulate_ctbo(
 
     # Initialize results arrays for carbon (f=fuels, cem=cement, pl=plastic, g=f+cem+pl, b=biomass)
     _supply_ktCO2f = []
-    _emitted_ktCO2f = []
+    _emitted_ktCO2f = [] # NOTE: Try net rather than gross emissions!
     _mandate_ktCO2 = []
     _stored_ktCO2g = []
     _stored_ktCO2b = []
@@ -1104,7 +1104,7 @@ def plot_carbon_trajectories(years, supply, emitted, mandate, stored_g, stored_b
     
     # Plot stored fossil and stored removals
     ax.plot(years, stored_g_arr, linewidth=2.5, label='Stored geological CO₂ (fossil fuels, cement, plastic)', color='tab:orange', linestyle='-')
-    ax.plot(years, stored_removal_arr, linewidth=2.5, label='Stored removals (BECCS and DACCS)', color='tab:green', linestyle='-')
+    ax.plot(years, stored_removal_arr, linewidth=2.5, label='Stored removals (BECCS+DACCS+CEM+PLASTIC)', color='tab:green', linestyle='-')
     
     ax.set_xlabel("Year", fontsize=14)
     ax.set_ylabel("MtCO₂", fontsize=14)
