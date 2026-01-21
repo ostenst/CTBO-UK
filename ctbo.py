@@ -545,7 +545,9 @@ def simulate_ctbo(
     print("Number of plants =", len(plants_clean))
     print("Total CO2 capture capacity =", plants_clean['ktCO2'].sum(), "ktCO2/y")
 
-    # Construct the MACC
+    # ------------------- CONSTRUCT THE MACC ---------------------
+    # NOTE: Maybe include PLASTIC and CEMENT in the mandate? To ensure full CTBO coverage when fraction=100%?
+    # NOTE: ALTERNATIVE: Calculate only O,G,C emissions, implying that waste have zero fossil emissions, and cement as 33% emissions...
     MACC = pd.DataFrame(columns=[
         'sector', 'site', 'stack', 'ktCO2f', 'ktCO2cem', 'ktCO2b',
         'MAC', 'CAPEX', 'OPEX', 'invested', 'year_invest', 
@@ -566,7 +568,7 @@ def simulate_ctbo(
 
         # Calculate CAPEX (of amine plant and Qboilers)
         tCO2_total = mCO2_total * FLH # [tCO2/y generated]
-        CAPEX, OPEX_fixed = approximate_CAPEX(mCO2_total, xCO2, fixate_CAPEX, CEPCI_2025, CEPCI_base=798.7, NETL=5.509, debug=False) # [M€], [M€/yr]
+        CAPEX, OPEX_fixed = approximate_CAPEX(mCO2_total, xCO2, fixate_CAPEX, CEPCI_2025, CEPCI_base=CEPCI_2025, NETL=NETL_2025, debug=False) # [M€], [M€/yr]
         if ASSUME_FOAK:
             CAPEX = CAPEX * FOAK_CALIBRATION
         OPEX_fixed = (OPEX_fixed * 10**6) / tCO2_total # [€/tCO2]
