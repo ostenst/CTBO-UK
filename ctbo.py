@@ -368,6 +368,7 @@ def adjust_outliers(MACC, capture_rate, x):
         'MAC': 0,  # New-build, MAC=0
         'CAPEX': 0,
         'OPEX': 0,
+        'invested': False,
         'year_invest': None,
         'ktCO2f_inc': 0,
         'ktCO2f_ccs': protos_fossil,
@@ -392,6 +393,7 @@ def adjust_outliers(MACC, capture_rate, x):
         'MAC': 0,  # New-build, MAC=0
         'CAPEX': 0,
         'OPEX': 0,
+        'invested': False,
         'year_invest': None,
         'ktCO2f_inc': 0,
         'ktCO2f_ccs': teeside_ktco2,
@@ -415,6 +417,18 @@ def simulate_ctbo(
     DISCOUNT_RATE = 0.035,
     CTBO_QUADRATIC = 0.4,
     FOAK_CALIBRATION = 1.6379, # from calibrate_foak.py
+    ETS_START = 45, # [£/tCO2]
+    ETS_SCENARIO = '£300', # [£/tCO2] 200, 300, 400
+    DACCS_SCENARIO = '£391', # [£/tCO2] 322, 391, 7th Carbon Budget
+    
+    START_YEAR = 2025,
+    END_YEAR = 2055,
+    DIFFUSE_END_YEAR = 2050,
+    DIFFUSE_END_FRACTION = 0.5,
+
+    coal_2023 = 17, # [MtCO2] IEA (2025)
+    oil_2023 = 139, # [MtCO2] 
+    gas_2023 = 127, # [MtCO2] 
 
     emission_factor_gas = 0.204, # [tCO2/MWh] NZIP
     emission_factor_waste = 0.98, # [tCO2/t waste] Tolvik
@@ -463,6 +477,7 @@ def simulate_ctbo(
     NETL_2025 = 5.509,
     discount_rate_ccs = 0.07,
     lifetime_ccs = 25,
+    pounds_to_EUR = 1.15,
 
     transport_uncertainty = 0.15, # [-] 
     cstorage = 25, # [€/tCO2] CATF (2025)
@@ -511,6 +526,14 @@ def simulate_ctbo(
         'drax_efficiency': drax_efficiency,
         'drax_efficiency_loss': drax_efficiency_loss,
     }
+    # Calculate the point-source carbon supply by subtracting waste emissions, Drax, and limestone emissions
+    total_ktCO2 = plants_clean['ktCO2'].sum()
+    print(f"Total CO2 capture capacity = {total_ktCO2:.2f} ktCO2/y")
+    waste_ktCO2 = plants_clean[plants_clean['sector'] == 'waste']['ktCO2'].sum()
+    drax_ktCO2 = plants_clean[plants_clean['sector'] == 'drax']['ktCO2'].sum()
+    cement_ktCO2 = plants_clean[plants_clean['sector'] == 'cement']['ktCO2'].sum() * fraction_limestone
+    pointsources_ktCO2f = total_ktCO2 - waste_ktCO2 - drax_ktCO2 - cement_ktCO2 # [ktCO2f] supplied and emitted in 2023
+    print(f"Point-source carbon supply = {pointsources_ktCO2f:.2f} ktCO2/y")
     
     # Specify whether plants defossilize. Omit low-concentration refinery stacks that have NaN as energy_strategy.
     if DEFOSSILIZE:
@@ -525,7 +548,7 @@ def simulate_ctbo(
     # Construct the MACC
     MACC = pd.DataFrame(columns=[
         'sector', 'site', 'stack', 'ktCO2f', 'ktCO2cem', 'ktCO2b',
-        'MAC', 'CAPEX', 'OPEX', 'year_invest', 
+        'MAC', 'CAPEX', 'OPEX', 'invested', 'year_invest', 
         'ktCO2f_inc', 'ktCO2f_ccs', 'ktCO2cem_ccs', 'ktCO2b_ccs', 'ktCO2tot_ccs', 'ktCO2f_res', 'ktCO2cem_res', 
         ])
 
@@ -565,43 +588,214 @@ def simulate_ctbo(
         TS_results[stack['stack']] = OPEX_transtorage
 
         # Store results as a MACC row
-        MACC.loc[len(MACC)] = [
-            stack['sector'],    
-            stack['site'], 
-            stack['stack'],  
-            ktCO2_dict['ktCO2f'], 
-            ktCO2_dict['ktCO2cem'], 
-            ktCO2_dict['ktCO2b'], 
-            MAC, 
-            CAPEX,
-            OPEX+OPEX_transtorage, 
-            None, 
-            ktCO2_dict['ktCO2f_inc'], 
-            ktCO2_dict['ktCO2f_ccs'], 
-            ktCO2_dict['ktCO2cem_ccs'], 
-            ktCO2_dict['ktCO2b_ccs'], 
-            ktCO2_dict['ktCO2tot_ccs'],
-            ktCO2_dict['ktCO2f_res'], 
-            ktCO2_dict['ktCO2cem_res'],
-        ]
-    # Adjust MACC based on three outliers
+        MACC.loc[len(MACC)] = {
+            'sector': stack['sector'],    
+            'site': stack['site'], 
+            'stack': stack['stack'],  
+            'ktCO2f': ktCO2_dict['ktCO2f'], 
+            'ktCO2cem': ktCO2_dict['ktCO2cem'], 
+            'ktCO2b': ktCO2_dict['ktCO2b'], 
+            'MAC': MAC, 
+            'CAPEX': CAPEX,
+            'OPEX': OPEX + OPEX_transtorage, 
+            'invested': False,
+            'year_invest': None, 
+            'ktCO2f_inc': ktCO2_dict['ktCO2f_inc'], 
+            'ktCO2f_ccs': ktCO2_dict['ktCO2f_ccs'], 
+            'ktCO2cem_ccs': ktCO2_dict['ktCO2cem_ccs'], 
+            'ktCO2b_ccs': ktCO2_dict['ktCO2b_ccs'], 
+            'ktCO2tot_ccs': ktCO2_dict['ktCO2tot_ccs'],
+            'ktCO2f_res': ktCO2_dict['ktCO2f_res'], 
+            'ktCO2cem_res': ktCO2_dict['ktCO2cem_res'],
+        }
     MACC = adjust_outliers(MACC, capture_rate, x)
+    MACC = MACC.sort_values(by='MAC', ascending=True)
 
-    # Print this MACC data in a neat table: stack, MAC, ktCO2tot_ccs, ktCO2f_inc
-    print(MACC[['stack', 'MAC', 'ktCO2tot_ccs', 'ktCO2f_inc']])
-    # For each sector, calculate the median MAC and print it
+    print(MACC[MACC['sector'] == 'steel'][['stack', 'MAC', 'ktCO2tot_ccs', 'invested', 'ktCO2f', 'ktCO2f_inc', 'ktCO2f_ccs', 'ktCO2f_res']])
     for sector in MACC['sector'].unique():
         median_MAC = MACC[MACC['sector'] == sector]['MAC'].median()
         print(f"Median MAC for sector {sector} = {median_MAC:.2f} €/tCO2")
 
-    # Order MACC by MAC and plot it
-    MACC = MACC.sort_values(by='MAC', ascending=False)
     if save_macc:
         MACC.to_csv('results/macc.csv', index=False)
-        plot_macc_curve(MACC, savefig=save_macc)
+        plot_macc(MACC, savefig=save_macc)
 
-    # -------------------
-    # When calculating diffuse emissions, make sure to subtract cement and waste CO2 appropriately!
+    # ------------------- SIMULATE THE CTBO ---------------------
+    # Calculate diffuse carbon trajectories by subtracting point-source carbon from total supply
+    years = np.arange(START_YEAR, END_YEAR + 1)
+    supply_ktCO2f = (coal_2023 + oil_2023 + gas_2023) * 1000 
+    diffuse_ktCO2f = supply_ktCO2f - pointsources_ktCO2f    # [ktCO2] suppled and emitted in 2023
+    diffuse_fraction = np.where(
+        years <= DIFFUSE_END_YEAR,
+        1.0 - (years - START_YEAR) * ((1.0 - DIFFUSE_END_FRACTION) / (DIFFUSE_END_YEAR - START_YEAR)),
+        DIFFUSE_END_FRACTION
+    )
+    diffuse_trajectory = diffuse_ktCO2f * diffuse_fraction
+
+    # Calculate ETS and CTBO policy trajectories
+    if DACCS_SCENARIO == '£322':
+        cost_DACCS = 322 * pounds_to_EUR
+    elif DACCS_SCENARIO == '£391':
+        cost_DACCS = 391 * pounds_to_EUR
+    if ETS_SCENARIO == '£200':
+        ETS_END = 200 
+    elif ETS_SCENARIO == '£300':
+        ETS_END = 300 
+    elif ETS_SCENARIO == '£400':
+        ETS_END = 400
+    ets_trajectory = np.where(
+        years <= DIFFUSE_END_YEAR,
+        ETS_START + (years - START_YEAR) * ((ETS_END - ETS_START) / (DIFFUSE_END_YEAR - START_YEAR)),
+        ETS_END
+    ) * pounds_to_EUR
+    ctbo_trajectory = ((years - START_YEAR) * CTBO_QUADRATIC)**2 / 100
+
+    # Initialize results arrays for carbon (indifferent of cement/plastic), policies, and plants
+    _supply_ktCO2f = []
+    _emitted_ktCO2f = []
+    _mandate_ktCO2 = []
+    _stored_ktCO2f = []
+    _stored_ktCO2b = []
+    _stored_ktCO2daccs = []
+
+    _cost_marginal = []
+    _price_ETS = []
+    _price_CSU = []
+    _cost_CTBO_producers = [] # Total cost rectangle
+    _cost_CSU_embedded = [] # Total cost rectangle / supply of CO2
+    _cost_CTBO_policy = [] # Area under MACC
+    _profit_CTBO_policy = [] # Area above MACC
+    _cost_ETS_policy = []
+    _profit_ETS_policy = []
+
+    _diesel_increase = [] # Absolute increases
+    _petrol_increase = [] 
+    _gas_increase = [] 
+    _plants_costbenefit = []
+
+    gas_increase_2040 = None
+    year_DACCS_marginal = None
+
+    # Simulate the CTBO
+    stored_ktCO2daccs = 0
+    cost_marginal = 0
+    cost_CTBO_producers = 0
+    cost_CSU_embedded = 0
+
+    for i, year in enumerate(years):
+
+        diffuse_supply = diffuse_trajectory[i]
+        ets_price = ets_trajectory[i] # NOTE: It could here be possible to re-shuffle the MAC each year based on ETS-priced extra fuel
+        ctbo_fraction = ctbo_trajectory[i]
+
+        # Plants invest voluntarily if ETS price > MAC (adjusted by any increased fossil costs)
+        for idx, plant in MACC.iterrows():
+            if not plant['invested']:
+
+                if plant['ktCO2f_inc'] > 0:
+                    costs_extra = plant['ktCO2f_inc']/plant['ktCO2f'] * (1 - capture_rate) * ets_price # [€/tCO2] extra fossil costs from natural gas
+                else:
+                    costs_extra = 0
+                
+                if plant['MAC']+costs_extra < ets_price:
+                    MACC.loc[idx, 'invested'] = True
+                    MACC.loc[idx, 'year_invest'] = year
+                    print(f"Voluntary investment in {plant['stack']} in {year}")
+                    print(f"   ETS price = {ets_price:.0f} €/tCO2 and MAC = {plant['MAC']:.0f} €/tCO2")
+                    print(f"   Extra fossil costs = {costs_extra:.0f} €/tCO2")
+
+        # Calculate current carbon balances 
+        total_ktCO2f = MACC['ktCO2f'].sum() + MACC['ktCO2f_inc'].where(MACC['invested'], 0).sum() # [ktCO2f]
+        waste_ktCO2f = MACC[MACC['sector'] == 'waste']['ktCO2f'].sum()
+        pointsource_supply = total_ktCO2f - waste_ktCO2f
+        supply_ktCO2f = pointsource_supply + diffuse_supply
+        print(" ")
+        print(supply_ktCO2f)
+
+        pointsource_emissions = MACC['ktCO2f'].where(~MACC['invested'], 0).sum() + MACC['ktCO2cem'].where(~MACC['invested'], 0).sum()
+        pointsource_residuals = MACC['ktCO2f_res'].where(MACC['invested'], 0).sum() + MACC['ktCO2cem_res'].where(MACC['invested'], 0).sum()
+        emitted_ktCO2f = pointsource_emissions + pointsource_residuals + diffuse_supply
+        print(emitted_ktCO2f)
+
+        cdr = MACC['ktCO2b_ccs'].where(MACC['invested'], 0).sum() + stored_ktCO2daccs
+        print(cdr)
+        print("CDR does not add up to CO2 emissions since the mandate doesnt concern limestone or plastic... how to handle?")
+
+        # Mandate CTBO compliance
+        ctbo_mandate = supply_ktCO2f * ctbo_fraction
+        stored_ktCO2f = MACC['ktCO2f_ccs'].where(MACC['invested'], 0).sum() + MACC['ktCO2cem_ccs'].where(MACC['invested'], 0).sum()
+        stored_ktCO2b = MACC['ktCO2b_ccs'].where(MACC['invested'], 0).sum()
+
+        stored_missing = ctbo_mandate - (stored_ktCO2f + stored_ktCO2b + stored_ktCO2daccs)
+        j = 0
+        print(" Endless loop? ")
+        while stored_missing > 0 and j < len(MACC):
+            plant = MACC.iloc[j]
+            if not plant['invested']:
+                print(plant['stack'])
+
+                # Consider this plant for the CTBO if it's chepar than DACCS (ignoring extra ETS costs)
+                if plant['MAC'] > cost_DACCS:
+                    print(f"DACCS is cheaper than plant {plant['stack']}: {plant['MAC']:.0f} €/tCO2 > {cost_DACCS:.0f} €/tCO2")
+                    break
+                MACC.loc[MACC.index[j], 'invested'] = True
+                MACC.loc[MACC.index[j], 'year_invest'] = year
+                stored_ktCO2f += plant['ktCO2f_ccs'] + plant['ktCO2cem_ccs']
+                stored_ktCO2b += plant['ktCO2b_ccs']
+                stored_missing = ctbo_mandate - (stored_ktCO2f + stored_ktCO2b + stored_ktCO2daccs)
+            j += 1
+        
+        # Calculate costs
+        plants_invested = MACC[MACC['invested']]
+        if len(plants_invested) > 0:
+            plant_marginal = plants_invested.loc[plants_invested['MAC'].idxmax()]
+            cost_marginal = plant_marginal['MAC']
+
+        if stored_missing > 0:
+            stored_ktCO2daccs = stored_missing
+            cost_marginal = cost_DACCS
+            if year_DACCS_marginal is None:
+                year_DACCS_marginal = year
+
+        cost_CSU = max(0, cost_marginal - ets_price) # [€/tCO2]
+        cost_CTBO_producers = cost_CSU * (stored_ktCO2f + stored_ktCO2b + stored_ktCO2daccs) # [k€/y] 
+        cost_CSU_embedded = cost_CTBO_producers / supply_ktCO2f # [€/tCO2]
+        print('CSU =',cost_CSU_embedded)
+        
+        _supply_ktCO2f.append(supply_ktCO2f)
+        _emitted_ktCO2f.append(emitted_ktCO2f)
+        _mandate_ktCO2.append(ctbo_mandate)
+        _stored_ktCO2f.append(stored_ktCO2f)
+        _stored_ktCO2b.append(stored_ktCO2b)
+        _stored_ktCO2daccs.append(stored_ktCO2daccs)
+        _cost_marginal.append(cost_marginal)
+        _price_ETS.append(ets_price)
+        _price_CSU.append(cost_CSU)
+        _cost_CTBO_producers.append(cost_CTBO_producers)
+        _cost_CSU_embedded.append(cost_CSU_embedded)
+
+    # Plot carbon trajectories
+    plot_carbon_trajectories(
+        years, 
+        _supply_ktCO2f, 
+        _emitted_ktCO2f, 
+        _mandate_ktCO2, 
+        _stored_ktCO2f, 
+        _stored_ktCO2b, 
+        _stored_ktCO2daccs,
+        savefig=save_macc
+    )
+    
+    # Plot cost trajectories
+    plot_cost_trajectories(
+        years,
+        _cost_marginal,
+        _price_ETS,
+        _price_CSU,
+        _cost_CSU_embedded,
+        savefig=save_macc
+    )
+    plt.show()
 
     results = {}
     return results
@@ -819,21 +1013,21 @@ def plot_ts_costs_by_sector(plants_clean, ts_results, bins=30, ncols=2, debug=Fa
         print(f"plot_ts_costs_by_sector output: sectors_plotted={plotted}")
     return plotted
 
-def plot_macc_curve(macc, savefig=False, debug=False):
+def plot_macc(macc, savefig=False, debug=False):
     """
     Plot the MACC curve with cumulative ktCO2tot_ccs on the x axis and MAC on the y axis.
     """
     magma = plt.cm.magma
     if debug:
         print(
-            "plot_macc_curve inputs:",
+            "plot_macc inputs:",
             f"rows={len(macc)}, columns={list(macc.columns)}",
         )
 
     macc_plot = macc[['stack', 'ktCO2tot_ccs', 'MAC']].dropna(subset=['ktCO2tot_ccs', 'MAC']).copy()
     if macc_plot.empty:
         if debug:
-            print("plot_macc_curve output: no data to plot")
+            print("plot_macc output: no data to plot")
         return 0
 
     macc_plot = macc_plot.sort_values(by='MAC')
@@ -852,9 +1046,87 @@ def plot_macc_curve(macc, savefig=False, debug=False):
         plt.savefig('results/macc_curve.png', dpi=450, bbox_inches='tight')
 
     if debug:
-        print("plot_macc_curve output:", macc_plot[['cumulative_kt', 'MAC']].tail(1))
+        print("plot_macc output:", macc_plot[['cumulative_kt', 'MAC']].tail(1))
 
     return len(macc_plot)
+
+def plot_carbon_trajectories(years, supply, emitted, mandate, stored_f, stored_b, stored_daccs, savefig=False, debug=False):
+    """
+    Plot carbon supply, emissions, mandate, and storage trajectories over time.
+    """
+    if debug:
+        print(f"plot_carbon_trajectories inputs: years={len(years)}, supply={len(supply)}, emitted={len(emitted)}")
+    
+    # Convert lists to arrays and scale to MtCO2
+    supply_arr = np.array(supply) / 1000
+    emitted_arr = np.array(emitted) / 1000
+    mandate_arr = np.array(mandate) / 1000
+    stored_f_arr = np.array(stored_f) / 1000
+    stored_removal_arr = (np.array(stored_b) + np.array(stored_daccs)) / 1000
+    
+    fig, ax = plt.subplots(figsize=(12, 7))
+    
+    # Plot supply, emitted, and mandate
+    ax.plot(years, supply_arr, linewidth=2.5, label='Supply', color='tab:blue', linestyle='-')
+    ax.plot(years, emitted_arr, linewidth=2.5, label='Emitted', color='tab:red', linestyle='-')
+    ax.plot(years, mandate_arr, linewidth=2.5, label='CTBO Mandate', color='tab:purple', linestyle='--')
+    
+    # Plot stored fossil and stored removals
+    ax.plot(years, stored_f_arr, linewidth=2.5, label='Stored Fossil CO₂', color='tab:orange', linestyle='-')
+    ax.plot(years, stored_removal_arr, linewidth=2.5, label='Stored Removals (Bio+DACCS)', color='tab:green', linestyle='-')
+    
+    ax.set_xlabel("Year", fontsize=14)
+    ax.set_ylabel("MtCO₂", fontsize=14)
+    ax.set_title("Carbon Trajectories under CTBO", fontsize=18)
+    ax.grid(True, linestyle='--', alpha=0.4)
+    ax.tick_params(labelsize=12)
+    ax.legend(fontsize=12, loc='best')
+    
+    plt.tight_layout()
+    if savefig:
+        plt.savefig('results/carbon_trajectories.png', dpi=450, bbox_inches='tight')
+    
+    if debug:
+        print(f"plot_carbon_trajectories output: plotted {len(years)} years")
+    
+    return len(years)
+
+def plot_cost_trajectories(years, marginal_cost, ets_price, csu_price, csu_embedded, savefig=False, debug=False):
+    """
+    Plot cost and price trajectories: marginal cost, ETS price, CSU price, and embedded CSU cost.
+    """
+    if debug:
+        print(f"plot_cost_trajectories inputs: years={len(years)}, marginal_cost={len(marginal_cost)}")
+    
+    # Convert lists to arrays
+    marginal_arr = np.array(marginal_cost)
+    ets_arr = np.array(ets_price)
+    csu_arr = np.array(csu_price)
+    csu_emb_arr = np.array(csu_embedded)
+    
+    fig, ax = plt.subplots(figsize=(12, 7))
+    
+    # Plot all four cost/price lines
+    ax.plot(years, marginal_arr, linewidth=2.5, label='Marginal Cost', color='tab:blue', linestyle='-')
+    ax.plot(years, ets_arr, linewidth=2.5, label='ETS Price', color='tab:red', linestyle='-')
+    ax.plot(years, csu_arr, linewidth=2.5, label='CSU Price', color='tab:orange', linestyle='--')
+    ax.plot(years, csu_emb_arr, linewidth=2.5, label='Embedded CSU Cost', color='tab:green', linestyle=':')
+    
+    ax.set_xlabel("Year", fontsize=14)
+    ax.set_ylabel("€/tCO₂", fontsize=14)
+    ax.set_title("Cost and Price Trajectories under CTBO", fontsize=18)
+    ax.grid(True, linestyle='--', alpha=0.4)
+    ax.tick_params(labelsize=12)
+    ax.legend(fontsize=12, loc='best')
+    
+    plt.tight_layout()
+    if savefig:
+        plt.savefig('results/cost_trajectories.png', dpi=450, bbox_inches='tight')
+    
+    if debug:
+        print(f"plot_cost_trajectories output: plotted {len(years)} years")
+    
+    return len(years)
 
 if __name__ == "__main__":
     plants_clean = pd.read_csv('results/plants_clean.csv')
