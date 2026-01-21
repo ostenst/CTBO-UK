@@ -707,9 +707,11 @@ def simulate_ctbo(
                     print(f"   Extra fossil costs = {costs_extra:.0f} €/tCO2")
 
         # Calculate current carbon balances 
-        total_ktCO2f = MACC['ktCO2f'].sum() + MACC['ktCO2f_inc'].where(MACC['invested'], 0).sum() # [ktCO2f]
+        total_ktCO2f = MACC['ktCO2f'].sum() + MACC['ktCO2f_inc'].where(MACC['invested'], 0).sum() # [ktCO2f] NOTE: Maybe remove cement
+        print("---------------------------------------------------------------------------------> WEIRD, REDO CARBON LOGIC")
         waste_ktCO2f = MACC[MACC['sector'] == 'waste']['ktCO2f'].sum()
-        pointsource_supply = total_ktCO2f - waste_ktCO2f
+        cement_ktCO2f = MACC[MACC['sector'] == 'cement']['ktCO2f'].sum() * fraction_limestone
+        pointsource_supply = total_ktCO2f - waste_ktCO2f - cement_ktCO2f
         supply_ktCO2f = pointsource_supply + diffuse_supply
         print(" ")
         print(supply_ktCO2f)
