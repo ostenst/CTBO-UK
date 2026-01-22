@@ -440,7 +440,7 @@ def simulate_ctbo(
     # Constants
     plants_clean,
     transport_hubs,
-    save_macc = False,
+    single_run = False,
 
     DEFOSSILIZE = False,
     ASSUME_FOAK = True,
@@ -454,7 +454,7 @@ def simulate_ctbo(
     START_YEAR = 2025,
     END_YEAR = 2055,
     DIFFUSE_END_YEAR = 2050,
-    DIFFUSE_END_FRACTION = 0.5,
+    DIFFUSE_END_FRACTION = 0.30,
 
     coal_2023 = 17, # [MtCO2] IEA (2025)
     oil_2023 = 139, # [MtCO2] 
@@ -576,8 +576,6 @@ def simulate_ctbo(
     print("Total CO2 capture capacity =", plants_clean['ktCO2'].sum(), "ktCO2/y")
 
     # ------------------- CONSTRUCT THE MACC ---------------------
-    # NOTE: Maybe include PLASTIC and CEMENT in the mandate? To ensure full CTBO coverage when fraction=100%?
-    # NOTE: ALTERNATIVE: Calculate only O,G,C emissions, implying that waste have zero fossil emissions, and cement as 33% emissions...
     MACC = pd.DataFrame(columns=[
         'sector', 'site', 'stack', 'ktCO2f', 'ktCO2cem', 'ktCO2pl', 'ktCO2b',
         'MAC', 'CAPEX', 'OPEX', 'invested', 'year_invest', 
@@ -651,9 +649,9 @@ def simulate_ctbo(
         median_MAC = MACC[MACC['sector'] == sector]['MAC'].median()
         print(f"Median MAC for sector {sector} = {median_MAC:.2f} €/tCO2")
 
-    if save_macc:
+    if single_run:
         MACC.to_csv('results/macc.csv', index=False)
-        plot_macc(MACC, savefig=save_macc)
+        plot_macc(MACC, savefig=True)
 
     # ------------------- SIMULATE THE CTBO ---------------------
     # Calculate diffuse carbon trajectories by subtracting point-source carbon from total supply
@@ -687,7 +685,7 @@ def simulate_ctbo(
 
     # Initialize results arrays for carbon (f=fuels, cem=cement, pl=plastic, g=f+cem+pl, b=biomass)
     _supply_ktCO2f = []
-    _emitted_ktCO2f = [] # NOTE: Try net rather than gross emissions!
+    _emitted_ktCO2f = [] 
     _mandate_ktCO2 = []
     _stored_ktCO2g = []
     _stored_ktCO2b = []
@@ -703,9 +701,7 @@ def simulate_ctbo(
     _cost_ETS_policy = []
     _profit_ETS_policy = []
 
-    _diesel_increase = [] # Absolute increases
-    _petrol_increase = [] 
-    _gas_increase = [] 
+    _gas_increase = [] # % increase
     _plants_costbenefit = []
 
     gas_increase_2040 = None
@@ -735,9 +731,6 @@ def simulate_ctbo(
                 if plant['MAC']+costs_extra < ets_price:
                     MACC.loc[idx, 'invested'] = True
                     MACC.loc[idx, 'year_invest'] = year
-                    print(f"Voluntary investment in {plant['stack']} in {year}")
-                    print(f"   ETS price = {ets_price:.0f} €/tCO2 and MAC = {plant['MAC']:.0f} €/tCO2")
-                    print(f"   Extra fossil costs = {costs_extra:.0f} €/tCO2")
 
         # Base the CTBO mandate on coal, oil, and gas supply (ktCO2f)
         pointsource_supply = MACC['ktCO2f'].sum() + MACC['ktCO2f_inc'].where(MACC['invested'], 0).sum()
@@ -746,7 +739,7 @@ def simulate_ctbo(
         pointsource_emissions = MACC['ktCO2f'].where(~MACC['invested'], 0).sum() + MACC['ktCO2f_res'].where(MACC['invested'], 0).sum()
         emitted_ktCO2f = pointsource_emissions + diffuse_supply
 
-        # Mandate CTBO compliance
+        # Mandate CTBO compliance for which any CO2 type can be stored
         ctbo_mandate = supply_ktCO2f * ctbo_fraction
         stored_ktCO2f = MACC['ktCO2f_ccs'].where(MACC['invested'], 0).sum()
         stored_ktCO2cem = MACC['ktCO2cem_ccs'].where(MACC['invested'], 0).sum()
@@ -761,7 +754,6 @@ def simulate_ctbo(
             if not plant['invested']:
                 # Consider this plant for the CTBO if it's chepar than DACCS (ignoring extra ETS costs)
                 if plant['MAC'] > cost_DACCS:
-                    print(f"DACCS is cheaper than plant {plant['stack']}: {plant['MAC']:.0f} €/tCO2 > {cost_DACCS:.0f} €/tCO2")
                     break
                 MACC.loc[MACC.index[j], 'invested'] = True
                 MACC.loc[MACC.index[j], 'year_invest'] = year
@@ -778,57 +770,200 @@ def simulate_ctbo(
             plant_marginal = plants_invested.loc[plants_invested['MAC'].idxmax()]
             cost_marginal = plant_marginal['MAC']
 
-        if stored_missing > 0:
-            stored_ktCO2daccs += stored_missing
+        if stored_missing > 0 or year_DACCS_marginal is not None:
+            if stored_missing > 0:
+                stored_ktCO2daccs += stored_missing
             cost_marginal = cost_DACCS
             if year_DACCS_marginal is None:
                 year_DACCS_marginal = year
-        
-        print("\nWhen ctbo_mandate=supply_ktCO2f, we expect stored_ktCO2b+stored_ktCO2daccs to equal emitted_ktCO2f!?!?")
-        print(ctbo_mandate/supply_ktCO2f)
-        print((stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) / supply_ktCO2f)
-        print((stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) / emitted_ktCO2f)
 
         cost_CSU = max(0, cost_marginal - ets_price) # [€/tCO2]
         cost_CTBO_producers = cost_CSU * (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) # [k€/y] 
         cost_CSU_embedded = cost_CTBO_producers / supply_ktCO2f # [€/tCO2]
+
+        # Calculate the gas price increase and store interim results
+        gas_increase_abs = cost_CSU_embedded * emission_factor_gas # [€/MWh]
+        gas_increase_pct = gas_increase_abs / cgas * 100 # [%]
+        if year == 2040:
+            gas_increase_2040 = gas_increase_pct
         
         _supply_ktCO2f.append(supply_ktCO2f)
         _emitted_ktCO2f.append(emitted_ktCO2f)
         _mandate_ktCO2.append(ctbo_mandate)
         _stored_ktCO2g.append(stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl)
-        _stored_ktCO2b.append(stored_ktCO2b + stored_ktCO2cem + stored_ktCO2pl) # NOTE: WE CONSIDER CEMENT+PLASTIC AS "BECCS" ISH 
+        _stored_ktCO2b.append(stored_ktCO2b)
         _stored_ktCO2daccs.append(stored_ktCO2daccs)
         _cost_marginal.append(cost_marginal)
         _price_ETS.append(ets_price)
         _price_CSU.append(cost_CSU)
         _cost_CTBO_producers.append(cost_CTBO_producers)
         _cost_CSU_embedded.append(cost_CSU_embedded)
+        _gas_increase.append(gas_increase_pct)
 
-    # Plot carbon trajectories
-    plot_carbon_trajectories(
-        years, 
-        _supply_ktCO2f, 
-        _emitted_ktCO2f, 
-        _mandate_ktCO2, 
-        _stored_ktCO2g, 
-        _stored_ktCO2b, 
-        _stored_ktCO2daccs,
-        savefig=save_macc
-    )
+        # Calculate plant and policy costs and profits based on MACC areas
+        cost_CTBO = 0
+        profit_CTBO = 0
+        cost_ETS = 0
+        profit_ETS = 0
+        for idx, plant in MACC.iterrows():
+            # All plants take on embedded CSU costs. Rest depends on whether plant has invested.
+            cost_CSU_plant = cost_CSU_embedded * (plant['ktCO2f'] + plant['ktCO2f_inc']) # [k€/y]
+
+            # NOTE: Fossil ETS are only accounted as costs (or avoided costs). Consider new logic, as a profit from selling ETS allowances? No, that's a special case!
+            if not plant['invested']:
+                profit_CSU_plant = 0
+                cost_ETS_plant = ets_price * (plant['ktCO2f'] + plant['ktCO2cem'] + plant['ktCO2pl']) # [k€/y] 
+                profit_ETS_plant = 0
+
+            if plant['invested']:
+                profit_CSU_plant = cost_CSU * plant['ktCO2tot_ccs'] 
+                cost_ETS_plant = ets_price * (plant['ktCO2f_res'] + plant['ktCO2cem_res'] + plant['ktCO2pl_res'])
+                profit_ETS_plant = max(0, ets_price - plant['MAC']) * plant['ktCO2b_ccs'] # [k€/y] assumes CDR can profit in the ETS
+
+                # NOTE: Only policy costs/profits for invested plants (to calculate the cost areas)
+                cost_CTBO += max(0, plant['MAC'] - ets_price) * plant['ktCO2tot_ccs'] # [k€/y] Green MACC area 1
+                profit_CTBO += max(0, cost_marginal - max(ets_price, plant['MAC'])) * plant['ktCO2tot_ccs'] # [k€/y] Green MACC area 2
+                cost_ETS += min(ets_price, plant['MAC']) * plant['ktCO2tot_ccs'] # [k€/y] Purple MACC area 3
+                profit_ETS += max(0, ets_price - plant['MAC']) * plant['ktCO2tot_ccs'] # [k€/y] Purple MACC area 4
+
+
+            _plants_costbenefit.append({
+                'year': year,
+                'stack': plant['stack'],
+                'sector': plant['sector'],
+                'invested': plant['invested'],
+                'investment_year': plant['year_invest'],
+                'marginal_plant': cost_marginal == plant['MAC'],
+                'CSU_price': cost_CSU,
+                'MAC': plant['MAC'],
+                'ETS_price': ets_price,
+                'CAPEX': plant['CAPEX'] * 10**3, # [k€]
+                'OPEX': plant['OPEX'] * plant['ktCO2tot_ccs'], # [k€/y] 
+                'cost_CSU_plant': cost_CSU_plant, # [k€/y]
+                'profit_CSU_plant': profit_CSU_plant, # [k€/y]
+                'cost_ETS_plant': cost_ETS_plant, # [k€/y]
+                'profit_ETS_plant': profit_ETS_plant, # [k€/y]
+                'ktCO2tot_ccs': plant['ktCO2tot_ccs'],
+            })
+
+        # Add DACCS and calculate policy costs/profits
+        if stored_ktCO2daccs > 0:
+            cost_CTBO += cost_CSU * stored_ktCO2daccs # [k€/y]
+            cost_ETS += ets_price * stored_ktCO2daccs # [k€/y]
+        _cost_CTBO_policy.append(cost_CTBO)
+        _profit_CTBO_policy.append(profit_CTBO)
+        _cost_ETS_policy.append(cost_ETS)
+        _profit_ETS_policy.append(profit_ETS)
+
+    # Calculate the NPV_CSU and NPV_total for each plant
+    npv_results = []
+    for idx, plant in MACC.iterrows():
+        ktCO2tot_ccs = plant['ktCO2tot_ccs']
+        sector = plant['sector']
+        NPV_data = pd.DataFrame(_plants_costbenefit)
+        NPV_data = NPV_data[NPV_data['stack'] == plant['stack']] # Data for all years
+        investment_year = NPV_data['investment_year'].dropna().iloc[0] if NPV_data['investment_year'].notna().any() else None
+        CAPEX = NPV_data['CAPEX'] # [k€] only once
+        OPEX_CCS = NPV_data['OPEX'] # [k€/y] for each year
+        cost_CSU_plant = NPV_data['cost_CSU_plant'] 
+        profit_CSU_plant = NPV_data['profit_CSU_plant'] 
+        cost_ETS_plant = NPV_data['cost_ETS_plant'] 
+        profit_ETS_plant = NPV_data['profit_ETS_plant'] 
+
+        NPV_data['discount_factor'] = 1 / (1 + DISCOUNT_RATE) ** (NPV_data['year'] - START_YEAR) # NPV is relative to START_YEAR, not investment year!
+        NPV_CSU = ((profit_CSU_plant - cost_CSU_plant) * NPV_data['discount_factor']).sum() # [k€]
+        
+        # NPV_total: CAPEX (once, at investment_year) + annual costs and profits
+        if investment_year is not None:
+            capex_value = CAPEX.iloc[0] if len(CAPEX) > 0 else 0  # [k€] CAPEX is same across years
+            discount_factor_capex = 1 / (1 + DISCOUNT_RATE) ** (investment_year - START_YEAR)
+            annual_costs = (cost_CSU_plant + cost_ETS_plant + OPEX_CCS) * NPV_data['discount_factor']
+            annual_profits = (profit_CSU_plant + profit_ETS_plant) * NPV_data['discount_factor']
+            NPV_total = -capex_value * discount_factor_capex + annual_profits.sum() - annual_costs.sum()  # [k€]
+        else:
+            NPV_total = 0
+        
+        npv_results.append({
+            'stack': plant['stack'],
+            'sector': sector,
+            'investment_year': investment_year,
+            'NPV_CSU': NPV_CSU,
+            'NPV_total': NPV_total,
+            'ktCO2tot_ccs': ktCO2tot_ccs
+        })
     
-    # Plot cost trajectories
-    plot_cost_trajectories(
-        years,
-        _cost_marginal,
-        _price_ETS,
-        _price_CSU,
-        _cost_CSU_embedded,
-        savefig=save_macc
-    )
-    plt.show()
+    if single_run:
+        # Plot NPV bubble charts (Omit "Drax-power")
+        npv_results = [result for result in npv_results if result['stack'] != 'Drax-power']
+        plot_npv_bubbles(npv_results, savefig=True)
+        plot_npv_total_bubbles(npv_results, savefig=True)
+
+        # Plot carbon trajectories
+        plot_carbon_trajectories(
+            years, 
+            _supply_ktCO2f, 
+            _emitted_ktCO2f, 
+            _mandate_ktCO2, 
+            _stored_ktCO2g, 
+            _stored_ktCO2b, 
+            _stored_ktCO2daccs,
+            savefig=True
+        )
+        
+        # Plot cost trajectories
+        plot_cost_trajectories(
+            years,
+            _cost_marginal,
+            _price_ETS,
+            _price_CSU,
+            _cost_CSU_embedded,
+            savefig=True
+        )
+        # Plot line plot of the gas price increase
+        fig, ax = plt.subplots(figsize=(12, 7))
+        ax.plot(years, _gas_increase, label='Gas price increase', color='tab:orange', linestyle='-')
+        ax.set_xlabel('Year', fontsize=14)
+        ax.set_ylabel('Gas price increase (%)', fontsize=14)
+        ax.set_title('Gas price increase over time', fontsize=16)
+        ax.legend(fontsize=12)
+        ax.grid(True, linestyle='--', alpha=0.4)
+        ax.tick_params(labelsize=12)
+
+        plt.show()
 
     results = {}
+    results['ctbo_trajectory'] = ctbo_trajectory
+    results['ETS_trajectory'] = ets_trajectory
+
+    results['supply_ktCO2f'] = _supply_ktCO2f
+    results['emitted_ktCO2f'] = _emitted_ktCO2f
+    results['mandate_ktCO2'] = _mandate_ktCO2
+    results['stored_ktCO2g'] = _stored_ktCO2g
+    results['stored_ktCO2b'] = _stored_ktCO2b
+    results['stored_ktCO2daccs'] = _stored_ktCO2daccs
+
+    results['cost_marginal'] = _cost_marginal
+    results['price_ETS'] = _price_ETS
+    results['price_CSU'] = _price_CSU
+    results['cost_CTBO_producers'] = _cost_CTBO_producers
+    results['cost_CSU_embedded'] = _cost_CSU_embedded
+    results['cost_CTBO_policy'] = _cost_CTBO_policy
+    results['profit_CTBO_policy'] = _profit_CTBO_policy
+    results['cost_ETS_policy'] = _cost_ETS_policy
+    results['profit_ETS_policy'] = _profit_ETS_policy
+
+    # Plant-level results, ordered alphabetically by stack
+    npv_sorted = sorted(npv_results, key=lambda x: x['stack'])
+    results['plants_stack'] = [p['stack'] for p in npv_sorted]
+    results['plants_sector'] = [p['sector'] for p in npv_sorted]
+    results['plants_investment_year'] = [p['investment_year'] for p in npv_sorted]
+    results['plants_NPV_CSU'] = [p['NPV_CSU'] for p in npv_sorted]
+    results['plants_NPV_total'] = [p['NPV_total'] for p in npv_sorted]
+    results['plants_ktCO2tot_ccs'] = [p['ktCO2tot_ccs'] for p in npv_sorted]
+    
+    results['gas_increase'] = _gas_increase
+    results['gas_increase_2040'] = gas_increase_2040
+    results['year_DACCS_marginal'] = year_DACCS_marginal
     return results
 
 def plot_opex_distributions_by_sector(plants_clean, opex_results, bins=30, ncols=2, debug=False):
@@ -1044,6 +1179,120 @@ def plot_ts_costs_by_sector(plants_clean, ts_results, bins=30, ncols=2, debug=Fa
         print(f"plot_ts_costs_by_sector output: sectors_plotted={plotted}")
     return plotted
 
+def plot_npv_bubbles(npv_results, savefig=False, debug=False):
+    """
+    Plot NPV bubble chart: x=investment_year, y=NPV_CSU, size=ktCO2tot_ccs, color=sector.
+    """
+    if debug:
+        print(f"plot_npv_bubbles inputs: n_plants={len(npv_results)}")
+    
+    df = pd.DataFrame(npv_results)
+    n_before = len(df)
+    df = df.dropna(subset=['investment_year', 'NPV_CSU', 'ktCO2tot_ccs'])
+    print(f"plot_npv_bubbles: {n_before} plants total, {len(df)} with valid investment_year (filtered {n_before - len(df)})")
+    
+    if df.empty:
+        if debug:
+            print("plot_npv_bubbles output: no data to plot")
+        return 0
+    
+    sectors = df['sector'].unique()
+    colors = plt.cm.tab10(np.linspace(0, 1, len(sectors)))
+    sector_colors = {s: c for s, c in zip(sectors, colors)}
+    
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    # Scale bubble sizes (adjust multiplier for visual clarity)
+    size_scale = 0.05
+    sizes = df['ktCO2tot_ccs'] * size_scale
+    
+    for sector in sectors:
+        mask = df['sector'] == sector
+        ax.scatter(
+            df.loc[mask, 'investment_year'],
+            df.loc[mask, 'NPV_CSU'] / 1000,  # Convert to M€
+            s=sizes[mask],
+            c=[sector_colors[sector]],
+            alpha=0.7,
+            edgecolors='black',
+            linewidths=0.5,
+            label=sector
+        )
+    
+    ax.axhline(0, color='grey', linestyle='--', linewidth=1, alpha=0.7)
+    ax.set_xlabel('Investment Year', fontsize=14)
+    ax.set_ylabel('NPV CSU [M€]', fontsize=14)
+    ax.set_title('NPV of CSU Policy by Plant', fontsize=18)
+    ax.tick_params(labelsize=12)
+    ax.legend(title='Sector', fontsize=11, title_fontsize=12, loc='best')
+    ax.grid(True, linestyle='--', alpha=0.4)
+    
+    plt.tight_layout()
+    if savefig:
+        plt.savefig('results/npv_bubbles.png', dpi=450, bbox_inches='tight')
+    
+    if debug:
+        print(f"plot_npv_bubbles output: n_plotted={len(df)}")
+    
+    return len(df)
+
+def plot_npv_total_bubbles(npv_results, savefig=False, debug=False):
+    """
+    Plot NPV bubble chart: x=investment_year, y=NPV_total, size=ktCO2tot_ccs, color=sector.
+    """
+    if debug:
+        print(f"plot_npv_total_bubbles inputs: n_plants={len(npv_results)}")
+    
+    df = pd.DataFrame(npv_results)
+    n_before = len(df)
+    df = df.dropna(subset=['investment_year', 'NPV_total', 'ktCO2tot_ccs'])
+    print(f"plot_npv_total_bubbles: {n_before} plants total, {len(df)} with valid data (filtered {n_before - len(df)})")
+    
+    if df.empty:
+        if debug:
+            print("plot_npv_total_bubbles output: no data to plot")
+        return 0
+    
+    sectors = df['sector'].unique()
+    colors = plt.cm.tab10(np.linspace(0, 1, len(sectors)))
+    sector_colors = {s: c for s, c in zip(sectors, colors)}
+    
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    # Scale bubble sizes (adjust multiplier for visual clarity)
+    size_scale = 0.05
+    sizes = df['ktCO2tot_ccs'] * size_scale
+    
+    for sector in sectors:
+        mask = df['sector'] == sector
+        ax.scatter(
+            df.loc[mask, 'investment_year'],
+            df.loc[mask, 'NPV_total'] / 1000,  # Convert to M€
+            s=sizes[mask],
+            c=[sector_colors[sector]],
+            alpha=0.7,
+            edgecolors='black',
+            linewidths=0.5,
+            label=sector
+        )
+    
+    ax.axhline(0, color='grey', linestyle='--', linewidth=1, alpha=0.7)
+    ax.set_xlabel('Investment Year', fontsize=14)
+    ax.set_ylabel('NPV Total [M€]', fontsize=14)
+    ax.set_title('Total NPV of CCS Investment by Plant', fontsize=18)
+    ax.tick_params(labelsize=12)
+    ax.legend(title='Sector', fontsize=11, title_fontsize=12, loc='best')
+    ax.grid(True, linestyle='--', alpha=0.4)
+    
+    plt.tight_layout()
+    if savefig:
+        plt.savefig('results/npv_total_bubbles.png', dpi=450, bbox_inches='tight')
+    
+    if debug:
+        print(f"plot_npv_total_bubbles output: n_plotted={len(df)}")
+    
+    return len(df)
+
 def plot_macc(macc, savefig=False, debug=False):
     """
     Plot the MACC curve with cumulative ktCO2tot_ccs on the x axis and MAC on the y axis.
@@ -1103,8 +1352,8 @@ def plot_carbon_trajectories(years, supply, emitted, mandate, stored_g, stored_b
     ax.plot(years, mandate_arr, linewidth=2.5, label='CTBO mandate', color='tab:purple', linestyle='--')
     
     # Plot stored fossil and stored removals
-    ax.plot(years, stored_g_arr, linewidth=2.5, label='Stored geological CO₂ (fossil fuels, cement, plastic)', color='tab:orange', linestyle='-')
-    ax.plot(years, stored_removal_arr, linewidth=2.5, label='Stored removals (BECCS+DACCS+CEM+PLASTIC)', color='tab:green', linestyle='-')
+    ax.plot(years, stored_g_arr, linewidth=2.5, label='Stored geological CO₂ (fossil fuels, limestone, plastic)', color='tab:orange', linestyle='-')
+    ax.plot(years, stored_removal_arr, linewidth=2.5, label='Stored removals (BECCS+DACCS)', color='tab:green', linestyle='-')
     
     ax.set_xlabel("Year", fontsize=14)
     ax.set_ylabel("MtCO₂", fontsize=14)
@@ -1162,5 +1411,8 @@ def plot_cost_trajectories(years, marginal_cost, ets_price, csu_price, csu_embed
 if __name__ == "__main__":
     plants_clean = pd.read_csv('results/plants_clean.csv')
     transport_hubs = pd.read_csv('data/transport_hubs.csv')
-    results = simulate_ctbo(plants_clean, transport_hubs, save_macc=True)
-    print(results)
+    results = simulate_ctbo(plants_clean, transport_hubs, single_run=True)
+    
+    results['plants_investment_year'] = [str(year) for year in results['plants_investment_year']] #Convert from np.float to string
+    print(f"\nThe stacks that have invested are (alphabetically ordered): {results['plants_stack']}")
+    print(f"\nThe investment years are (alphabetically ordered): {results['plants_investment_year']}")
