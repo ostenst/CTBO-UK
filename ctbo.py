@@ -374,7 +374,6 @@ def adjust_outliers(MACC, capture_rate, x):
     mask = MACC['stack'] == 'Padeswood-cement'
     if mask.any():
         MACC.loc[mask, 'MAC'] = 0
-        print("Adjusted MAC for Padeswood-cement to 0 €/tCO2")
 
     # 2. Add new-built waste incinerator with CCS (Protos)
     protos_ktco2 = 370  # [ktCO2/y]
@@ -559,12 +558,10 @@ def simulate_ctbo(
     # Calculate the point-source carbon supply. Low-concentration refinery stacks that have NaN as energy_strategy are considered "diffuse" and excluded. Also subtract waste emissions, Drax, and limestone emissions
     plants_clean = plants_clean[plants_clean['energy_strategy'].notna()]
     total_ktCO2 = plants_clean['ktCO2'].sum()
-    print(f"Total CO2 capture capacity = {total_ktCO2:.2f} ktCO2/y")
     waste_ktCO2 = plants_clean[plants_clean['sector'] == 'waste']['ktCO2'].sum()
     drax_ktCO2 = plants_clean[plants_clean['sector'] == 'drax']['ktCO2'].sum()
     cement_ktCO2 = plants_clean[plants_clean['sector'] == 'cement']['ktCO2'].sum() * fraction_limestone
     pointsources_ktCO2f = total_ktCO2 - (waste_ktCO2 + drax_ktCO2 + cement_ktCO2) # [ktCO2f] supplied and emitted in 2023
-    print(f"Point-source fossil FUEL carbon supply = {pointsources_ktCO2f:.2f} ktCO2/y")
     
     # Specify whether plants defossilize. 
     if DEFOSSILIZE:
@@ -572,8 +569,6 @@ def simulate_ctbo(
         ccgt_plants = plants_clean[plants_clean['sector'] == 'ccgt']
         ccgt_even = ccgt_plants.iloc[::2]
         plants_clean = pd.concat([plants_clean[plants_clean['sector'] != 'ccgt'], ccgt_even])
-    print("Number of plants =", len(plants_clean))
-    print("Total CO2 capture capacity =", plants_clean['ktCO2'].sum(), "ktCO2/y")
 
     # ------------------- CONSTRUCT THE MACC ---------------------
     MACC = pd.DataFrame(columns=[
@@ -644,10 +639,10 @@ def simulate_ctbo(
     MACC = adjust_outliers(MACC, capture_rate, x)
     MACC = MACC.sort_values(by='MAC', ascending=True)
 
-    print(MACC[MACC['sector'] == 'cement'][['stack', 'MAC', 'ktCO2f', 'ktCO2cem', 'ktCO2b', 'ktCO2f_ccs', 'ktCO2cem_ccs', 'ktCO2b_ccs', 'ktCO2f_res']])
-    for sector in MACC['sector'].unique():
-        median_MAC = MACC[MACC['sector'] == sector]['MAC'].median()
-        print(f"Median MAC for sector {sector} = {median_MAC:.2f} €/tCO2")
+    # print(MACC[MACC['sector'] == 'cement'][['stack', 'MAC', 'ktCO2f', 'ktCO2cem', 'ktCO2b', 'ktCO2f_ccs', 'ktCO2cem_ccs', 'ktCO2b_ccs', 'ktCO2f_res']])
+    # for sector in MACC['sector'].unique():
+    #     median_MAC = MACC[MACC['sector'] == sector]['MAC'].median()
+    #     print(f"Median MAC for sector {sector} = {median_MAC:.2f} €/tCO2")
 
     if single_run:
         MACC.to_csv('results/macc.csv', index=False)
@@ -701,7 +696,8 @@ def simulate_ctbo(
     _cost_ETS_policy = []
     _profit_ETS_policy = []
 
-    _gas_increase = [] # % increase
+    _gas_increase_abs = [] # €/MWh
+    _gas_increase_pct = [] # % increase
     _plants_costbenefit = []
 
     gas_increase_2040 = None
@@ -798,7 +794,8 @@ def simulate_ctbo(
         _price_CSU.append(cost_CSU)
         _cost_CTBO_producers.append(cost_CTBO_producers)
         _cost_CSU_embedded.append(cost_CSU_embedded)
-        _gas_increase.append(gas_increase_pct)
+        _gas_increase_abs.append(gas_increase_abs)
+        _gas_increase_pct.append(gas_increase_pct)
 
         # Calculate plant and policy costs and profits based on MACC areas
         cost_CTBO = 0
@@ -921,7 +918,7 @@ def simulate_ctbo(
         )
         # Plot line plot of the gas price increase
         fig, ax = plt.subplots(figsize=(12, 7))
-        ax.plot(years, _gas_increase, label='Gas price increase', color='tab:orange', linestyle='-')
+        ax.plot(years, _gas_increase_pct, label='Gas price increase', color='tab:orange', linestyle='-')
         ax.set_xlabel('Year', fontsize=14)
         ax.set_ylabel('Gas price increase (%)', fontsize=14)
         ax.set_title('Gas price increase over time', fontsize=16)
@@ -961,7 +958,8 @@ def simulate_ctbo(
     results['plants_NPV_total'] = [p['NPV_total'] for p in npv_sorted]
     results['plants_ktCO2tot_ccs'] = [p['ktCO2tot_ccs'] for p in npv_sorted]
     
-    results['gas_increase'] = _gas_increase
+    results['gas_increase_abs'] = _gas_increase_abs
+    results['gas_increase_pct'] = _gas_increase_pct
     results['gas_increase_2040'] = gas_increase_2040
     results['year_DACCS_marginal'] = year_DACCS_marginal
     return results
@@ -1412,7 +1410,7 @@ if __name__ == "__main__":
     plants_clean = pd.read_csv('results/plants_clean.csv')
     transport_hubs = pd.read_csv('data/transport_hubs.csv')
     results = simulate_ctbo(plants_clean, transport_hubs, single_run=True)
-    
+
     results['plants_investment_year'] = [str(year) for year in results['plants_investment_year']] #Convert from np.float to string
     print(f"\nThe stacks that have invested are (alphabetically ordered): {results['plants_stack']}")
     print(f"\nThe investment years are (alphabetically ordered): {results['plants_investment_year']}")

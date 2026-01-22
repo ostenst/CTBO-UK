@@ -1,0 +1,111 @@
+plant_index,stack,sector
+0,Aberthaw-cement,cement
+1,Allerton Park-waste,waste
+2,Allington-waste,waste
+3,Ardley-waste,waste
+4,Avonmouth-waste,waste
+5,Baldovie-waste,waste
+6,Ballylumford-ccgt,ccgt
+7,Beddington Lane-waste,waste
+8,Belfast ACT-waste,waste
+9,Carrington CCGT-ccgt,ccgt
+10,Cauldon Cement-cement,cement
+11,Chineham-waste,waste
+12,Connahs Quay Power Station-ccgt,ccgt
+13,Coolkeeragh-ccgt,ccgt
+14,Cornwall-waste,waste
+15,Coryton-ccgt,ccgt
+16,Cottam Development Centre-ccgt,ccgt
+17,Coventry-waste,waste
+18,Damhead Creek Power Station-ccgt,ccgt
+19,Devonport-waste,waste
+20,Didcot B-ccgt,ccgt
+21,Drax-power,drax
+22,Dunbar Works-cement,cement
+23,Dunbar-waste,waste
+24,Eastcroft-waste,waste
+25,Eastham-FCC,refinery
+26,Eastham-HPU,refinery
+27,Eastham-distillation,refinery
+28,Eastham-scattered,refinery
+29,Edmonton-waste,waste
+30,Enfield Power Station-ccgt,ccgt
+31,Fawley Refinery-FCC,refinery
+32,Fawley Refinery-HPU,refinery
+33,Fawley Refinery-distillation,refinery
+34,Fawley Refinery-scattered,refinery
+35,Fellside CHP Plant-ccgt,ccgt
+36,Ferrybridge FM1-waste,waste
+37,Ferrybridge FM2-waste,waste
+38,Four Ashes-waste,waste
+39,Glasgow ACT-waste,waste
+40,Grain CCGT-ccgt,ccgt
+41,Great Blakenham-waste,waste
+42,Great Yarmouth Power Station-ccgt,ccgt
+43,Greatmoor-waste,waste
+44,Hanford-waste,waste
+45,Hartlebury-waste,waste
+46,Hope Cement Works-cement,cement
+47,Immingham-ccgt,ccgt
+48,Javelin Park-waste,waste
+49,Keadby-ccgt,ccgt
+50,Kemsley-waste,waste
+51,Ketton-cement,cement
+52,Kilroot-ccgt,ccgt
+53,Kings Lynn Power Station-ccgt,ccgt
+54,Kirklees-waste,waste
+55,Lakeside-waste,waste
+56,Langage Energy Centre-ccgt,ccgt
+57,Leeds-waste,waste
+58,Little Barford-ccgt,ccgt
+59,Marchwood  Power  Station-ccgt,ccgt
+60,Marchwood-waste,waste
+61,Medway-ccgt,ccgt
+62,Millerhill-waste,waste
+63,New Rugby-cement,cement
+64,Newhaven-waste,waste
+65,Newhurst-waste,waste
+66,North Hykeham-waste,waste
+67,Padeswood-cement,cement
+68,Parc Adfer-waste,waste
+69,Pembroke Power Station-ccgt,ccgt
+70,Pembroke Refinery-FCC,refinery
+71,Pembroke Refinery-HPU,refinery
+72,Pembroke Refinery-distillation,refinery
+73,Pembroke Refinery-scattered,refinery
+74,Peterhead Power Station-ccgt,ccgt
+75,Portsmouth-waste,waste
+76,Protos-waste,waste
+77,Ribblesdale-cement,cement
+78,Riverside-waste,waste
+79,Rocksavage-ccgt,ccgt
+80,Rookery South C-waste,waste
+81,Runcorn-waste,waste
+82,Rye House-ccgt,ccgt
+83,SELCHP-waste,waste
+84,Saltend-ccgt,ccgt
+85,Scunthorpe Blast Furnaces-blast,steel
+86,Scunthorpe Power Station-power,steel
+87,Scunthorpe Sinter-sinter,steel
+88,Seabank-ccgt,ccgt
+89,Severnside-waste,waste
+90,Sheffield-waste,waste
+91,Shoreham Power Station-ccgt,ccgt
+92,South Humber-ccgt,ccgt
+93,South Killingholme-FCC,refinery
+94,South Killingholme-HPU,refinery
+95,South Killingholme-distillation,refinery
+96,South Killingholme-scattered,refinery
+97,Spalding-ccgt,ccgt
+98,Stanlow Refinery-FCC,refinery
+99,Stanlow Refinery-HPU,refinery
+100,Stanlow Refinery-distillation,refinery
+101,Stanlow Refinery-scattered,refinery
+102,Staythorpe Power Station-ccgt,ccgt
+103,Tees Valley-waste,waste
+104,Teeside-ccgt,ccgt
+105,Trident Park-waste,waste
+106,Tunstead Cement-cement,cement
+107,Tyseley-waste,waste
+108,West Burton B CCGT Power Station-ccgt,ccgt
+109,Wilton 11-waste,waste
