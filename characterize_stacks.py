@@ -243,8 +243,7 @@ def create_all_plants_map(europe, plants_gdf, bubble_scaling=1.0, remaining_gdf=
     )
     cbar = plt.colorbar(scatter, ax=ax, shrink=0.8)
     cbar.set_label('CO₂ Concentration (%)', fontsize=13)
-    ax.set_title('UK Point Source CO₂ Emissions (2022)\nBubble size proportional to annual CO₂ emissions', 
-                 fontsize=15, fontweight='bold')
+
     ax.set_xlim(-9, 3)
     ax.set_ylim(49.5, 59.5)
     ax.set_xticks([])

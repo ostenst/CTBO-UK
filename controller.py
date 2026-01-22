@@ -66,7 +66,6 @@ if __name__ == "__main__":
     model.levers = [
         CategoricalParameter("ETS_SCENARIO", ['£200', '£300', '£400']),
         RealParameter("DIFFUSE_END_FRACTION", 0.05, 0.40),
-        CategoricalParameter("ASSUME_FOAK", [True, False]),
     ]
 
     # Outcomes: metrics to track
@@ -105,6 +104,7 @@ if __name__ == "__main__":
         Constant("transport_hubs", transport_hubs),
         Constant("single_run", False),
         Constant("DEFOSSILIZE", False),
+        Constant("ASSUME_FOAK", False),
         Constant("CTBO_QUADRATIC", 0.4),
         Constant("DISCOUNT_RATE", 0.035),
         Constant("FOAK_CALIBRATION", 1.6379),
@@ -116,8 +116,8 @@ if __name__ == "__main__":
     ]
 
     # Run experiments
-    n_scenarios = 5
-    n_policies = 4
+    n_scenarios = 50
+    n_policies = 20
     
     results = perform_experiments(
         model, 

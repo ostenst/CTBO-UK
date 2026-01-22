@@ -137,6 +137,14 @@ def plot_gas_increase_by_ets(results_dir='results', debug=False):
     ax.tick_params(labelsize=12)
     ax.set_xlim(START_YEAR, 2050)
     
+    # Secondary y-axis: annual household bill (11200 kWh avg consumption)
+    household_consumption = 11200  # kWh/year
+    ax2 = ax.twinx()
+    ax2.set_ylabel('Household bill increase [£/year] - assuming 11.200 kWh/year', fontsize=14)
+    y1_min, y1_max = ax.get_ylim()
+    ax2.set_ylim(y1_min * household_consumption / 100, y1_max * household_consumption / 100)  # pence→£
+    ax2.tick_params(labelsize=12)
+    
     plt.tight_layout()
     plt.savefig(f'{results_dir}/gas_increase_by_ets.png', dpi=450, bbox_inches='tight')
     

@@ -859,7 +859,7 @@ def simulate_ctbo(
         sector = plant['sector']
         NPV_data = pd.DataFrame(_plants_costbenefit)
         NPV_data = NPV_data[NPV_data['stack'] == plant['stack']] # Data for all years
-        investment_year = NPV_data['investment_year'].dropna().iloc[0] if NPV_data['investment_year'].notna().any() else None
+        investment_year = NPV_data['investment_year'].dropna().iloc[0] if NPV_data['investment_year'].notna().any() else np.nan
         CAPEX = NPV_data['CAPEX'] # [k€] only once
         OPEX_CCS = NPV_data['OPEX'] # [k€/y] for each year
         cost_CSU_plant = NPV_data['cost_CSU_plant'] 
