@@ -123,8 +123,8 @@ if __name__ == "__main__":
     ]
 
     # Run experiments
-    n_scenarios = 10
-    n_policies = 10
+    n_scenarios = 5
+    n_policies = 2
     
     results = perform_experiments(
         model, 

@@ -864,8 +864,14 @@ def simulate_ctbo(
     NPV_profit_CTBO = (np.array(_profit_CTBO_policy) * discount_factors).sum()  # [k€]
     NPV_cost_ETS = (np.array(_cost_ETS_policy) * discount_factors).sum()        # [k€]
     NPV_profit_ETS = (np.array(_profit_ETS_policy) * discount_factors).sum()    # [k€]
-    benefit2cost_CTBO = NPV_profit_CTBO / NPV_cost_CTBO  # [-] Net policy value for CTBO
-    benefit2cost_ETS = NPV_profit_ETS / NPV_cost_ETS      # [-] Net policy value for ETS
+    if NPV_cost_CTBO > 0:
+        benefit2cost_CTBO = NPV_profit_CTBO / NPV_cost_CTBO  # [-] Net policy value for CTBO
+    else:
+        benefit2cost_CTBO = 0
+    if NPV_cost_ETS > 0:
+        benefit2cost_ETS = NPV_profit_ETS / NPV_cost_ETS      # [-] Net policy value for ETS
+    else:
+        benefit2cost_ETS = 0
     
     # --- Plant-level NPV ---
     NPV_data_all = pd.DataFrame(_plants_costbenefit)
@@ -1342,16 +1348,24 @@ def plot_macc(macc, savefig=False, debug=False):
             print("plot_macc output: no data to plot")
         return 0
 
+    # Sort by MAC and compute cumulative (including MAC=0 plants)
     macc_plot = macc_plot.sort_values(by='MAC')
     macc_plot['cumulative_kt'] = macc_plot['ktCO2tot_ccs'].cumsum()
+    
+    # Filter to only plot plants with MAC != 0 (but cumulative already includes MAC=0 capacity)
+    macc_nonzero = macc_plot[macc_plot['MAC'] != 0]
 
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.step(macc_plot['cumulative_kt']/1000, macc_plot['MAC'], where='pre', color=magma(0.5), linewidth=2.5)
+    ax.step(macc_nonzero['cumulative_kt']/1000, macc_nonzero['MAC'], where='pre', color=magma(0.5), linewidth=2.5)
     ax.set_xlabel("Cumulative MtCO₂ CCS", fontsize=14)
     ax.set_ylabel("MAC [€/tCO₂] of CCS/BECCS", fontsize=14)
     ax.set_title("Marginal Abatement Cost Curve", fontsize=18)
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
+    # Get the ylims
+    ylims = ax.get_ylim()
+    # Set xlims
+    ax.set_ylim(0, ylims[1])
 
     plt.tight_layout()
     if savefig:

@@ -284,6 +284,110 @@ def create_all_plants_map(europe, plants_gdf, bubble_scaling=1.0, remaining_gdf=
             handle.set_sizes([200]) # Custom size for point source emitters
     return fig, ax
 
+def create_sector_map(europe, plants_gdf, bubble_scaling=1.0, remaining_gdf=None, hubs_gdf=None, debug=False):
+    """
+    Create a map showing all plants colored by sector (using magma colormap).
+    """
+    if debug:
+        print(f"create_sector_map inputs: europe shape={europe.shape}, plants shape={plants_gdf.shape}")
+        if remaining_gdf is not None:
+            print(f"  remaining plants shape={remaining_gdf.shape}")
+    
+    fig, ax = plt.subplots(1, 1, figsize=(12, 15))
+    ax.set_aspect(1.90)
+    europe.plot(ax=ax, color='lightgray', edgecolor='white', alpha=0.45)
+
+    # Plot remaining plants as gray bubbles first
+    if remaining_gdf is not None and len(remaining_gdf) > 0:
+        ax.scatter(
+            remaining_gdf.geometry.x, remaining_gdf.geometry.y,
+            s=remaining_gdf['ktCO2'] * bubble_scaling, c='gray', alpha=0.5,
+            edgecolors='darkgray', linewidth=0.3,
+            label='Other emitters'
+        )
+
+    # Create sector colors using magma
+    sectors = plants_gdf['sector'].unique()
+    sector_labels_dict = {
+        'ccgt': 'Gas power',
+        'cement': 'Cement',
+        'drax': 'Drax',
+        'refinery': 'Refinery',
+        'steel': 'Steel',
+        'waste': 'Waste',
+    }
+    magma_colors = plt.cm.magma(np.linspace(0.1, 0.9, len(sectors)))
+    sector_colors = {s: c for s, c in zip(sorted(sectors), magma_colors)}
+    
+    if debug:
+        print(f"  Sectors: {sorted(sectors)}")
+
+    # Plot plants colored by sector
+    legend_handles = []
+    for sector in sorted(sectors):
+        mask = plants_gdf['sector'] == sector
+        sector_data = plants_gdf[mask]
+        scatter = ax.scatter(
+            sector_data.geometry.x, sector_data.geometry.y,
+            s=sector_data['ktCO2'] * bubble_scaling, 
+            c=[sector_colors[sector]],
+            alpha=0.7,
+            edgecolors='black', linewidth=0.5,
+            label=sector_labels_dict[sector]
+        )
+        # Create legend handle with fixed size
+        handle = plt.scatter([], [], s=80, c=[sector_colors[sector]], alpha=0.7, 
+                            edgecolors='black', linewidth=0.5, label=sector_labels_dict[sector])
+        legend_handles.append(handle)
+
+    ax.set_xlim(-9, 3)
+    ax.set_ylim(49.5, 59.5)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.grid(True, alpha=0.3)
+    
+    # Plot hubs if provided
+    if hubs_gdf is not None and len(hubs_gdf) > 0:
+        if 'km_shipping_clean' in hubs_gdf:
+            no_shipping = hubs_gdf[hubs_gdf['km_shipping_clean'].isna()]
+            shipping = hubs_gdf[~hubs_gdf['km_shipping_clean'].isna()]
+        else:
+            no_shipping = hubs_gdf
+            shipping = gpd.GeoDataFrame(columns=hubs_gdf.columns)
+        if len(no_shipping) > 0:
+            h1 = ax.scatter(
+                no_shipping.geometry.x,
+                no_shipping.geometry.y,
+                marker='D',
+                s=120,
+                c='#62A7A6',
+                edgecolors='black',
+                linewidth=0.8,
+                label='Storage hub'
+            )
+            legend_handles.append(h1)
+        if len(shipping) > 0:
+            h2 = ax.scatter(
+                shipping.geometry.x,
+                shipping.geometry.y,
+                marker='D',
+                s=120,
+                c='#E55064',
+                edgecolors='black',
+                linewidth=0.8,
+                label='Export hub'
+            )
+            legend_handles.append(h2)
+    
+    # Add "Other emitters" to legend if present
+    if remaining_gdf is not None and len(remaining_gdf) > 0:
+        h_other = plt.scatter([], [], s=80, c='gray', alpha=0.5, 
+                              edgecolors='darkgray', linewidth=0.3, label='Other emitters')
+        legend_handles.insert(0, h_other)
+    
+    ax.legend(handles=legend_handles, loc='lower left', fontsize=12)
+    return fig, ax
+
 # Identify remaining plants (in point_sources but not in stacks_clean)
 clean_names = stacks_clean['site'].unique()
 remaining_plants = point_sources[~point_sources['Site'].isin(clean_names)].copy()
@@ -320,4 +424,17 @@ fig, ax = create_all_plants_map(
 
 output_file = 'results/map_concentrations.png'
 plt.savefig(output_file, dpi=400, bbox_inches='tight')
+
+# Create sector map
+fig2, ax2 = create_sector_map(
+    europe,
+    plants_gdf,
+    bubble_scaling=0.8,
+    remaining_gdf=remaining_gdf,
+    hubs_gdf=hubs_gdf,
+    debug=True
+)
+output_file2 = 'results/map_sectors.png'
+plt.savefig(output_file2, dpi=400, bbox_inches='tight')
+
 plt.show()
