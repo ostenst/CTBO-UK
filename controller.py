@@ -73,6 +73,12 @@ if __name__ == "__main__":
         # Scalar outcomes
         ScalarOutcome("gas_increase_2040"),
         ScalarOutcome("year_DACCS_marginal"),
+        ScalarOutcome("NPV_cost_CTBO"),
+        ScalarOutcome("NPV_profit_CTBO"),
+        ScalarOutcome("benefit2cost_CTBO"),
+        ScalarOutcome("NPV_cost_ETS"),
+        ScalarOutcome("NPV_profit_ETS"),
+        ScalarOutcome("benefit2cost_ETS"),
         # Time series outcomes
         ArrayOutcome("supply_ktCO2f"),
         ArrayOutcome("emitted_ktCO2f"),
@@ -95,6 +101,7 @@ if __name__ == "__main__":
         ArrayOutcome("plants_investment_year"),
         ArrayOutcome("plants_NPV_CSU"),
         ArrayOutcome("plants_NPV_total"),
+        ArrayOutcome("plants_NPV_ETS"),
         ArrayOutcome("plants_ktCO2tot_ccs"),
     ]
 
@@ -116,8 +123,8 @@ if __name__ == "__main__":
     ]
 
     # Run experiments
-    n_scenarios = 50
-    n_policies = 20
+    n_scenarios = 10
+    n_policies = 10
     
     results = perform_experiments(
         model, 

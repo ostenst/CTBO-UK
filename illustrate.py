@@ -62,9 +62,9 @@ def plot_carbon_trajectories_uncertainty(results_dir='results', debug=False):
     ax.fill_between(years, total_p5 / scale, total_p95 / scale, color=color3, alpha=0.25)
     
     # Formatting
-    ax.set_xlabel('Year', fontsize=14)
+    # ax.set_xlabel('Year', fontsize=14)
     ax.set_ylabel('Carbon [MtCO₂/year]', fontsize=14)
-    ax.set_title('Carbon Trajectories with Uncertainty (5th-95th percentile)', fontsize=16)
+    # ax.set_title('Carbon Trajectories with Uncertainty (5th-95th percentile)', fontsize=16)
     ax.legend(fontsize=12, loc='best')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
@@ -129,9 +129,9 @@ def plot_gas_increase_by_ets(results_dir='results', debug=False):
     
     # Formatting
     ax.axhline(0, color='grey', linestyle='--', linewidth=1, alpha=0.7)
-    ax.set_xlabel('Year', fontsize=14)
+    # ax.set_xlabel('Year', fontsize=14)
     ax.set_ylabel('Gas price increase [pence/kWh]', fontsize=14)
-    ax.set_title('Gas Price Increase by ETS Scenario (5th-95th percentile)', fontsize=16)
+    # ax.set_title('Gas Price Increase by ETS Scenario (5th-95th percentile)', fontsize=16)
     ax.legend(fontsize=12, loc='best')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
@@ -208,9 +208,9 @@ def plot_prices_by_ets(results_dir='results', debug=False):
     
     # Formatting
     ax.axhline(0, color='grey', linestyle='--', linewidth=1, alpha=0.7)
-    ax.set_xlabel('Year', fontsize=14)
+    # ax.set_xlabel('Year', fontsize=14)
     ax.set_ylabel('Price [€/tCO₂]', fontsize=14)
-    ax.set_title('CSU Price (solid) and ETS Price (dashed) by Scenario', fontsize=16)
+    # ax.set_title('CSU Price (solid) and ETS Price (dashed) by Scenario', fontsize=16)
     ax.legend(fontsize=12, loc='best')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
@@ -316,7 +316,7 @@ def plot_plant_npv_bubbles(results_dir='results', ETS_filter=None, debug=False):
     title = 'Plant NPV by investment year (median across scenarios)'
     if ETS_filter:
         title += f'\nETS: {", ".join(ETS_filter)}'
-    ax.set_title(title, fontsize=16)
+    # ax.set_title(title, fontsize=16)
     ax.legend(handles=legend_handles, title='Sector', fontsize=11, title_fontsize=12, loc='best')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
@@ -430,7 +430,7 @@ def plot_plant_npv_csu_bubbles(results_dir='results', ETS_filter=None, exclude_s
     title = 'Plant NPV by investment year (median across scenarios)'
     if ETS_filter:
         title += f'\nETS: {", ".join(ETS_filter)}'
-    ax.set_title(title, fontsize=16)
+    # ax.set_title(title, fontsize=16)
     ax.legend(handles=legend_handles, title='Sector', fontsize=11, title_fontsize=12, loc='best')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
@@ -445,6 +445,169 @@ def plot_plant_npv_csu_bubbles(results_dir='results', ETS_filter=None, exclude_s
     
     return fig
 
+def plot_plant_npv_ets_bubbles(results_dir='results', ETS_filter=None, exclude_sectors=None, debug=False):
+    """
+    Plot plant-level NPV ETS bubbles: x=median investment year, y=median NPV ETS,
+    size=median ktCO2tot_ccs, color=sector.
+    ETS_filter: optional list of ETS scenarios to include, e.g. ['£200', '£300', '£400']
+    exclude_sectors: optional list of sectors to exclude, e.g. ['drax']
+    """
+    if debug:
+        print(f"Loading plant data from {results_dir}")
+    
+    # Load plant reference (alphabetically ordered)
+    plant_ref = pd.read_csv(f'{results_dir}/plant_reference.csv')
+    experiments = pd.read_csv(f'{results_dir}/experiments.csv')
+    
+    # Load plant outcome arrays (shape: n_experiments x n_plants)
+    investment_year = np.load(f'{results_dir}/outcomes_plants_investment_year.npy')
+    npv_ets = np.load(f'{results_dir}/outcomes_plants_NPV_ETS.npy')
+    ktCO2tot_ccs = np.load(f'{results_dir}/outcomes_plants_ktCO2tot_ccs.npy')
+    
+    # Filter by ETS scenario if specified
+    if ETS_filter is not None:
+        mask = experiments['ETS_SCENARIO'].isin(ETS_filter)
+        investment_year = investment_year[mask]
+        npv_ets = npv_ets[mask]
+        ktCO2tot_ccs = ktCO2tot_ccs[mask]
+        if debug:
+            print(f"Filtered to {mask.sum()} experiments with ETS_SCENARIO in {ETS_filter}")
+    
+    if debug:
+        print(f"Shape of plant arrays: {investment_year.shape}")
+        print(f"Number of plants: {len(plant_ref)}")
+    
+    # Calculate median across scenarios (axis=0) for each plant
+    med_investment_year = np.nanmedian(investment_year, axis=0)
+    med_npv_ets = np.nanmedian(npv_ets, axis=0)
+    med_ktCO2 = np.nanmedian(ktCO2tot_ccs, axis=0)
+    
+    # Create DataFrame for plotting
+    df = pd.DataFrame({
+        'stack': plant_ref['stack'],
+        'sector': plant_ref['sector'],
+        'investment_year': med_investment_year,
+        'NPV_ETS': med_npv_ets,
+        'ktCO2tot_ccs': med_ktCO2
+    })
+    
+    # Exclude specified sectors
+    if exclude_sectors is not None:
+        df = df[~df['sector'].isin(exclude_sectors)]
+        if debug:
+            print(f"Excluded sectors: {exclude_sectors}, remaining plants: {len(df)}")
+    
+    # Filter out plants with NaN investment year (never invested in any scenario)
+    df_valid = df.dropna(subset=['investment_year', 'NPV_ETS', 'ktCO2tot_ccs'])
+    
+    if debug:
+        print(f"Plants with valid data: {len(df_valid)} / {len(df)}")
+    
+    if df_valid.empty:
+        print("No valid plant data to plot")
+        return None
+    
+    # Setup colors by sector: magma for all except waste (green)
+    sectors = df_valid['sector'].unique()
+    non_waste_sectors = [s for s in sectors if s != 'waste']
+    magma_colors = plt.cm.magma(np.linspace(0.05, 0.95, len(non_waste_sectors)))
+    sector_colors = {s: c for s, c in zip(non_waste_sectors, magma_colors)}
+    sector_colors['waste'] = '#62a7a6'  # Green for waste
+
+    # Scale bubble sizes
+    size_scale = 0.3
+    sizes = df_valid['ktCO2tot_ccs'] * size_scale
+    
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    legend_handles = []
+    for sector in sectors:
+        mask = df_valid['sector'] == sector
+        ax.scatter(
+            df_valid.loc[mask, 'investment_year'],
+            df_valid.loc[mask, 'NPV_ETS'] / 1000,  # Convert to M€
+            s=sizes[mask],
+            c=[sector_colors[sector]],
+            alpha=0.7,
+            edgecolors='black',
+            linewidths=0.5
+        )
+        # Create custom legend handle with fixed size
+        handle = plt.scatter([], [], s=80, c=[sector_colors[sector]], alpha=0.7, 
+                            edgecolors='black', linewidths=0.5, label=sector)
+        legend_handles.append(handle)
+    
+    # Formatting
+    ax.axhline(0, color='grey', linestyle='--', linewidth=1, alpha=0.7)
+    ax.set_xlabel('Median Investment Year', fontsize=14)
+    ax.set_ylabel('Median NPV [M€] from ETS costs and profits', fontsize=14)
+    title = 'Plant NPV (ETS only) by investment year (median across scenarios)'
+    if ETS_filter:
+        title += f'\nETS: {", ".join(ETS_filter)}'
+    # ax.set_title(title, fontsize=16)
+    ax.legend(handles=legend_handles, title='Sector', fontsize=11, title_fontsize=12, loc='best')
+    ax.grid(True, linestyle='--', alpha=0.4)
+    ax.tick_params(labelsize=12)
+    ax.set_xlim(2025, 2050)
+    ax.set_xticks(np.arange(2025, 2051, 5))
+    
+    plt.tight_layout()
+    plt.savefig(f'{results_dir}/plant_npv_ets_bubbles.png', dpi=450, bbox_inches='tight')
+    
+    if debug:
+        print(f"Plot saved to {results_dir}/plant_npv_ets_bubbles.png")
+    
+    return fig
+
+def plot_policy_npv_boxplots(results_dir='results', debug=False):
+    """
+    Two-panel figure:
+    - Panel 1: Box plots of NPV_cost_CTBO, NPV_profit_CTBO, NPV_cost_ETS, NPV_profit_ETS
+    - Panel 2: Box plots of benefit2cost_CTBO and benefit2cost_ETS
+    """
+    if debug:
+        print(f"Loading scalar outcomes from {results_dir}")
+    
+    # Load scalar outcomes (combined with experiments in experiments.csv)
+    outcomes = pd.read_csv(f'{results_dir}/experiments.csv')
+    
+    if debug:
+        print(f"Loaded {len(outcomes)} experiments")
+        print(f"Columns: {outcomes.columns.tolist()}")
+    
+    fig, ax = plt.subplots(figsize=(6.5, 6))
+    
+    # NPV costs and profits
+    green = '#62a7a6'
+    npv_data = [
+        outcomes['NPV_cost_CTBO'] * 0.80 / 1e6,   # Convert k€ to B€
+        outcomes['NPV_cost_CTBO'] / 1e6,
+        (outcomes['NPV_cost_CTBO']+outcomes['NPV_profit_CTBO']) / 1e6,
+        outcomes['NPV_profit_CTBO'] / 1e6,
+    ]
+    npv_labels = ['CfD eq. policy cost\n(20% cost reduction)', 'CTBO policy\ncost', 'CTBO fuel\nsupplier cost', 'CTBO emitter\nand T&S profits']
+    
+    bp = ax.boxplot(npv_data, tick_labels=npv_labels, patch_artist=True)
+    box_colors = [green, green, green, green]
+    box_alphas = [1, 1, 0.4, 0.4]
+    for i, (patch, color) in enumerate(zip(bp['boxes'], box_colors)):
+        patch.set_facecolor(color)
+        patch.set_alpha(box_alphas[i])
+    
+    ax.axhline(0, color='grey', linestyle='--', linewidth=1, alpha=0.7)
+    ax.set_ylabel('NPV [B€]', fontsize=14)
+    # ax.set_title('Policy NPV: Costs and Profits', fontsize=16)
+    ax.tick_params(labelsize=12)
+    ax.grid(True, linestyle='--', alpha=0.4, axis='y')
+    
+    plt.tight_layout()
+    plt.savefig(f'{results_dir}/policy_npv_boxplots.png', dpi=450, bbox_inches='tight')
+    
+    if debug:
+        print(f"Plot saved to {results_dir}/policy_npv_boxplots.png")
+    
+    return fig
+
 if __name__ == "__main__":
     
     plot_carbon_trajectories_uncertainty(debug=True)
@@ -453,5 +616,8 @@ if __name__ == "__main__":
 
     plot_plant_npv_bubbles(debug=True)
     plot_plant_npv_csu_bubbles(debug=True, exclude_sectors=['drax'])
+    plot_plant_npv_ets_bubbles(debug=True, exclude_sectors=['drax'])
+    
+    plot_policy_npv_boxplots(debug=True)
 
     plt.show()

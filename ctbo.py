@@ -803,19 +803,22 @@ def simulate_ctbo(
         cost_ETS = 0
         profit_ETS = 0
         for idx, plant in MACC.iterrows():
-            # All plants take on embedded CSU costs. Rest depends on whether plant has invested.
+            
             cost_CSU_plant = cost_CSU_embedded * (plant['ktCO2f'] + plant['ktCO2f_inc']) # [k€/y]
 
-            # NOTE: Fossil ETS are only accounted as costs (or avoided costs). Consider new logic, as a profit from selling ETS allowances? No, that's a special case!
             if not plant['invested']:
                 profit_CSU_plant = 0
-                cost_ETS_plant = ets_price * (plant['ktCO2f'] + plant['ktCO2cem'] + plant['ktCO2pl']) # [k€/y] 
+                # cost_ETS_plant = ets_price * (plant['ktCO2f'] + plant['ktCO2cem'] + plant['ktCO2pl']) # [k€/y] 
+                cost_ETS_plant = 0 # assuming that the ETS is not a cost but a potential profit
                 profit_ETS_plant = 0
 
             if plant['invested']:
                 profit_CSU_plant = cost_CSU * plant['ktCO2tot_ccs'] 
-                cost_ETS_plant = ets_price * (plant['ktCO2f_res'] + plant['ktCO2cem_res'] + plant['ktCO2pl_res'])
-                profit_ETS_plant = max(0, ets_price - plant['MAC']) * plant['ktCO2b_ccs'] # [k€/y] assumes CDR can profit in the ETS
+                # cost_ETS_plant = ets_price * (plant['ktCO2f_res'] + plant['ktCO2cem_res'] + plant['ktCO2pl_res'])
+                # profit_ETS_plant = max(0, ets_price - plant['MAC']) * plant['ktCO2b_ccs'] # [k€/y] assumes CDR can profit in the ETS
+                cost_ETS_plant =  ets_price * plant['ktCO2f_inc'] * capture_rate # only additional costs from burning additional fossil fuel
+                profit_ETS_plant = ets_price * (plant['ktCO2f_ccs'] + plant['ktCO2cem_ccs'] + plant['ktCO2pl_ccs']) # profit from avoiding ETS charges
+                profit_ETS_plant += ets_price * plant['ktCO2b_ccs'] # [k€/y] assumes CDR can profit in the ETS
 
                 # NOTE: Only policy costs/profits for invested plants (to calculate the cost areas)
                 cost_CTBO += max(0, plant['MAC'] - ets_price) * plant['ktCO2tot_ccs'] # [k€/y] Green MACC area 1
@@ -851,44 +854,65 @@ def simulate_ctbo(
         _profit_CTBO_policy.append(profit_CTBO)
         _cost_ETS_policy.append(cost_ETS)
         _profit_ETS_policy.append(profit_ETS)
-
-    # Calculate the NPV_CSU and NPV_total for each plant
+    
+    # ========== NPV CALCULATIONS ==========
+    # Discount factors for annual values (relative to START_YEAR)
+    discount_factors = 1 / (1 + DISCOUNT_RATE) ** (years - START_YEAR)
+    
+    # --- Policy-level NPV ---
+    NPV_cost_CTBO = (np.array(_cost_CTBO_policy) * discount_factors).sum()      # [k€]
+    NPV_profit_CTBO = (np.array(_profit_CTBO_policy) * discount_factors).sum()  # [k€]
+    NPV_cost_ETS = (np.array(_cost_ETS_policy) * discount_factors).sum()        # [k€]
+    NPV_profit_ETS = (np.array(_profit_ETS_policy) * discount_factors).sum()    # [k€]
+    benefit2cost_CTBO = NPV_profit_CTBO / NPV_cost_CTBO  # [-] Net policy value for CTBO
+    benefit2cost_ETS = NPV_profit_ETS / NPV_cost_ETS      # [-] Net policy value for ETS
+    
+    # --- Plant-level NPV ---
+    NPV_data_all = pd.DataFrame(_plants_costbenefit)
+    NPV_data_all['discount_factor'] = discount_factors[NPV_data_all['year'] - START_YEAR] 
+    
     npv_results = []
     for idx, plant in MACC.iterrows():
-        ktCO2tot_ccs = plant['ktCO2tot_ccs']
-        sector = plant['sector']
-        NPV_data = pd.DataFrame(_plants_costbenefit)
-        NPV_data = NPV_data[NPV_data['stack'] == plant['stack']] # Data for all years
+        
+        NPV_data = NPV_data_all[NPV_data_all['stack'] == plant['stack']]  # Filter from pre-computed DataFrame
         investment_year = NPV_data['investment_year'].dropna().iloc[0] if NPV_data['investment_year'].notna().any() else np.nan
-        CAPEX = NPV_data['CAPEX'] # [k€] only once
+        CAPEX = NPV_data['CAPEX'].iloc[0] if len(NPV_data['CAPEX']) > 0 else 0  # [k€] CAPEX is same across years
         OPEX_CCS = NPV_data['OPEX'] # [k€/y] for each year
         cost_CSU_plant = NPV_data['cost_CSU_plant'] 
         profit_CSU_plant = NPV_data['profit_CSU_plant'] 
         cost_ETS_plant = NPV_data['cost_ETS_plant'] 
         profit_ETS_plant = NPV_data['profit_ETS_plant'] 
+        discount_factor_capex = 1 / (1 + DISCOUNT_RATE) ** (investment_year - START_YEAR)
 
-        NPV_data['discount_factor'] = 1 / (1 + DISCOUNT_RATE) ** (NPV_data['year'] - START_YEAR) # NPV is relative to START_YEAR, not investment year!
+        # NPV_CSU: profits and costs from CSU policy
         NPV_CSU = ((profit_CSU_plant - cost_CSU_plant) * NPV_data['discount_factor']).sum() # [k€]
         
         # NPV_total: CAPEX (once, at investment_year) + annual costs and profits
         if investment_year is not None:
-            capex_value = CAPEX.iloc[0] if len(CAPEX) > 0 else 0  # [k€] CAPEX is same across years
-            discount_factor_capex = 1 / (1 + DISCOUNT_RATE) ** (investment_year - START_YEAR)
             annual_costs = (cost_CSU_plant + cost_ETS_plant + OPEX_CCS) * NPV_data['discount_factor']
             annual_profits = (profit_CSU_plant + profit_ETS_plant) * NPV_data['discount_factor']
-            NPV_total = -capex_value * discount_factor_capex + annual_profits.sum() - annual_costs.sum()  # [k€]
+            NPV_total = -CAPEX * discount_factor_capex + annual_profits.sum() - annual_costs.sum()  # [k€]
         else:
             NPV_total = 0
-        
+
+        # NPV_ETS: profits and costs from ETS policy and CCS costs (without CSU policy)
+        if investment_year is not None:
+            annual_costs = (cost_ETS_plant + OPEX_CCS) * NPV_data['discount_factor']
+            annual_profits = profit_ETS_plant * NPV_data['discount_factor']
+            NPV_ETS = -CAPEX * discount_factor_capex + annual_profits.sum() - annual_costs.sum()  # [k€]
+        else:
+            NPV_ETS = 0
+
         npv_results.append({
             'stack': plant['stack'],
-            'sector': sector,
+            'sector': plant['sector'],  # From MACC, not NPV_data
             'investment_year': investment_year,
             'NPV_CSU': NPV_CSU,
             'NPV_total': NPV_total,
-            'ktCO2tot_ccs': ktCO2tot_ccs
+            'NPV_ETS': NPV_ETS,
+            'ktCO2tot_ccs': plant['ktCO2tot_ccs']  # From MACC, not NPV_data
         })
-    
+
     if single_run:
         # Plot NPV bubble charts (Omit "Drax-power")
         npv_results = [result for result in npv_results if result['stack'] != 'Drax-power']
@@ -956,12 +980,22 @@ def simulate_ctbo(
     results['plants_investment_year'] = [p['investment_year'] for p in npv_sorted]
     results['plants_NPV_CSU'] = [p['NPV_CSU'] for p in npv_sorted]
     results['plants_NPV_total'] = [p['NPV_total'] for p in npv_sorted]
+    results['plants_NPV_ETS'] = [p['NPV_ETS'] for p in npv_sorted]
     results['plants_ktCO2tot_ccs'] = [p['ktCO2tot_ccs'] for p in npv_sorted]
     
     results['gas_increase_abs'] = _gas_increase_abs
     results['gas_increase_pct'] = _gas_increase_pct
     results['gas_increase_2040'] = gas_increase_2040
     results['year_DACCS_marginal'] = year_DACCS_marginal
+    
+    # Policy-level NPV results
+    results['NPV_cost_CTBO'] = NPV_cost_CTBO
+    results['NPV_profit_CTBO'] = NPV_profit_CTBO
+    results['benefit2cost_CTBO'] = benefit2cost_CTBO
+    results['NPV_cost_ETS'] = NPV_cost_ETS
+    results['NPV_profit_ETS'] = NPV_profit_ETS
+    results['benefit2cost_ETS'] = benefit2cost_ETS
+    
     return results
 
 def plot_opex_distributions_by_sector(plants_clean, opex_results, bins=30, ncols=2, debug=False):
