@@ -17,16 +17,17 @@ def plot_stylistic_supply_stored(debug=False):
     supply = np.linspace(supply_start, supply_end, len(years))
     
     # Setup figure with two y-axes
-    fig, ax1 = plt.subplots(figsize=(10, 4))
+    fig, ax1 = plt.subplots(figsize=(7.5, 4))
     
     # Left y-axis: CO2 supply (stackplot)
-    ax1.stackplot(years, supply, colors=['gray'], alpha=0.7, labels=['CO₂ supply'])
-    ax1.set_xlabel('Year', fontsize=14)
+    ax1.stackplot(years, supply, colors=['gray'], alpha=0.45, labels=['CO₂ supply'])
+    # ax1.set_xlabel('Year', fontsize=14)
     ax1.set_ylabel('Carbon supply [MtCO₂/yr]\n'+ r'$\mathbf{diffuse}$' +' emitters', fontsize=14)
     ax1.set_xlim(2025, 2050)
     ax1.set_ylim(0, 300)
     ax1.set_yticks([0, 100, 200, 300])
     ax1.tick_params(labelsize=12)
+    ax1.grid(True, linestyle='--', alpha=0.7)
     # ax1.legend(loc='upper left', fontsize=12)
     
     # Right y-axis: CO2 stored (empty for now, same ticks as left)
@@ -62,16 +63,17 @@ def plot_stylistic_supply_vs_stored(debug=False):
     stored = 150 * ctbo_trajectory
     
     # Setup figure with two y-axes
-    fig, ax1 = plt.subplots(figsize=(10, 4))
+    fig, ax1 = plt.subplots(figsize=(7.5, 4))
     
     # Left y-axis: CO2 supply (stackplot)
-    ax1.stackplot(years, supply, colors=['gray'], alpha=0.7, labels=['CO₂ supply'])
-    ax1.set_xlabel('Year', fontsize=14)
+    ax1.stackplot(years, supply, colors=['gray'], alpha=0.45, labels=['CO₂ supply'])
+    # ax1.set_xlabel('Year', fontsize=14)
     ax1.set_ylabel('Carbon supply [MtCO₂/yr]\n'+ r'$\mathbf{point-source}$' +' emitters', fontsize=14)
     ax1.set_xlim(2025, 2050)
     ax1.set_ylim(0, 300)
     ax1.set_yticks([0, 100, 200, 300])
     ax1.tick_params(labelsize=12)
+    ax1.grid(True, linestyle='--', alpha=0.7)
     
     # Right y-axis: CO2 stored (stackplot)
     ax2 = ax1.twinx()
@@ -107,16 +109,17 @@ def plot_stylistic_decreasing_supply_stored(debug=False):
     stored = 150 * ctbo_trajectory
     
     # Setup figure with two y-axes
-    fig, ax1 = plt.subplots(figsize=(10, 4))
+    fig, ax1 = plt.subplots(figsize=(7.5, 4))
     
     # Left y-axis: CO2 supply (stackplot)
-    ax1.stackplot(years, supply, colors=['gray'], alpha=0.7, labels=['CO₂ supply'])
-    ax1.set_xlabel('Year', fontsize=14)
+    ax1.stackplot(years, supply, colors=['gray'], alpha=0.45, labels=['CO₂ supply'])
+    # ax1.set_xlabel('Year', fontsize=14)
     ax1.set_ylabel('Carbon supply [MtCO₂/yr]\n'+ r'$\mathbf{all}$' +' emitters', fontsize=14)
     ax1.set_xlim(2025, 2050)
     ax1.set_ylim(0, 300)
     ax1.set_yticks([0, 100, 200, 300])
     ax1.tick_params(labelsize=12)
+    ax1.grid(True, linestyle='--', alpha=0.7)
     
     # Right y-axis: CO2 stored (stackplot)
     ax2 = ax1.twinx()

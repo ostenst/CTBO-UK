@@ -111,7 +111,7 @@ def plot_gas_increase_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=Fa
     magma = plt.cm.magma
     colors = [magma(0.2), magma(0.5), magma(0.8)]
     
-    fig, ax = plt.subplots(figsize=(12, 5.5))
+    fig, ax = plt.subplots(figsize=(12, 4.5)) # figsize=(12, 4.5) for baseline case and figsize=(5, 4.5) for stress test - but reduce fontsize!
     
     for scenario, color in zip(scenarios, colors):
         mask = experiments['ETS_SCENARIO'] == scenario
@@ -131,7 +131,7 @@ def plot_gas_increase_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=Fa
     # ax.set_xlabel('Year', fontsize=14)
     ax.set_ylabel('Gas price increase [pence/kWh]', fontsize=14)
     # ax.set_title('Gas Price Increase by ETS Scenario (5th-95th percentile)', fontsize=16)
-    ax.legend(fontsize=12, loc='best')
+    ax.legend(fontsize=12, loc='upper left')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
     ax.set_xlim(START_YEAR, 2050)
@@ -184,7 +184,7 @@ def plot_cost_ctbo_producers_by_ets(results_dir='results', pounds_to_EUR=1.15, d
     magma = plt.cm.magma
     colors = [magma(0.2), magma(0.5), magma(0.8)]
     
-    fig, ax = plt.subplots(figsize=(12, 5.5))
+    fig, ax = plt.subplots(figsize=(12, 4.5))
     
     for scenario, color in zip(scenarios, colors):
         mask = experiments['ETS_SCENARIO'] == scenario
@@ -202,7 +202,7 @@ def plot_cost_ctbo_producers_by_ets(results_dir='results', pounds_to_EUR=1.15, d
     # Formatting
     ax.axhline(0, color='grey', linestyle='--', linewidth=1, alpha=0.7)
     ax.set_ylabel('CTBO cost to producers [B£/yr]', fontsize=14)
-    ax.legend(fontsize=12, loc='best')
+    ax.legend(fontsize=12, loc='upper left')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
     ax.set_xlim(START_YEAR, 2050)
@@ -247,7 +247,7 @@ def plot_prices_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=False):
     magma = plt.cm.magma
     colors = [magma(0.2), magma(0.5), magma(0.8)]
     
-    fig, ax = plt.subplots(figsize=(12, 5.5))
+    fig, ax = plt.subplots(figsize=(12, 4.5))
     
     for scenario, color in zip(scenarios, colors):
         mask = experiments['ETS_SCENARIO'] == scenario
@@ -352,7 +352,7 @@ def plot_plant_npv_bubbles(results_dir='results', ETS_filter=None, pounds_to_EUR
     size_scale = 0.3
     sizes = df_valid['ktCO2tot_ccs'] * size_scale
     
-    fig, ax = plt.subplots(figsize=(9, 8))
+    fig, ax = plt.subplots(figsize=(7, 8))
     
     legend_handles = []
     for sector in sectors:
@@ -466,7 +466,7 @@ def plot_plant_npv_csu_bubbles(results_dir='results', ETS_filter=None, exclude_s
     size_scale = 0.3
     sizes = df_valid['ktCO2tot_ccs'] * size_scale
     
-    fig, ax = plt.subplots(figsize=(9, 8))
+    fig, ax = plt.subplots(figsize=(7, 8))
     
     legend_handles = []
     for sector in sectors:
@@ -580,7 +580,7 @@ def plot_plant_npv_ets_bubbles(results_dir='results', ETS_filter=None, exclude_s
     size_scale = 0.3
     sizes = df_valid['ktCO2tot_ccs'] * size_scale
     
-    fig, ax = plt.subplots(figsize=(9, 8))
+    fig, ax = plt.subplots(figsize=(7, 8))
     
     legend_handles = []
     for sector in sectors:
@@ -621,10 +621,11 @@ def plot_plant_npv_ets_bubbles(results_dir='results', ETS_filter=None, exclude_s
     
     return fig
 
-def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, debug=False):
+def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, article_format=False, debug=False):
     """
     Generate three figures (one per ETS scenario) with box plots of policy NPV costs and profits.
     All figures share the same y-axis limits (determined by the widest range).
+    article_format: if True, use thinner figsize and vertically rotated labels.
     """
     if debug:
         print(f"Loading scalar outcomes from {results_dir}")
@@ -637,7 +638,10 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, debug=Fa
         print(f"Columns: {outcomes.columns.tolist()}")
     
     scenarios = ['£200', '£300', '£400']
-    npv_labels = ['CfD eq.\n policy cost\n(-20% reduction)', 'CTBO\npolicy cost', 'CTBO\nfuel supplier\ncost', 'CTBO\nemitter and\nT&S profits']
+    if article_format:
+        npv_labels = ['Policy cost (CfD eq.)', 'Policy cost (CTBO)', 'Fuel supplier costs (CTBO)', 'Emitter and T&S profits (CTBO)']
+    else:
+        npv_labels = ['CfD eq.\n policy cost\n(-20% reduction)', 'CTBO\npolicy cost', 'CTBO\nfuel supplier\ncost', 'CTBO\nemitter and\nT&S profits']
     green = '#62a7a6'
     box_colors = [green, green, green, green]
     box_alphas = [1, 1, 0.4, 0.4]
@@ -667,7 +671,7 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, debug=Fa
             global_max = max(global_max, arr.max())
     
     # Add some padding to the limits
-    padding = (global_max - global_min) * 0.05
+    padding = (global_max - global_min) * 0.01
     ylim = (global_min - padding, global_max + padding)
     
     if debug:
@@ -683,12 +687,19 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, debug=Fa
         
         npv_data = scenario_data[scenario]
         
-        fig, ax = plt.subplots(figsize=(5.5, 6))
+        if article_format:
+            fig, ax = plt.subplots(figsize=(3.5, 8))
+        else:
+            fig, ax = plt.subplots(figsize=(5.5, 6))
         
         bp = ax.boxplot(npv_data, tick_labels=npv_labels, patch_artist=True)
         for i, (patch, color) in enumerate(zip(bp['boxes'], box_colors)):
             patch.set_facecolor(color)
             patch.set_alpha(box_alphas[i])
+        
+        # Rotate labels if article_format
+        if article_format:
+            ax.set_xticklabels(npv_labels, rotation=90, ha='center', fontsize=11)
         
         ax.axhline(0, color='black', linestyle='-', linewidth=1)
         ax.axhline(21.7, color='black', linestyle='--', linewidth=1.5, label='Public funding\nCCS clusters')
@@ -721,6 +732,6 @@ if __name__ == "__main__":
     plot_plant_npv_csu_bubbles(debug=True, exclude_sectors=['drax']) # 'drax'
     plot_plant_npv_ets_bubbles(debug=True, exclude_sectors=[])
     
-    plot_policy_npv_boxplots(debug=True)
+    plot_policy_npv_boxplots(debug=True, article_format=True)
 
     plt.show()

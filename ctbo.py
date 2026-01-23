@@ -1356,7 +1356,7 @@ def plot_macc(macc, savefig=False, debug=False):
     macc_nonzero = macc_plot[macc_plot['MAC'] != 0]
 
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.step(macc_nonzero['cumulative_kt']/1000, macc_nonzero['MAC'], where='pre', color=magma(0.5), linewidth=2.5)
+    ax.step(macc_nonzero['cumulative_kt']/1000, macc_nonzero['MAC'], where='pre', color='gray', linewidth=2.5)
     ax.set_xlabel("Cumulative MtCO₂ CCS", fontsize=14)
     ax.set_ylabel("MAC [€/tCO₂] of CCS/BECCS", fontsize=14)
     ax.set_title("Marginal Abatement Cost Curve", fontsize=18)
