@@ -1,4 +1,6 @@
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 import pandas as pd
 from ctbo import simulate_ctbo
 from ema_workbench import (
@@ -13,6 +15,8 @@ from ema_workbench import (
     ema_logging,
     perform_experiments
 )
+from ema_workbench.em_framework import get_SALib_problem
+from SALib.analyze import sobol
 
 if __name__ == "__main__":
     ema_logging.log_to_stderr(ema_logging.INFO)
@@ -42,7 +46,7 @@ if __name__ == "__main__":
         RealParameter("ccgt_efficiency", 0.45, 0.55),
         RealParameter("ccgt_efficiency_loss", 0.10, 0.15),  # [-] CCS efficiency penalty
         # Cost uncertainties
-        RealParameter("cgas", 10, 100),  # [€/MWh] 
+        RealParameter("cgas", 30, 80),  # [€/MWh]
         RealParameter("celc", 150, 300),  # [€/MWh]
         RealParameter("cpellets", 150, 250),  # [€/t]
         RealParameter("cstraw", 100, 200),  # [€/t]
@@ -60,13 +64,19 @@ if __name__ == "__main__":
         IntegerParameter("lifetime_ccs", 20, 30),  # [years]
         RealParameter("CEPCI_2025", 880, 980),
         RealParameter("NETL_2025", 5.0, 6.0),
-    ]
 
-    # Levers: policy choices we can control
-    model.levers = [
+        # Policy uncertainties
         CategoricalParameter("ETS_SCENARIO", ['£200', '£300', '£400']),
         RealParameter("DIFFUSE_END_FRACTION", 0.05, 0.40),
+        
+        CategoricalParameter("ASSUME_FOAK", [False, True]),
     ]
+
+    # # Levers: policy choices we can control
+    # model.levers = [
+    #     CategoricalParameter("ETS_SCENARIO", ['£200', '£300', '£400']),
+    #     RealParameter("DIFFUSE_END_FRACTION", 0.05, 0.40),
+    # ]
 
     # Outcomes: metrics to track
     model.outcomes = [
@@ -110,8 +120,6 @@ if __name__ == "__main__":
         Constant("plants_clean", plants_clean),
         Constant("transport_hubs", transport_hubs),
         Constant("single_run", False),
-        Constant("DEFOSSILIZE", False),
-        Constant("ASSUME_FOAK", False),
         Constant("CTBO_QUADRATIC", 0.4),
         Constant("DISCOUNT_RATE", 0.035),
         Constant("FOAK_CALIBRATION", 1.6379),
@@ -120,46 +128,57 @@ if __name__ == "__main__":
         Constant("END_YEAR", 2055),
         Constant("DIFFUSE_END_YEAR", 2050),
         Constant("pounds_to_EUR", 1.15),
+        Constant("DEFOSSILIZE", False),
     ]
 
     # Run experiments
-    n_scenarios = 5
-    n_policies = 2
+    n_scenarios = 10
+    n_policies = 0
     
     results = perform_experiments(
         model, 
         n_scenarios, 
         n_policies, 
-        uncertainty_sampling=Samplers.LHS, 
-        lever_sampling=Samplers.LHS
+        uncertainty_sampling=Samplers.SOBOL, 
+        lever_sampling=Samplers.SOBOL
     )
     experiments, outcomes = results
 
-    # Separate scalar and array outcomes
-    scalar_outcomes = {k: v for k, v in outcomes.items() if np.asarray(v).ndim == 1}
-    array_outcomes = {k: v for k, v in outcomes.items() if np.asarray(v).ndim > 1}
-    
-    # Save experiments + scalar outcomes as CSV
-    scalar_df = pd.DataFrame(scalar_outcomes)
-    combined_df = pd.concat([experiments, scalar_df], axis=1)
-    combined_df.to_csv("results/experiments.csv", index=False)
-    
-    # Save array outcomes as .npy files
-    for name, arr in array_outcomes.items():
-        np.save(f"results/outcomes_{name}.npy", arr)
-    
-    # Save plant names reference (alphabetically ordered, same for all runs)
-    # Use same constants as model to ensure consistency if DEFOSSILIZE=True
-    constants_dict = {c.name: c.value for c in model.constants if c.name not in ['plants_clean', 'transport_hubs']}
-    test_result = simulate_ctbo(plants_clean, transport_hubs, **constants_dict)
-    plant_ref = pd.DataFrame({
-        'plant_index': range(len(test_result['plants_stack'])),
-        'stack': test_result['plants_stack'],
-        'sector': test_result['plants_sector']
-    })
-    plant_ref.to_csv("results/plant_reference.csv", index=False)
-    
-    print(f"\nCompleted {len(experiments)} experiments")
-    print(f"Experiments + scalar outcomes saved to: results/experiments.csv")
-    print(f"Array outcomes saved to: results/outcomes_*.npy")
-    print(f"Plant reference saved to: results/plant_reference.csv")
+    def analyze(results, ooi):
+        """analyze results using SALib sobol, returns a dataframe"""
+        _, outcomes = results
+
+        problem = get_SALib_problem(model.uncertainties)
+        y = outcomes[ooi]
+        sobol_indices = sobol.analyze(problem, y)
+        sobol_stats = {key: sobol_indices[key] for key in ["ST", "ST_conf", "S1", "S1_conf"]}
+        sobol_stats = pd.DataFrame(sobol_stats, index=problem["names"])
+        sobol_stats.sort_values(by="ST", ascending=False)
+        s2 = pd.DataFrame(sobol_indices["S2"], index=problem["names"], columns=problem["names"])
+        s2_conf = pd.DataFrame(
+            sobol_indices["S2_conf"], index=problem["names"], columns=problem["names"]
+        )
+        return sobol_stats, s2, s2_conf, problem
+    sobol_stats, s2, s2_conf, problem = analyze(results, "gas_increase_2040")
+
+    print(sobol_stats)
+    print(s2)
+    print(s2_conf)
+    sobol_stats = pd.DataFrame(sobol_stats, index=problem["names"])
+    sobol_stats.to_csv("sobol_stats.csv")
+    sobol_stats_sorted = sobol_stats.sort_values(by="ST", ascending=False)  # Ascending for better readability
+
+    # Create horizontal bar plot
+    plt.figure(figsize=(8, 10))  # Adjust figure size for better layout
+    sns.barplot(
+        y=sobol_stats_sorted.index,  # Parameters on y-axis
+        x=sobol_stats_sorted["ST"],  # Sobol indices on x-axis
+        xerr=sobol_stats_sorted["ST_conf"],  # Confidence intervals as error bars
+        capsize=0.2,
+        color="crimson"
+    )
+    plt.ylabel("Parameter")
+    plt.xlabel("Total Sobol Index (ST)")
+    plt.title("Total-Order Sobol Indices with Confidence Intervals")
+    plt.grid(axis="x", linestyle="--", alpha=0.7)
+    plt.show()

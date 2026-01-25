@@ -459,7 +459,7 @@ def simulate_ctbo(
     oil_2023 = 139, # [MtCO2] 
     gas_2023 = 127, # [MtCO2] 
 
-    emission_factor_gas = 0.204, # [tCO2/MWh] NZIP
+    emission_factor_gas = 0.204, # [tCO2/MWh] NZIP 
     emission_factor_waste = 0.98, # [tCO2/t waste] Tolvik
     emission_factor_pellets = 0.358, # [tCO2/MWh] calc. from Emenike et al. (2020)
     emission_factor_straw = 0.353, # [tCO2/MWh] 
@@ -489,7 +489,7 @@ def simulate_ctbo(
     ccgt_efficiency = 0.49, # [MWelc/MWfuel] DUKES DESNZ  
     ccgt_efficiency_loss = (67.3 - 13.260)/420, # [MWlost/MWbaseline] based on Sherman FEED study, using LP steam, subtracting the compression work
 
-    cgas = 40, # [€/MWh]
+    cgas = 40, # [€/MWh] Mersch et al. (2023)
     celc = 250, # [€/MWh]
     cpellets = 200, # [€/t biopellets]
     cstraw = 150, # [€/t biostraw]
@@ -781,7 +781,7 @@ def simulate_ctbo(
         gas_increase_abs = cost_CSU_embedded * emission_factor_gas # [€/MWh]
         gas_increase_pct = gas_increase_abs / cgas * 100 # [%]
         if year == 2040:
-            gas_increase_2040 = gas_increase_pct
+            gas_increase_2040 = gas_increase_abs
         
         _supply_ktCO2f.append(supply_ktCO2f)
         _emitted_ktCO2f.append(emitted_ktCO2f)

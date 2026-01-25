@@ -43,98 +43,112 @@ def plot_carbon_trajectories_uncertainty(results_dir='results', pounds_to_EUR=1.
     
     # Setup plot
     magma = plt.cm.magma
+    dark_magma = magma(0.1)
     green = '#62a7a6'
-    fig, ax = plt.subplots(figsize=(12, 6.5))
+    purple = '#9F5994'
+    fig, ax = plt.subplots(figsize=(7, 6.5))
     
     # Line 1: Supply
-    color1 = magma(0.2)
-    ax.plot(years, supply_med / scale, color=color1, linewidth=2.5, label='Fossil fuel supply (coal, oil, gas)')
-    ax.fill_between(years, supply_p5 / scale, supply_p95 / scale, color=color1, alpha=0.25)
+    # color1 = magma(0.2)
+    ax.plot(years, supply_med / scale, color=dark_magma, linewidth=2.5, label='Fossil fuel supply (coal, oil, gas)')
+    ax.fill_between(years, supply_p5 / scale, supply_p95 / scale, color=dark_magma, alpha=0.30)
     
     # Line 2: Biogenic + DACCS storage
     color2 = green
     ax.plot(years, bio_daccs_med / scale, color=color2, linewidth=2.5, label='CDR storage (BECCS, DACCS)')
-    ax.fill_between(years, bio_daccs_p5 / scale, bio_daccs_p95 / scale, color=color2, alpha=0.25)
+    ax.fill_between(years, bio_daccs_p5 / scale, bio_daccs_p95 / scale, color=color2, alpha=0.40)
     
     # Line 3: Total storage
-    color3 = magma(0.8)
-    ax.plot(years, total_med / scale, color=color3, linewidth=2.5, label='Total storage (fossil CCS, BECCS, DACCS)')
-    ax.fill_between(years, total_p5 / scale, total_p95 / scale, color=color3, alpha=0.25)
+    # color3 = magma(0.8)
+    ax.plot(years, total_med / scale, color=purple, linewidth=2.5, label='Total storage (fossil CCS, BECCS, DACCS)')
+    ax.fill_between(years, total_p5 / scale, total_p95 / scale, color=purple, alpha=0.40)
     
     # Formatting
     # ax.set_xlabel('Year', fontsize=14)
     ax.set_ylabel('Carbon [MtCO₂/year]', fontsize=14)
-    # ax.set_title('Carbon Trajectories with Uncertainty (5th-95th percentile)', fontsize=16)
+    # # ax.set_title('Carbon Trajectories with Uncertainty (5th-95th percentile)', fontsize=16)
     ax.legend(fontsize=12, loc='best')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
     ax.set_xlim(START_YEAR, END_YEAR)
+    ax.set_ylim(-20, 300)
     
     plt.tight_layout()
-    plt.savefig(f'{results_dir}/carbon_balances.png', dpi=450, bbox_inches='tight')
+    plt.savefig(f'{results_dir}/1_carbon_balances.png', dpi=450, bbox_inches='tight')
     
     if debug:
         print(f"Plot saved to {results_dir}/carbon_balances.png")
     
     return fig
 
-def plot_gas_increase_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=False):
+def plot_gas_increase_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_scenario=None, debug=False):
     """
-    Plot gas_increase_abs with uncertainty intervals, grouped by ETS_SCENARIO.
-    """
+    Plot gas_increase_abs as box plots for years 2030, 2035, 2040, 2045, 2050.
     
+    Args:
+        results_dir: Directory containing results files
+        pounds_to_EUR: Conversion rate from pounds to EUR
+        ets_scenario: Optional ETS scenario to filter by (e.g., '£200', '£300', '£400'). Default: no filtering
+        debug: If True, print debug information
+    """
     if debug:
         print(f"Loading data from {results_dir}")
+        print(f"ETS scenario filter: {ets_scenario}")
     
-    # Load experiments to get ETS_SCENARIO values
+    # Load experiments and data
     experiments = pd.read_csv(f'{results_dir}/experiments.csv')
-    gas_increase_abs = np.load(f'{results_dir}/outcomes_gas_increase_abs.npy') # [€/MWh]
+    gas_increase_abs = np.load(f'{results_dir}/outcomes_gas_increase_abs.npy')  # [€/MWh]
     gas_increase_abs = gas_increase_abs / pounds_to_EUR * (100 / 1000)  # €→£, then £/MWh→pence/kWh
+    
+    # Filter by ETS scenario if specified
+    if ets_scenario is not None:
+        mask = experiments['ETS_SCENARIO'] == ets_scenario
+        gas_increase_abs = gas_increase_abs[mask]
     
     if debug:
         print(f"Shape of gas_increase_abs: {gas_increase_abs.shape}")
-        print(f"ETS_SCENARIO values: {experiments['ETS_SCENARIO'].unique()}")
     
-    # Years array (from constants)
+    # Years array
     START_YEAR = 2025
-    END_YEAR = 2055
-    years = np.arange(START_YEAR, END_YEAR + 1)
+    years = np.arange(START_YEAR, START_YEAR + gas_increase_abs.shape[1])
+    target_years = [2030, 2035, 2040, 2045, 2050]
     
-    # Calculate statistics for each scenario
-    def get_stats(arr):
-        median = np.median(arr, axis=0)
-        p5 = np.percentile(arr, 5, axis=0)
-        p95 = np.percentile(arr, 95, axis=0)
-        return median, p5, p95
+    # Extract data for target years
+    box_data = []
+    for year in target_years:
+        year_idx = year - START_YEAR
+        box_data.append(gas_increase_abs[:, year_idx])
     
-    scenarios = ['£200', '£300', '£400']
+    if debug:
+        print(f"Target years: {target_years}")
+        print(f"Box data shapes: {[d.shape for d in box_data]}")
+    
+    # Hard-coded box color
     magma = plt.cm.magma
-    colors = [magma(0.2), magma(0.5), magma(0.8)]
+    box_color = magma(0.7)
+    median_color = magma(0.1)
     
-    fig, ax = plt.subplots(figsize=(12, 4.5)) # figsize=(12, 4.5) for baseline case and figsize=(5, 4.5) for stress test - but reduce fontsize!
+    fig, ax = plt.subplots(figsize=(6, 5))
+
+    plt.grid(True, axis='y', linestyle='--', alpha=0.4)
+
+    # Create box plots
+    bp = ax.boxplot(box_data, positions=range(len(target_years)), patch_artist=True, widths=0.6)
     
-    for scenario, color in zip(scenarios, colors):
-        mask = experiments['ETS_SCENARIO'] == scenario
-        data = gas_increase_abs[mask]
-        
-        if len(data) == 0:
-            if debug:
-                print(f"No data for ETS_SCENARIO={scenario}")
-            continue
-        
-        med, p5, p95 = get_stats(data)
-        ax.plot(years, med, color=color, linewidth=2.5, label=f'ETS {scenario}')
-        ax.fill_between(years, p5, p95, color=color, alpha=0.25)
+    # Style the boxes
+    for box in bp['boxes']:
+        box.set_facecolor(box_color)
+        box.set_alpha(0.7)
+    for median in bp['medians']:
+        median.set_color(median_color)
+        median.set_linewidth(2)
     
     # Formatting
-    ax.axhline(0, color='grey', linestyle='--', linewidth=1, alpha=0.7)
-    # ax.set_xlabel('Year', fontsize=14)
+    ax.set_xticks(range(len(target_years)))
+    ax.set_xticklabels(target_years, fontsize=12)
     ax.set_ylabel('Gas price increase [pence/kWh]', fontsize=14)
-    # ax.set_title('Gas Price Increase by ETS Scenario (5th-95th percentile)', fontsize=16)
-    ax.legend(fontsize=12, loc='upper left')
-    ax.grid(True, linestyle='--', alpha=0.4)
+    # ax.set_xlabel('Year', fontsize=14)
     ax.tick_params(labelsize=12)
-    ax.set_xlim(START_YEAR, 2050)
     
     # Secondary y-axis: annual household bill (11200 kWh avg consumption)
     household_consumption = 11200  # kWh/year
@@ -144,74 +158,98 @@ def plot_gas_increase_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=Fa
     ax2.set_ylim(y1_min * household_consumption / 100, y1_max * household_consumption / 100)  # pence→£
     ax2.tick_params(labelsize=12)
     
-    fig.subplots_adjust(left=0.08, right=0.85, top=0.95, bottom=0.08)  # Fixed margins for consistent x-axis width
-    plt.savefig(f'{results_dir}/gas_increase_by_ets.png', dpi=450, bbox_inches='tight')
+    title = 'Gas price increase'
+    if ets_scenario is not None:
+        title += f' (ETS {ets_scenario})'
+    # ax.set_title(title, fontsize=14)
+    
+    fig.subplots_adjust(left=0.15, right=0.75, top=0.92, bottom=0.12)
+    plt.savefig(f'{results_dir}/3_gas_increase_boxplots.png', dpi=450)
     
     if debug:
-        print(f"Plot saved to {results_dir}/gas_increase_by_ets.png")
+        print(f"Plot saved to {results_dir}/3_gas_increase_boxplots.png")
     
     return fig
 
-def plot_cost_ctbo_producers_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=False):
+def plot_cost_ctbo_producers_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_scenario=None, debug=False):
     """
-    Plot cost_CTBO_producers with uncertainty intervals, grouped by ETS_SCENARIO.
+    Plot cost_CTBO_producers as box plots for years 2030, 2035, 2040, 2045, 2050.
+    
+    Args:
+        results_dir: Directory containing results files
+        pounds_to_EUR: Conversion rate from pounds to EUR
+        ets_scenario: Optional ETS scenario to filter by (e.g., '£200', '£300', '£400'). Default: no filtering
+        debug: If True, print debug information
     """
     if debug:
         print(f"Loading data from {results_dir}")
+        print(f"ETS scenario filter: {ets_scenario}")
     
-    # Load experiments to get ETS_SCENARIO values
+    # Load experiments and data
     experiments = pd.read_csv(f'{results_dir}/experiments.csv')
     cost_CTBO_producers = np.load(f'{results_dir}/outcomes_cost_CTBO_producers.npy')  # [k€/yr]
     cost_CTBO_producers = cost_CTBO_producers / 1e6 / pounds_to_EUR  # k€/yr → B£/yr
     
+    # Filter by ETS scenario if specified
+    if ets_scenario is not None:
+        mask = experiments['ETS_SCENARIO'] == ets_scenario
+        cost_CTBO_producers = cost_CTBO_producers[mask]
+    
     if debug:
         print(f"Shape of cost_CTBO_producers: {cost_CTBO_producers.shape}")
-        print(f"ETS_SCENARIO values: {experiments['ETS_SCENARIO'].unique()}")
     
-    # Years array (from constants)
+    # Years array
     START_YEAR = 2025
-    END_YEAR = 2055
-    years = np.arange(START_YEAR, END_YEAR + 1)
+    years = np.arange(START_YEAR, START_YEAR + cost_CTBO_producers.shape[1])
+    target_years = [2030, 2035, 2040, 2045, 2050]
     
-    # Calculate statistics for each scenario
-    def get_stats(arr):
-        median = np.median(arr, axis=0)
-        p5 = np.percentile(arr, 5, axis=0)
-        p95 = np.percentile(arr, 95, axis=0)
-        return median, p5, p95
-    
-    scenarios = ['£200', '£300', '£400']
-    magma = plt.cm.magma
-    colors = [magma(0.2), magma(0.5), magma(0.8)]
-    
-    fig, ax = plt.subplots(figsize=(12, 4.5))
-    
-    for scenario, color in zip(scenarios, colors):
-        mask = experiments['ETS_SCENARIO'] == scenario
-        data = cost_CTBO_producers[mask]
-        
-        if len(data) == 0:
-            if debug:
-                print(f"No data for ETS_SCENARIO={scenario}")
-            continue
-        
-        med, p5, p95 = get_stats(data)
-        ax.plot(years, med, color=color, linewidth=2.5, label=f'ETS {scenario}')
-        ax.fill_between(years, p5, p95, color=color, alpha=0.25)
-    
-    # Formatting
-    ax.axhline(0, color='grey', linestyle='--', linewidth=1, alpha=0.7)
-    ax.set_ylabel('CTBO cost to producers [B£/yr]', fontsize=14)
-    ax.legend(fontsize=12, loc='upper left')
-    ax.grid(True, linestyle='--', alpha=0.4)
-    ax.tick_params(labelsize=12)
-    ax.set_xlim(START_YEAR, 2050)
-    
-    fig.subplots_adjust(left=0.08, right=0.85, top=0.95, bottom=0.08)  # Fixed margins for consistent x-axis width
-    plt.savefig(f'{results_dir}/cost_ctbo_producers_by_ets.png', dpi=450, bbox_inches='tight')
+    # Extract data for target years
+    box_data = []
+    for year in target_years:
+        year_idx = year - START_YEAR
+        box_data.append(cost_CTBO_producers[:, year_idx])
     
     if debug:
-        print(f"Plot saved to {results_dir}/cost_ctbo_producers_by_ets.png")
+        print(f"Target years: {target_years}")
+        print(f"Box data shapes: {[d.shape for d in box_data]}")
+    
+    # Hard-coded box color
+    magma = plt.cm.magma
+    box_color = magma(0.1)
+    median_color = magma(0.7)
+    
+    fig, ax = plt.subplots(figsize=(6, 5))
+    
+    plt.grid(True, axis='y', linestyle='--', alpha=0.4)
+
+    # Create box plots
+    bp = ax.boxplot(box_data, positions=range(len(target_years)), patch_artist=True, widths=0.6)
+    
+    # Style the boxes
+    for box in bp['boxes']:
+        box.set_facecolor(box_color)
+        box.set_alpha(0.7)
+    for median in bp['medians']:
+        median.set_color(median_color)
+        median.set_linewidth(2)
+    
+    # Formatting
+    ax.set_xticks(range(len(target_years)))
+    ax.set_xticklabels(target_years, fontsize=12)
+    ax.set_ylabel('CTBO cost to producers [B£/yr]', fontsize=14)
+    # ax.set_xlabel('Year', fontsize=14)
+    ax.tick_params(labelsize=12)
+    
+    title = 'CTBO cost to producers'
+    if ets_scenario is not None:
+        title += f' (ETS {ets_scenario})'
+    # ax.set_title(title, fontsize=14)
+    
+    fig.subplots_adjust(left=0.15, right=0.75, top=0.92, bottom=0.12)
+    plt.savefig(f'{results_dir}/3_cost_ctbo_producers_boxplots.png', dpi=450)
+    
+    if debug:
+        print(f"Plot saved to {results_dir}/cost_ctbo_producers_boxplots.png")
     
     return fig
 
@@ -245,9 +283,9 @@ def plot_prices_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=False):
     
     scenarios = ['£200', '£300', '£400']
     magma = plt.cm.magma
-    colors = [magma(0.2), magma(0.5), magma(0.8)]
+    colors = [magma(0.10), magma(0.40), magma(0.70)]
     
-    fig, ax = plt.subplots(figsize=(12, 4.5))
+    fig, ax = plt.subplots(figsize=(7, 5.5))
     
     for scenario, color in zip(scenarios, colors):
         mask = experiments['ETS_SCENARIO'] == scenario
@@ -272,14 +310,14 @@ def plot_prices_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=False):
     ax.axhline(0, color='grey', linestyle='--', linewidth=1, alpha=0.7)
     # ax.set_xlabel('Year', fontsize=14)
     ax.set_ylabel('Price [£/tCO₂]', fontsize=14)
-    # ax.set_title('CSU Price (solid) and ETS Price (dashed) by Scenario', fontsize=16)
+    # # ax.set_title('CSU Price (solid) and ETS Price (dashed) by Scenario', fontsize=16)
     ax.legend(fontsize=12, loc='best')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
     ax.set_xlim(START_YEAR, 2050)
     
     fig.subplots_adjust(left=0.08, right=0.85, top=0.95, bottom=0.08)  # Fixed margins for consistent x-axis width
-    plt.savefig(f'{results_dir}/prices_by_ets.png', dpi=450, bbox_inches='tight')
+    plt.savefig(f'{results_dir}/2_prices_by_ets.png', dpi=450, bbox_inches='tight')
     
     if debug:
         print(f"Plot saved to {results_dir}/prices_by_ets.png")
@@ -352,9 +390,10 @@ def plot_plant_npv_bubbles(results_dir='results', ETS_filter=None, pounds_to_EUR
     size_scale = 0.3
     sizes = df_valid['ktCO2tot_ccs'] * size_scale
     
-    fig, ax = plt.subplots(figsize=(7, 8))
+    fig, ax = plt.subplots(figsize=(6, 6))
     
     legend_handles = []
+    legend_labels= {'cement': 'Cement', 'waste': 'Waste', 'ccgt': 'Gas power', 'drax': 'Drax', 'refinery': 'Refinery', 'steel': 'Steel'}
     for sector in sectors:
         mask = df_valid['sector'] == sector
         ax.scatter(
@@ -368,7 +407,7 @@ def plot_plant_npv_bubbles(results_dir='results', ETS_filter=None, pounds_to_EUR
         )
         # Create custom legend handle with fixed size
         handle = plt.scatter([], [], s=80, c=[sector_colors[sector]], alpha=0.7, 
-                            edgecolors='black', linewidths=0.5, label=sector)
+                            edgecolors='black', linewidths=0.5, label=legend_labels[sector])
         legend_handles.append(handle)
     
     # Formatting
@@ -378,15 +417,15 @@ def plot_plant_npv_bubbles(results_dir='results', ETS_filter=None, pounds_to_EUR
     title = 'Plant NPV by investment year (median across scenarios)'
     if ETS_filter:
         title += f'\nETS: {", ".join(ETS_filter)}'
-    # ax.set_title(title, fontsize=16)
-    ax.legend(handles=legend_handles, title='Sector', fontsize=11, title_fontsize=12, loc='best')
+    # # ax.set_title(title, fontsize=16)
+    ax.legend(handles=legend_handles, fontsize=12, title_fontsize=12, loc='best')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
     ax.set_xlim(2025, 2050)
     ax.set_xticks(np.arange(2025, 2051, 5))
     
-    plt.tight_layout()
-    plt.savefig(f'{results_dir}/plant_npv_total_bubbles.png', dpi=450, bbox_inches='tight')
+    fig.subplots_adjust(left=0.17, right=0.95, top=0.97, bottom=0.10)
+    plt.savefig(f'{results_dir}/4_plant_npv_total_bubbles.png', dpi=450)
     
     if debug:
         print(f"Plot saved to {results_dir}/plant_npv_total_bubbles.png")
@@ -466,9 +505,10 @@ def plot_plant_npv_csu_bubbles(results_dir='results', ETS_filter=None, exclude_s
     size_scale = 0.3
     sizes = df_valid['ktCO2tot_ccs'] * size_scale
     
-    fig, ax = plt.subplots(figsize=(7, 8))
+    fig, ax = plt.subplots(figsize=(6, 6))
     
     legend_handles = []
+    legend_labels= {'cement': 'Cement', 'waste': 'Waste', 'ccgt': 'Gas power', 'drax': 'Drax', 'refinery': 'Refinery', 'steel': 'Steel'}
     for sector in sectors:
         mask = df_valid['sector'] == sector
         ax.scatter(
@@ -482,7 +522,7 @@ def plot_plant_npv_csu_bubbles(results_dir='results', ETS_filter=None, exclude_s
         )
         # Create custom legend handle with fixed size
         handle = plt.scatter([], [], s=80, c=[sector_colors[sector]], alpha=0.7, 
-                            edgecolors='black', linewidths=0.5, label=sector)
+                            edgecolors='black', linewidths=0.5, label=legend_labels[sector])
         legend_handles.append(handle)
     
     # Formatting
@@ -492,15 +532,15 @@ def plot_plant_npv_csu_bubbles(results_dir='results', ETS_filter=None, exclude_s
     title = 'Plant NPV by investment year (median across scenarios)'
     if ETS_filter:
         title += f'\nETS: {", ".join(ETS_filter)}'
-    # ax.set_title(title, fontsize=16)
-    ax.legend(handles=legend_handles, title='Sector', fontsize=11, title_fontsize=12, loc='best')
+    # # ax.set_title(title, fontsize=16)
+    ax.legend(handles=legend_handles, fontsize=12, title_fontsize=12, loc='best')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
     ax.set_xlim(2025, 2050)
     ax.set_xticks(np.arange(2025, 2051, 5))
     
-    plt.tight_layout()
-    plt.savefig(f'{results_dir}/plant_npv_csu_bubbles.png', dpi=450, bbox_inches='tight')
+    fig.subplots_adjust(left=0.17, right=0.95, top=0.97, bottom=0.10)
+    plt.savefig(f'{results_dir}/4_plant_npv_csu_bubbles.png', dpi=450)
     
     if debug:
         print(f"Plot saved to {results_dir}/plant_npv_csu_bubbles.png")
@@ -580,8 +620,9 @@ def plot_plant_npv_ets_bubbles(results_dir='results', ETS_filter=None, exclude_s
     size_scale = 0.3
     sizes = df_valid['ktCO2tot_ccs'] * size_scale
     
-    fig, ax = plt.subplots(figsize=(7, 8))
-    
+    fig, ax = plt.subplots(figsize=(6, 6))
+
+    legend_labels= {'cement': 'Cement', 'waste': 'Waste', 'ccgt': 'Gas power', 'drax': 'Drax', 'refinery': 'Refinery', 'steel': 'Steel'}
     legend_handles = []
     for sector in sectors:
         mask = df_valid['sector'] == sector
@@ -596,7 +637,7 @@ def plot_plant_npv_ets_bubbles(results_dir='results', ETS_filter=None, exclude_s
         )
         # Create custom legend handle with fixed size
         handle = plt.scatter([], [], s=80, c=[sector_colors[sector]], alpha=0.7, 
-                            edgecolors='black', linewidths=0.5, label=sector)
+                            edgecolors='black', linewidths=0.5, label=legend_labels[sector])
         legend_handles.append(handle)
     
     # Formatting
@@ -606,26 +647,25 @@ def plot_plant_npv_ets_bubbles(results_dir='results', ETS_filter=None, exclude_s
     title = 'Plant NPV (ETS only) by investment year (median across scenarios)'
     if ETS_filter:
         title += f'\nETS: {", ".join(ETS_filter)}'
-    # ax.set_title(title, fontsize=16)
-    ax.legend(handles=legend_handles, title='Sector', fontsize=11, title_fontsize=12, loc='best')
+    # # ax.set_title(title, fontsize=16)
+    ax.legend(handles=legend_handles, fontsize=12, title_fontsize=12, loc='best')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
     ax.set_xlim(2025, 2050)
     ax.set_xticks(np.arange(2025, 2051, 5))
     
-    plt.tight_layout()
-    plt.savefig(f'{results_dir}/plant_npv_ets_bubbles.png', dpi=450, bbox_inches='tight')
+    fig.subplots_adjust(left=0.17, right=0.95, top=0.97, bottom=0.10)
+    plt.savefig(f'{results_dir}/4_plant_npv_ets_bubbles.png', dpi=450)
     
     if debug:
         print(f"Plot saved to {results_dir}/plant_npv_ets_bubbles.png")
     
     return fig
 
-def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, article_format=False, debug=False):
+def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, debug=False):
     """
     Generate three figures (one per ETS scenario) with box plots of policy NPV costs and profits.
     All figures share the same y-axis limits (determined by the widest range).
-    article_format: if True, use thinner figsize and vertically rotated labels.
     """
     if debug:
         print(f"Loading scalar outcomes from {results_dir}")
@@ -638,10 +678,9 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, article_
         print(f"Columns: {outcomes.columns.tolist()}")
     
     scenarios = ['£200', '£300', '£400']
-    if article_format:
-        npv_labels = ['Policy cost (CfD eq.)', 'Policy cost (CTBO)', 'Fuel supplier costs (CTBO)', 'Emitter and T&S profits (CTBO)']
-    else:
-        npv_labels = ['CfD eq.\n policy cost\n(-20% reduction)', 'CTBO\npolicy cost', 'CTBO\nfuel supplier\ncost', 'CTBO\nemitter and\nT&S profits']
+
+    npv_labels = ['Policy cost (CfD eq.)', 'Policy cost (CTBO)', 'Fuel supplier costs (CTBO)', 'Emitter and T&S profits (CTBO)']
+
     green = '#62a7a6'
     box_colors = [green, green, green, green]
     box_alphas = [1, 1, 0.4, 0.4]
@@ -671,11 +710,17 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, article_
             global_max = max(global_max, arr.max())
     
     # Add some padding to the limits
-    padding = (global_max - global_min) * 0.01
+    padding = (global_max - global_min) * 0.03
     ylim = (global_min - padding, global_max + padding)
     
     if debug:
         print(f"Global y-axis limits: {ylim}")
+
+    # Flip order of boxes
+    npv_data = npv_data[::-1]
+    npv_labels = npv_labels[::-1]
+    box_colors = box_colors[::-1]
+    box_alphas = box_alphas[::-1]
     
     # Second pass: create figures with consistent y-axis
     figs = []
@@ -686,32 +731,32 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, article_
             continue
         
         npv_data = scenario_data[scenario]
-        
-        if article_format:
-            fig, ax = plt.subplots(figsize=(3.5, 8))
-        else:
-            fig, ax = plt.subplots(figsize=(5.5, 6))
-        
-        bp = ax.boxplot(npv_data, tick_labels=npv_labels, patch_artist=True)
-        for i, (patch, color) in enumerate(zip(bp['boxes'], box_colors)):
+
+        fig, ax = plt.subplots(figsize=(6.4, 3))
+
+
+        bp = ax.boxplot(
+            npv_data,
+            tick_labels=npv_labels,
+            patch_artist=True,
+            vert=False
+        )
+
+        for patch, color, alpha in zip(bp['boxes'], box_colors, box_alphas):
             patch.set_facecolor(color)
-            patch.set_alpha(box_alphas[i])
-        
-        # Rotate labels if article_format
-        if article_format:
-            ax.set_xticklabels(npv_labels, rotation=90, ha='center', fontsize=11)
-        
-        ax.axhline(0, color='black', linestyle='-', linewidth=1)
-        ax.axhline(21.7, color='black', linestyle='--', linewidth=1.5, label='Public funding\nCCS clusters')
-        ax.set_ylabel('NPV [B£]', fontsize=14)
-        ax.set_title(f'ETS {scenario}', fontsize=16)
+            patch.set_alpha(alpha)
+
+        ax.axvline(0, color='black', linewidth=1)
+        ax.axvline(21.7, color='black', linestyle='--', linewidth=1.5) # Public funding CCS clusters
+
+        ax.set_xlabel('NPV [B£]', fontsize=14)
         ax.tick_params(labelsize=12)
-        ax.grid(True, linestyle='--', alpha=0.4, axis='y')
-        ax.set_ylim(ylim)  # Apply consistent y-axis limits
-        ax.legend(loc='upper left', fontsize=11)
-        
+        ax.grid(True, linestyle='--', alpha=0.4, axis='x')
+        ax.set_xlim(ylim)
+        # ax.legend(loc='upper right', fontsize=12)
+
         plt.tight_layout()
-        filename = f'{results_dir}/policy_npv_boxplots_{scenario.replace("£", "")}.png'
+        filename = f'{results_dir}/5_policy_npv_boxplots_{scenario.replace("£", "")}.png'
         plt.savefig(filename, dpi=450, bbox_inches='tight')
         
         if debug:
@@ -724,14 +769,14 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, article_
 if __name__ == "__main__":
     
     plot_carbon_trajectories_uncertainty(debug=True)
-    plot_gas_increase_by_ets(debug=True)
-    plot_cost_ctbo_producers_by_ets(debug=True)
+    plot_gas_increase_boxplots(debug=True)
+    plot_cost_ctbo_producers_boxplots(debug=True)
     plot_prices_by_ets(debug=True)
 
     plot_plant_npv_bubbles(debug=True)
     plot_plant_npv_csu_bubbles(debug=True, exclude_sectors=['drax']) # 'drax'
     plot_plant_npv_ets_bubbles(debug=True, exclude_sectors=[])
     
-    plot_policy_npv_boxplots(debug=True, article_format=True)
+    plot_policy_npv_boxplots(debug=True)
 
     plt.show()
