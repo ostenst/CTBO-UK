@@ -441,7 +441,7 @@ def simulate_ctbo(
     transport_hubs,
     single_run = False,
 
-    DEFOSSILIZE = False,
+    PHASEOUT = False,
     ASSUME_FOAK = True,
     DISCOUNT_RATE = 0.035,
     CTBO_QUADRATIC = 0.4,
@@ -564,7 +564,7 @@ def simulate_ctbo(
     pointsources_ktCO2f = total_ktCO2 - (waste_ktCO2 + drax_ktCO2 + cement_ktCO2) # [ktCO2f] supplied and emitted in 2023
     
     # Specify whether plants defossilize. 
-    if DEFOSSILIZE:
+    if PHASEOUT:
         plants_clean = plants_clean[~plants_clean['sector'].isin(['steel', 'refinery'])]
         ccgt_plants = plants_clean[plants_clean['sector'] == 'ccgt']
         ccgt_even = ccgt_plants.iloc[::2]

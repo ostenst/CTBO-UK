@@ -67,7 +67,7 @@ def plot_carbon_trajectories_uncertainty(results_dir='results', pounds_to_EUR=1.
     # ax.set_xlabel('Year', fontsize=14)
     ax.set_ylabel('Carbon [MtCO₂/year]', fontsize=14)
     # # ax.set_title('Carbon Trajectories with Uncertainty (5th-95th percentile)', fontsize=16)
-    ax.legend(fontsize=12, loc='best')
+    # ax.legend(fontsize=12, loc='best')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
     ax.set_xlim(START_YEAR, END_YEAR)
@@ -149,12 +149,13 @@ def plot_gas_increase_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_sc
     ax.set_ylabel('Gas price increase [pence/kWh]', fontsize=14)
     # ax.set_xlabel('Year', fontsize=14)
     ax.tick_params(labelsize=12)
+    y1_min, y1_max = ax.get_ylim()
+    ax.set_ylim(y1_min, 4.7)
     
     # Secondary y-axis: annual household bill (11200 kWh avg consumption)
     household_consumption = 11200  # kWh/year
     ax2 = ax.twinx()
     ax2.set_ylabel('Household bill increase [£/year]\n- assuming 11.200 kWh/year', fontsize=14)
-    y1_min, y1_max = ax.get_ylim()
     ax2.set_ylim(y1_min * household_consumption / 100, y1_max * household_consumption / 100)  # pence→£
     ax2.tick_params(labelsize=12)
     
@@ -237,6 +238,8 @@ def plot_cost_ctbo_producers_boxplots(results_dir='results', pounds_to_EUR=1.15,
     ax.set_xticks(range(len(target_years)))
     ax.set_xticklabels(target_years, fontsize=12)
     ax.set_ylabel('CTBO cost to producers [B£/yr]', fontsize=14)
+    ylims = ax.get_ylim()
+    ax.set_ylim(ylims[0], 27)
     # ax.set_xlabel('Year', fontsize=14)
     ax.tick_params(labelsize=12)
     
@@ -379,12 +382,17 @@ def plot_plant_npv_bubbles(results_dir='results', ETS_filter=None, pounds_to_EUR
         print("No valid plant data to plot")
         return None
     
-    # Setup colors by sector: magma for all except waste (green)
+    # Hard-coded colors by sector (magma colormap values, waste is green)
     sectors = df_valid['sector'].unique()
-    non_waste_sectors = [s for s in sectors if s != 'waste']
-    magma_colors = plt.cm.magma(np.linspace(0.05, 0.95, len(non_waste_sectors)))
-    sector_colors = {s: c for s, c in zip(non_waste_sectors, magma_colors)}
-    sector_colors['waste'] = '#62a7a6'  # Green for waste
+    magma = plt.cm.magma
+    sector_colors = {
+        'cement': magma(0.1),
+        'ccgt': magma(0.3),
+        'refinery': magma(0.5),
+        'steel': magma(0.7),
+        'drax': magma(0.9),
+        'waste': '#62a7a6'
+    }
 
     # Scale bubble sizes
     size_scale = 0.3
@@ -393,7 +401,7 @@ def plot_plant_npv_bubbles(results_dir='results', ETS_filter=None, pounds_to_EUR
     fig, ax = plt.subplots(figsize=(6, 6))
     
     legend_handles = []
-    legend_labels= {'cement': 'Cement', 'waste': 'Waste', 'ccgt': 'Gas power', 'drax': 'Drax', 'refinery': 'Refinery', 'steel': 'Steel'}
+    legend_labels = {'cement': 'Cement', 'waste': 'Waste', 'ccgt': 'Gas power', 'drax': 'Drax', 'refinery': 'Refinery', 'steel': 'Steel'}
     for sector in sectors:
         mask = df_valid['sector'] == sector
         ax.scatter(
@@ -423,6 +431,8 @@ def plot_plant_npv_bubbles(results_dir='results', ETS_filter=None, pounds_to_EUR
     ax.tick_params(labelsize=12)
     ax.set_xlim(2025, 2050)
     ax.set_xticks(np.arange(2025, 2051, 5))
+    y1_min, y1_max = ax.get_ylim()
+    ax.set_ylim(y1_min, 8000)
     
     fig.subplots_adjust(left=0.17, right=0.95, top=0.97, bottom=0.10)
     plt.savefig(f'{results_dir}/4_plant_npv_total_bubbles.png', dpi=450)
@@ -494,12 +504,17 @@ def plot_plant_npv_csu_bubbles(results_dir='results', ETS_filter=None, exclude_s
         print("No valid plant data to plot")
         return None
     
-    # Setup colors by sector: magma for all except waste (green)
+    # Hard-coded colors by sector (magma colormap values, waste is green)
     sectors = df_valid['sector'].unique()
-    non_waste_sectors = [s for s in sectors if s != 'waste']
-    magma_colors = plt.cm.magma(np.linspace(0.05, 0.95, len(non_waste_sectors)))
-    sector_colors = {s: c for s, c in zip(non_waste_sectors, magma_colors)}
-    sector_colors['waste'] = '#62a7a6'  # Green for waste
+    magma = plt.cm.magma
+    sector_colors = {
+        'cement': magma(0.1),
+        'ccgt': magma(0.3),
+        'refinery': magma(0.5),
+        'steel': magma(0.7),
+        'drax': magma(0.9),
+        'waste': '#62a7a6'
+    }
 
     # Scale bubble sizes
     size_scale = 0.3
@@ -508,7 +523,7 @@ def plot_plant_npv_csu_bubbles(results_dir='results', ETS_filter=None, exclude_s
     fig, ax = plt.subplots(figsize=(6, 6))
     
     legend_handles = []
-    legend_labels= {'cement': 'Cement', 'waste': 'Waste', 'ccgt': 'Gas power', 'drax': 'Drax', 'refinery': 'Refinery', 'steel': 'Steel'}
+    legend_labels = {'cement': 'Cement', 'waste': 'Waste', 'ccgt': 'Gas power', 'drax': 'Drax', 'refinery': 'Refinery', 'steel': 'Steel'}
     for sector in sectors:
         mask = df_valid['sector'] == sector
         ax.scatter(
@@ -533,11 +548,13 @@ def plot_plant_npv_csu_bubbles(results_dir='results', ETS_filter=None, exclude_s
     if ETS_filter:
         title += f'\nETS: {", ".join(ETS_filter)}'
     # # ax.set_title(title, fontsize=16)
-    ax.legend(handles=legend_handles, fontsize=12, title_fontsize=12, loc='best')
+    # ax.legend(handles=legend_handles, fontsize=12, title_fontsize=12, loc='best')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
     ax.set_xlim(2025, 2050)
     ax.set_xticks(np.arange(2025, 2051, 5))
+    y1_min, y1_max = ax.get_ylim()
+    ax.set_ylim(y1_min, 850)
     
     fig.subplots_adjust(left=0.17, right=0.95, top=0.97, bottom=0.10)
     plt.savefig(f'{results_dir}/4_plant_npv_csu_bubbles.png', dpi=450)
@@ -609,12 +626,17 @@ def plot_plant_npv_ets_bubbles(results_dir='results', ETS_filter=None, exclude_s
         print("No valid plant data to plot")
         return None
     
-    # Setup colors by sector: magma for all except waste (green)
+    # Hard-coded colors by sector (magma colormap values, waste is green)
     sectors = df_valid['sector'].unique()
-    non_waste_sectors = [s for s in sectors if s != 'waste']
-    magma_colors = plt.cm.magma(np.linspace(0.05, 0.95, len(non_waste_sectors)))
-    sector_colors = {s: c for s, c in zip(non_waste_sectors, magma_colors)}
-    sector_colors['waste'] = '#62a7a6'  # Green for waste
+    magma = plt.cm.magma
+    sector_colors = {
+        'cement': magma(0.1),
+        'ccgt': magma(0.3),
+        'refinery': magma(0.5),
+        'steel': magma(0.7),
+        'drax': magma(0.9),
+        'waste': '#62a7a6'
+    }
 
     # Scale bubble sizes
     size_scale = 0.3
@@ -622,7 +644,7 @@ def plot_plant_npv_ets_bubbles(results_dir='results', ETS_filter=None, exclude_s
     
     fig, ax = plt.subplots(figsize=(6, 6))
 
-    legend_labels= {'cement': 'Cement', 'waste': 'Waste', 'ccgt': 'Gas power', 'drax': 'Drax', 'refinery': 'Refinery', 'steel': 'Steel'}
+    legend_labels = {'cement': 'Cement', 'waste': 'Waste', 'ccgt': 'Gas power', 'drax': 'Drax', 'refinery': 'Refinery', 'steel': 'Steel'}
     legend_handles = []
     for sector in sectors:
         mask = df_valid['sector'] == sector
@@ -648,7 +670,7 @@ def plot_plant_npv_ets_bubbles(results_dir='results', ETS_filter=None, exclude_s
     if ETS_filter:
         title += f'\nETS: {", ".join(ETS_filter)}'
     # # ax.set_title(title, fontsize=16)
-    ax.legend(handles=legend_handles, fontsize=12, title_fontsize=12, loc='best')
+    # ax.legend(handles=legend_handles, fontsize=12, title_fontsize=12, loc='best')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
     ax.set_xlim(2025, 2050)

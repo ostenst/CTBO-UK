@@ -110,7 +110,7 @@ if __name__ == "__main__":
         Constant("plants_clean", plants_clean),
         Constant("transport_hubs", transport_hubs),
         Constant("single_run", False),
-        Constant("DEFOSSILIZE", False),
+        Constant("PHASEOUT", False),
         Constant("ASSUME_FOAK", False),
         Constant("CTBO_QUADRATIC", 0.4),
         Constant("DISCOUNT_RATE", 0.035),
@@ -123,8 +123,8 @@ if __name__ == "__main__":
     ]
 
     # Run experiments
-    n_scenarios = 5
-    n_policies = 2
+    n_scenarios = 50
+    n_policies = 20
     
     results = perform_experiments(
         model, 
@@ -149,7 +149,7 @@ if __name__ == "__main__":
         np.save(f"results/outcomes_{name}.npy", arr)
     
     # Save plant names reference (alphabetically ordered, same for all runs)
-    # Use same constants as model to ensure consistency if DEFOSSILIZE=True
+    # Use same constants as model to ensure consistency if PHASEOUT=True
     constants_dict = {c.name: c.value for c in model.constants if c.name not in ['plants_clean', 'transport_hubs']}
     test_result = simulate_ctbo(plants_clean, transport_hubs, **constants_dict)
     plant_ref = pd.DataFrame({

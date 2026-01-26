@@ -165,7 +165,7 @@ if __name__ == "__main__":
     print(s2)
     print(s2_conf)
     sobol_stats = pd.DataFrame(sobol_stats, index=problem["names"])
-    sobol_stats.to_csv("sobol_stats.csv")
+    sobol_stats.to_csv("results/sobol_stats.csv")
     sobol_stats_sorted = sobol_stats.sort_values(by="ST", ascending=False)  # Ascending for better readability
 
     # Create horizontal bar plot
