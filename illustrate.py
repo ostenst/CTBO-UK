@@ -150,7 +150,7 @@ def plot_gas_increase_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_sc
     # ax.set_xlabel('Year', fontsize=14)
     ax.tick_params(labelsize=12)
     y1_min, y1_max = ax.get_ylim()
-    ax.set_ylim(y1_min, 4.7)
+    ax.set_ylim(y1_min, 4.9)
     
     # Secondary y-axis: annual household bill (11200 kWh avg consumption)
     household_consumption = 11200  # kWh/year
@@ -239,7 +239,7 @@ def plot_cost_ctbo_producers_boxplots(results_dir='results', pounds_to_EUR=1.15,
     ax.set_xticklabels(target_years, fontsize=12)
     ax.set_ylabel('CTBO cost to producers [B£/yr]', fontsize=14)
     ylims = ax.get_ylim()
-    ax.set_ylim(ylims[0], 27)
+    ax.set_ylim(ylims[0], 30)
     # ax.set_xlabel('Year', fontsize=14)
     ax.tick_params(labelsize=12)
     
@@ -432,7 +432,7 @@ def plot_plant_npv_bubbles(results_dir='results', ETS_filter=None, pounds_to_EUR
     ax.set_xlim(2025, 2050)
     ax.set_xticks(np.arange(2025, 2051, 5))
     y1_min, y1_max = ax.get_ylim()
-    ax.set_ylim(y1_min, 8000)
+    ax.set_ylim(-6000, 8000)
     
     fig.subplots_adjust(left=0.17, right=0.95, top=0.97, bottom=0.10)
     plt.savefig(f'{results_dir}/4_plant_npv_total_bubbles.png', dpi=450)
@@ -554,7 +554,7 @@ def plot_plant_npv_csu_bubbles(results_dir='results', ETS_filter=None, exclude_s
     ax.set_xlim(2025, 2050)
     ax.set_xticks(np.arange(2025, 2051, 5))
     y1_min, y1_max = ax.get_ylim()
-    ax.set_ylim(y1_min, 850)
+    ax.set_ylim(-50, 850)
     
     fig.subplots_adjust(left=0.17, right=0.95, top=0.97, bottom=0.10)
     plt.savefig(f'{results_dir}/4_plant_npv_csu_bubbles.png', dpi=450)
@@ -701,11 +701,12 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, debug=Fa
     
     scenarios = ['£200', '£300', '£400']
 
-    npv_labels = ['Policy cost (CfD eq.)', 'Policy cost (CTBO)', 'Fuel supplier costs (CTBO)', 'Emitter and T&S profits (CTBO)']
+    # Labels and styling (reversed so first item appears at top in horizontal boxplot)
+    npv_labels = ['Policy cost (CfD eq., -20% cost)', 'Policy cost (CTBO)', 'Fuel supplier costs (CTBO)', 'Emitter and T&S profits (CTBO)'][::-1]
 
     green = '#62a7a6'
-    box_colors = [green, green, green, green]
-    box_alphas = [1, 1, 0.4, 0.4]
+    box_colors = [green, green, green, green][::-1]
+    box_alphas = [1, 1, 0.4, 0.4][::-1]
     
     # First pass: calculate data for all scenarios and find global min/max
     scenario_data = {}
@@ -737,12 +738,6 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, debug=Fa
     
     if debug:
         print(f"Global y-axis limits: {ylim}")
-
-    # Flip order of boxes
-    npv_data = npv_data[::-1]
-    npv_labels = npv_labels[::-1]
-    box_colors = box_colors[::-1]
-    box_alphas = box_alphas[::-1]
     
     # Second pass: create figures with consistent y-axis
     figs = []
@@ -752,7 +747,7 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, debug=Fa
                 print(f"No data for ETS_SCENARIO={scenario}")
             continue
         
-        npv_data = scenario_data[scenario]
+        npv_data = scenario_data[scenario][::-1]  # Reverse to match flipped labels/colors
 
         fig, ax = plt.subplots(figsize=(6.4, 3))
 

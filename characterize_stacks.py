@@ -262,9 +262,9 @@ def create_all_plants_map(europe, plants_gdf, bubble_scaling=1.0, remaining_gdf=
                 no_shipping.geometry.y,
                 marker='D',
                 s=120,
-                c='#62A7A6',
+                c='whitesmoke',
                 edgecolors='black',
-                linewidth=0.8,
+                linewidth=1.0,
                 label='Storage hub'
             )
         if len(shipping) > 0:
@@ -275,7 +275,7 @@ def create_all_plants_map(europe, plants_gdf, bubble_scaling=1.0, remaining_gdf=
                 s=120,
                 c='#E55064',
                 edgecolors='black',
-                linewidth=0.8,
+                linewidth=1.0,
                 label='Export hub'
             )
     legend = ax.legend(loc='lower left')
@@ -360,9 +360,9 @@ def create_sector_map(europe, plants_gdf, bubble_scaling=1.0, remaining_gdf=None
                 no_shipping.geometry.y,
                 marker='D',
                 s=120,
-                c='#62A7A6',
+                c='whitesmoke',
                 edgecolors='black',
-                linewidth=0.8,
+                linewidth=1.0,
                 label='Storage hub'
             )
             legend_handles.append(h1)
@@ -374,7 +374,7 @@ def create_sector_map(europe, plants_gdf, bubble_scaling=1.0, remaining_gdf=None
                 s=120,
                 c='#E55064',
                 edgecolors='black',
-                linewidth=0.8,
+                linewidth=1.0,
                 label='Export hub'
             )
             legend_handles.append(h2)

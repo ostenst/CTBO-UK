@@ -569,6 +569,8 @@ def simulate_ctbo(
         ccgt_plants = plants_clean[plants_clean['sector'] == 'ccgt']
         ccgt_even = ccgt_plants.iloc[::2]
         plants_clean = pd.concat([plants_clean[plants_clean['sector'] != 'ccgt'], ccgt_even])
+    if single_run:
+        print("Total point-sources of carbon =", plants_clean['ktCO2'].sum(), "ktCO2")
 
     # ------------------- CONSTRUCT THE MACC ---------------------
     MACC = pd.DataFrame(columns=[
@@ -646,7 +648,7 @@ def simulate_ctbo(
 
     if single_run:
         MACC.to_csv('results/macc.csv', index=False)
-        plot_macc(MACC, savefig=True)
+        plot_macc(MACC, pounds_to_EUR=pounds_to_EUR, savefig=True)
 
     # ------------------- SIMULATE THE CTBO ---------------------
     # Calculate diffuse carbon trajectories by subtracting point-source carbon from total supply
@@ -1331,7 +1333,7 @@ def plot_npv_total_bubbles(npv_results, savefig=False, debug=False):
     
     return len(df)
 
-def plot_macc(macc, savefig=False, debug=False):
+def plot_macc(macc, pounds_to_EUR=1.15, savefig=False, debug=False):
     """
     Plot the MACC curve with cumulative ktCO2tot_ccs on the x axis and MAC on the y axis.
     """
@@ -1355,11 +1357,14 @@ def plot_macc(macc, savefig=False, debug=False):
     # Filter to only plot plants with MAC != 0 (but cumulative already includes MAC=0 capacity)
     macc_nonzero = macc_plot[macc_plot['MAC'] != 0]
 
+    # Convert MAC to £/tCO₂
+    macc_nonzero['MAC'] = macc_nonzero['MAC'] / pounds_to_EUR
+
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.step(macc_nonzero['cumulative_kt']/1000, macc_nonzero['MAC'], where='pre', color='gray', linewidth=2.5)
-    ax.set_xlabel("Cumulative MtCO₂ CCS", fontsize=14)
-    ax.set_ylabel("MAC [€/tCO₂] of CCS/BECCS", fontsize=14)
-    ax.set_title("Marginal Abatement Cost Curve", fontsize=18)
+    ax.set_xlabel("Cumulative CCS/BECCS capacity [MtCO₂]", fontsize=14)
+    ax.set_ylabel("Abatement cost of CCS/BECCS [£/tCO₂] ", fontsize=14)
+    # ax.set_title("Marginal Abatement Cost Curve", fontsize=18)
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
     # Get the ylims

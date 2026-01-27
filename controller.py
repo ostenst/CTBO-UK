@@ -110,7 +110,7 @@ if __name__ == "__main__":
         Constant("plants_clean", plants_clean),
         Constant("transport_hubs", transport_hubs),
         Constant("single_run", False),
-        Constant("PHASEOUT", False),
+        Constant("PHASEOUT", True),
         Constant("ASSUME_FOAK", False),
         Constant("CTBO_QUADRATIC", 0.4),
         Constant("DISCOUNT_RATE", 0.035),
