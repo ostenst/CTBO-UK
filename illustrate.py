@@ -493,6 +493,7 @@ def plot_plant_npv_csu_bubbles(results_dir='results', ETS_filter=None, exclude_s
         df = df[~df['sector'].isin(exclude_sectors)]
         if debug:
             print(f"Excluded sectors: {exclude_sectors}, remaining plants: {len(df)}")
+            print(f"Median NPV of excluded plants in sectors: {df['NPV_CSU'].median()}")
     
     # Filter out plants with NaN investment year (never invested in any scenario)
     df_valid = df.dropna(subset=['investment_year', 'NPV_CSU', 'ktCO2tot_ccs'])
