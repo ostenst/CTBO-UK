@@ -459,7 +459,11 @@ def simulate_ctbo(
     oil_2023 = 139, # [MtCO2] 
     gas_2023 = 127, # [MtCO2] 
 
-    emission_factor_gas = 0.204, # [tCO2/MWh] NZIP 
+    emission_factor_gas = 0.2027, # [tCO2/MWh] DESNZ GHG conversion factors 2025 condensed set
+    emission_factor_petrol = 2.339, # [kgCO2e/L] DESNZ
+    emission_factor_diesel = 2.661, # [kgCO2e/L] DESNZ
+    emission_factor_kerosene = 2.542, # [kgCO2e/L] DESNZ
+
     emission_factor_waste = 0.98, # [tCO2/t waste] Tolvik
     emission_factor_pellets = 0.358, # [tCO2/MWh] calc. from Emenike et al. (2020)
     emission_factor_straw = 0.353, # [tCO2/MWh] 
@@ -700,6 +704,9 @@ def simulate_ctbo(
 
     _gas_increase_abs = [] # €/MWh
     _gas_increase_pct = [] # % increase
+    _petrol_increase_abs = [] # €/L
+    _diesel_increase_abs = [] # €/L
+    _kerosene_increase_abs = [] # €/L
     _plants_costbenefit = []
 
     gas_increase_2040 = None
@@ -784,6 +791,10 @@ def simulate_ctbo(
         gas_increase_pct = gas_increase_abs / cgas * 100 # [%]
         if year == 2040:
             gas_increase_2040 = gas_increase_abs
+
+        petrol_increase_abs = cost_CSU_embedded * (emission_factor_petrol/1000) # [€/L]
+        diesel_increase_abs = cost_CSU_embedded * (emission_factor_diesel/1000) # [€/L]
+        kerosene_increase_abs = cost_CSU_embedded * (emission_factor_kerosene/1000) # [€/L]
         
         _supply_ktCO2f.append(supply_ktCO2f)
         _emitted_ktCO2f.append(emitted_ktCO2f)
@@ -798,6 +809,9 @@ def simulate_ctbo(
         _cost_CSU_embedded.append(cost_CSU_embedded)
         _gas_increase_abs.append(gas_increase_abs)
         _gas_increase_pct.append(gas_increase_pct)
+        _petrol_increase_abs.append(petrol_increase_abs)
+        _diesel_increase_abs.append(diesel_increase_abs)
+        _kerosene_increase_abs.append(kerosene_increase_abs)
 
         # Calculate plant and policy costs and profits based on MACC areas
         cost_CTBO = 0
@@ -914,6 +928,7 @@ def simulate_ctbo(
         npv_results.append({
             'stack': plant['stack'],
             'sector': plant['sector'],  # From MACC, not NPV_data
+            'cost': plant['MAC'],
             'investment_year': investment_year,
             'NPV_CSU': NPV_CSU,
             'NPV_total': NPV_total,
@@ -990,10 +1005,14 @@ def simulate_ctbo(
     results['plants_NPV_total'] = [p['NPV_total'] for p in npv_sorted]
     results['plants_NPV_ETS'] = [p['NPV_ETS'] for p in npv_sorted]
     results['plants_ktCO2tot_ccs'] = [p['ktCO2tot_ccs'] for p in npv_sorted]
+    results['plants_cost'] = [p['cost'] for p in npv_sorted]
     
     results['gas_increase_abs'] = _gas_increase_abs
     results['gas_increase_pct'] = _gas_increase_pct
     results['gas_increase_2040'] = gas_increase_2040
+    results['petrol_increase_abs'] = _petrol_increase_abs
+    results['diesel_increase_abs'] = _diesel_increase_abs
+    results['kerosene_increase_abs'] = _kerosene_increase_abs
     results['year_DACCS_marginal'] = year_DACCS_marginal
     
     # Policy-level NPV results

@@ -172,6 +172,100 @@ def plot_gas_increase_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_sc
     
     return fig
 
+def plot_fuel_increase_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_scenario=None, debug=False):
+    """
+    Plot petrol, diesel, and kerosene price increases as box plots for years 2030, 2035, 2040, 2045, 2050.
+    
+    Args:
+        results_dir: Directory containing results files
+        pounds_to_EUR: Conversion rate from pounds to EUR
+        ets_scenario: Optional ETS scenario to filter by (e.g., '£200', '£300', '£400'). Default: no filtering
+        debug: If True, print debug information
+    """
+    if debug:
+        print(f"Loading data from {results_dir}")
+        print(f"ETS scenario filter: {ets_scenario}")
+    
+    # Load experiments and data
+    experiments = pd.read_csv(f'{results_dir}/experiments.csv')
+    petrol = np.load(f'{results_dir}/outcomes_petrol_increase_abs.npy') / pounds_to_EUR *100 # €/L → £/L → p/L
+    diesel = np.load(f'{results_dir}/outcomes_diesel_increase_abs.npy') / pounds_to_EUR *100 # €/L → £/L → p/L
+    kerosene = np.load(f'{results_dir}/outcomes_kerosene_increase_abs.npy') / pounds_to_EUR *100 # €/L → £/L → p/L
+    
+    # Filter by ETS scenario if specified
+    if ets_scenario is not None:
+        mask = experiments['ETS_SCENARIO'] == ets_scenario
+        petrol = petrol[mask]
+        diesel = diesel[mask]
+        kerosene = kerosene[mask]
+    
+    if debug:
+        print(f"Shape of fuel arrays: {petrol.shape}")
+    
+    # Years array
+    START_YEAR = 2025
+    target_years = [2030, 2035, 2040, 2045, 2050]
+    
+    # Hard-coded box colors
+    magma = plt.cm.magma
+    fuel_colors = {
+        'Petrol': magma(0.2),
+        'Diesel': magma(0.5),
+        'Kerosene': magma(0.8)
+    }
+    median_color = 'black'
+    
+    fig, ax = plt.subplots(figsize=(8, 5))
+    
+    plt.grid(True, axis='y', linestyle='--', alpha=0.4)
+    
+    # Box width and positions
+    box_width = 0.25
+    fuels = [('Petrol', petrol), ('Diesel', diesel), ('Kerosene', kerosene)]
+    
+    for fuel_idx, (fuel_name, fuel_data) in enumerate(fuels):
+        # Extract data for target years
+        box_data = []
+        for year in target_years:
+            year_idx = year - START_YEAR
+            box_data.append(fuel_data[:, year_idx])
+        
+        # Position offset for each fuel type
+        positions = [i + (fuel_idx - 1) * box_width for i in range(len(target_years))]
+        
+        bp = ax.boxplot(box_data, positions=positions, patch_artist=True, widths=box_width * 0.9)
+        
+        # Style the boxes
+        for box in bp['boxes']:
+            box.set_facecolor(fuel_colors[fuel_name])
+            box.set_alpha(0.7)
+        for median in bp['medians']:
+            median.set_color(median_color)
+            median.set_linewidth(2)
+    
+    # Formatting
+    ax.set_xticks(range(len(target_years)))
+    ax.set_xticklabels(target_years, fontsize=12)
+    ax.set_ylabel('Fuel price increase [p/L]', fontsize=14)
+    ax.tick_params(labelsize=12)
+    
+    # Legend
+    legend_handles = [plt.Rectangle((0,0),1,1, facecolor=fuel_colors[f], alpha=0.7) for f in ['Petrol', 'Diesel', 'Kerosene']]
+    ax.legend(legend_handles, ['Petrol', 'Diesel', 'Kerosene'], fontsize=12, loc='upper left')
+    
+    title = 'Fuel price increases'
+    if ets_scenario is not None:
+        title += f' (ETS {ets_scenario})'
+    ax.set_title(title, fontsize=14)
+    
+    fig.subplots_adjust(left=0.10, right=0.95, top=0.92, bottom=0.10)
+    plt.savefig(f'{results_dir}/3_fuel_increase_boxplots.png', dpi=450)
+    
+    if debug:
+        print(f"Plot saved to {results_dir}/3_fuel_increase_boxplots.png")
+    
+    return fig
+
 def plot_cost_ctbo_producers_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_scenario=None, debug=False):
     """
     Plot cost_CTBO_producers as box plots for years 2030, 2035, 2040, 2045, 2050.
@@ -703,7 +797,7 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, debug=Fa
     scenarios = ['£200', '£300', '£400']
 
     # Labels and styling (reversed so first item appears at top in horizontal boxplot)
-    npv_labels = ['Policy cost (CfD eq., -20% cost)', 'Policy cost (CTBO)', 'Fuel supplier costs (CTBO)', 'Emitter and T&S profits (CTBO)'][::-1]
+    npv_labels = ['Policy cost (CfD eq., +10% cost)', 'Policy cost (CTBO)', 'Fuel supplier costs (CTBO)', 'Emitter and T&S profits (CTBO)'][::-1]
 
     green = '#62a7a6'
     box_colors = [green, green, green, green][::-1]
@@ -721,7 +815,7 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, debug=Fa
             continue
         
         npv_data = [
-            data['NPV_cost_CTBO'] * 0.80 / 1e6 / pounds_to_EUR,
+            data['NPV_cost_CTBO'] * 1.10 / 1e6 / pounds_to_EUR,
             data['NPV_cost_CTBO'] / 1e6 / pounds_to_EUR,
             (data['NPV_cost_CTBO']+data['NPV_profit_CTBO']) / 1e6 / pounds_to_EUR,
             data['NPV_profit_CTBO'] / 1e6 / pounds_to_EUR,
@@ -784,10 +878,117 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, debug=Fa
     
     return figs
 
+def plot_macc_curves(results_dir='results', pounds_to_EUR=1.15, debug=False):
+    """
+    Plot Marginal Abatement Cost Curves (MACC) for each scenario.
+    X-axis: cumulative ktCO2 captured, Y-axis: cost per tCO2.
+    Plants are ordered from least to most expensive.
+    Highlights curves with highest and lowest summed_cost (sum of co2 × cost).
+    """
+    if debug:
+        print(f"Loading plant data from {results_dir}")
+    
+    # Load plant data
+    plant_ref = pd.read_csv(f'{results_dir}/plant_reference.csv')
+    ktCO2tot_ccs = np.load(f'{results_dir}/outcomes_plants_ktCO2tot_ccs.npy')  # shape: (n_scenarios, n_plants)
+    plant_cost = np.load(f'{results_dir}/outcomes_plants_cost.npy')  # shape: (n_scenarios, n_plants)
+    # Convert kt to Mt and costs to pounds
+    ktCO2tot_ccs = ktCO2tot_ccs / 1e3
+    plant_cost = plant_cost / pounds_to_EUR
+
+    
+    n_scenarios, n_plants = ktCO2tot_ccs.shape
+    
+    if debug:
+        print(f"Shape: {n_scenarios} scenarios x {n_plants} plants")
+        print(f"ktCO2tot_ccs range: {np.nanmin(ktCO2tot_ccs):.1f} - {np.nanmax(ktCO2tot_ccs):.1f}")
+        print(f"plant_cost range: {np.nanmin(plant_cost):.1f} - {np.nanmax(plant_cost):.1f}")
+    
+    # First pass: calculate summed_cost for each scenario and prepare plot data
+    scenario_data = []
+    summed_costs = []
+    
+    for i in range(n_scenarios):
+        co2 = ktCO2tot_ccs[i, :]
+        marginal_cost = plant_cost[i, :]
+        
+        # Filter out invalid values (NaN, inf, zero CO2)
+        valid = np.isfinite(marginal_cost) & np.isfinite(co2) & (co2 > 0)
+        co2_valid = co2[valid]
+        mc_valid = marginal_cost[valid]
+
+        if len(co2_valid) == 0:
+            print(f"No valid data for scenario {i}")
+            scenario_data.append(None)
+            summed_costs.append(np.nan)
+            continue
+        
+        # Calculate summed_cost: sum of (co2 × cost) across all plants
+        summed_cost = np.sum(co2_valid * mc_valid)
+        summed_costs.append(summed_cost)
+        
+        # Sort by marginal cost (cheapest first)
+        sort_idx = np.argsort(mc_valid)
+        co2_sorted = co2_valid[sort_idx]
+        mc_sorted = mc_valid[sort_idx]
+        cumulative_co2 = np.cumsum(co2_sorted)
+        
+        scenario_data.append((cumulative_co2, mc_sorted))
+    
+    # Find indices of highest and lowest summed_cost
+    summed_costs = np.array(summed_costs)
+    valid_indices = np.where(np.isfinite(summed_costs))[0]
+    idx_min = valid_indices[np.argmin(summed_costs[valid_indices])]
+    idx_max = valid_indices[np.argmax(summed_costs[valid_indices])]
+    
+    if debug:
+        print(f"Summed costs: min={summed_costs[idx_min]:.2f} (scenario {idx_min}), max={summed_costs[idx_max]:.2f} (scenario {idx_max})")
+    
+    # Sample from magma colormap for each scenario
+    magma = plt.cm.magma
+    colors = [magma(i/n_scenarios) for i in range(n_scenarios)]
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Second pass: plot all curves, bold for min/max
+    plotted_count = 0
+    for i in range(n_scenarios):
+        if scenario_data[i] is None:
+            continue
+        
+        cumulative_co2, mc_sorted = scenario_data[i]
+        plotted_count += 1
+        
+        # Bold styling for highest and lowest summed_cost
+        if i == idx_min or i == idx_max:
+            ax.step(cumulative_co2, mc_sorted, where='pre', color=colors[i], alpha=1.0, linewidth=2.5)
+        else:
+            ax.step(cumulative_co2, mc_sorted, where='pre', color=colors[i], alpha=0.1, linewidth=1)
+    
+    if debug:
+        print(f"Plotted {plotted_count} scenarios out of {n_scenarios}")
+    
+    # Formatting
+    ax.set_xlabel('Cumulative CCS/BECCS capacity [MtCO₂]', fontsize=14)
+    ax.set_ylabel('Abatement cost of CCS/BECCS [£/tCO₂]', fontsize=14)
+    # ax.set_title('Marginal Abatement Cost Curves (all scenarios)', fontsize=14)
+    ax.tick_params(labelsize=12)
+    ax.grid(True, linestyle='--', alpha=0.4)
+    ax.axhline(0, color='gray', linestyle='-', linewidth=0.5)
+    
+    plt.tight_layout()
+    plt.savefig(f'{results_dir}/6_macc_curves.png', dpi=450, bbox_inches='tight')
+    
+    if debug:
+        print(f"Plot saved to {results_dir}/6_macc_curves.png")
+    
+    return fig
+
 if __name__ == "__main__":
     
     plot_carbon_trajectories_uncertainty(debug=True)
     plot_gas_increase_boxplots(debug=True)
+    plot_fuel_increase_boxplots(debug=True)
     plot_cost_ctbo_producers_boxplots(debug=True)
     plot_prices_by_ets(debug=True)
 
@@ -796,5 +997,6 @@ if __name__ == "__main__":
     plot_plant_npv_ets_bubbles(debug=True, exclude_sectors=[])
     
     plot_policy_npv_boxplots(debug=True)
+    plot_macc_curves(debug=True)
 
     plt.show()

@@ -97,12 +97,16 @@ if __name__ == "__main__":
         ArrayOutcome("profit_ETS_policy"),
         ArrayOutcome("gas_increase_abs"),
         ArrayOutcome("gas_increase_pct"),
+        ArrayOutcome("petrol_increase_abs"),
+        ArrayOutcome("diesel_increase_abs"),
+        ArrayOutcome("kerosene_increase_abs"),
         # Plant-level outcomes (alphabetically ordered)
         ArrayOutcome("plants_investment_year"),
         ArrayOutcome("plants_NPV_CSU"),
         ArrayOutcome("plants_NPV_total"),
         ArrayOutcome("plants_NPV_ETS"),
         ArrayOutcome("plants_ktCO2tot_ccs"),
+        ArrayOutcome("plants_cost")
     ]
 
     # Constants: fixed parameters for all runs
@@ -110,7 +114,7 @@ if __name__ == "__main__":
         Constant("plants_clean", plants_clean),
         Constant("transport_hubs", transport_hubs),
         Constant("single_run", False),
-        Constant("PHASEOUT", True),
+        Constant("PHASEOUT", False),
         Constant("ASSUME_FOAK", False),
         Constant("CTBO_QUADRATIC", 0.4),
         Constant("DISCOUNT_RATE", 0.035),
