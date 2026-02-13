@@ -95,20 +95,67 @@ print("R²:", r_squared)
 
 # TESTING FOR DRAX
 emission_factor = 0.358 # [tCO2/MWh]
-capacity = 2580 # [MW]
-mCO2 = capacity * emission_factor / 4 # [tCO2/h] there are four biomass boilers @ 645 MWth
+capacity = 2580 /4 # [MW]
+drax_efficiency = 33/(1-0.24) /100 # [MWelc/MWfuel] Donnison et al. (2020)
+drax_efficiency_loss = 0.24 # [-] Donnison et al. (2020)
+Qfuel = capacity / drax_efficiency # [MWth]
+print('\nDrax Qfuel=', Qfuel)
+print('Power = ', capacity)
+
+mCO2 = Qfuel * emission_factor # [tCO2/h] there are four biomass boilers @ 645 MWth
 xCO2 = 0.14 # [-]
 CAPEX_pred = capex_model(final_params, mCO2, xCO2)
-print(f"\nDrax Predicted: {CAPEX_pred:6.1f} MEUR at mCO2 [tCO2/h]=", mCO2)
+print(f"Drax Predicted: {CAPEX_pred:6.1f} MEUR at mCO2 [tCO2/h]=", mCO2)
 
 discount_rate = 0.07
 lifetime = 25
-annual_CO2 = 11 /4 # MtCO2 p.a.
+annual_CO2 = 12 /4 # MtCO2 p.a.
 capture_rate = 0.90
 annualized_CAPEX = CAPEX_pred * discount_rate * (1 + discount_rate)**lifetime / ((1 + discount_rate)**lifetime - 1)
 levelized_CAPEX = annualized_CAPEX / (annual_CO2 * capture_rate)
+OPEXfix = CAPEX_pred * 0.05 # MEUR/yr
+OPEXfix = OPEXfix / (annual_CO2 * capture_rate)
 print(levelized_CAPEX)
+print(OPEXfix)
 
+FLH = annual_CO2*10**6 / (Qfuel * emission_factor) # [h/y]
+print(FLH)
+
+# Now add energy OPEX, and other OPEX
+celc = 150 # [EUR/MWh] NOTE: UNCERTAINTY elecprice
+camines = 4 # [EUR/tCO2] NOTE: Ignore this, assume oxygen carriers have the same cost for now!
+revenues = capacity * celc * FLH # [EUR/yr] NOTE: UNCERTAINTY FLH
+revenues_ccs = capacity * (1-drax_efficiency_loss) * celc * FLH # [EUR/yr]
+diff = revenues - revenues_ccs
+OPEXE = diff / (annual_CO2*10**6 * capture_rate)
+print(OPEXE)
+cost_amines = levelized_CAPEX + OPEXfix + OPEXE
+print(cost_amines, " <amines")
+
+# Now try CLC
+oxygen_demand = 0.05 # kmolO2/kgbr, assuming complete combustion and 1.2 extra air
+LHV = 17.82 # MJ/kgbr
+mfuel = Qfuel / LHV # kg/s
+print("mfuel", mfuel)
+oxygen_demand = oxygen_demand * mfuel # kmolO2/s
+ASU_demand = oxygen_demand * 32 * 0.15 # kg/s, assuming 15% is supplied by oxypolish ASU
+ASU_power = 230 # kWh/tO2 (Macroscopic ref)
+ASU_power = ASU_power * ASU_demand/1000 *3600 # kW
+ASU_power /= 1000 # MW
+print(ASU_power)
+OPEXE = ASU_power * celc / (mCO2*0.98) # EUR/tCO2 NOTE assuming almost 100% capture rate, but 2% is unconverted? char?
+print(OPEXE)
+
+for guess_CLC in np.linspace(0.1, 5, 10):
+    CAPEX_CLC = CAPEX_pred * guess_CLC
+    annualized_CAPEX_CLC = CAPEX_CLC * discount_rate * (1 + discount_rate)**lifetime / ((1 + discount_rate)**lifetime - 1)
+    levelized_CAPEX_CLC = annualized_CAPEX_CLC / (annual_CO2 * 0.98)
+    OPEXfix = CAPEX_CLC * 0.05 # MEUR/yr
+    OPEXfix = OPEXfix / (annual_CO2 * 0.98)
+    cost_CLC = levelized_CAPEX_CLC + OPEXfix + OPEXE
+    print("=>", guess_CLC, cost_CLC, cost_amines, cost_CLC/cost_amines)
+    if cost_CLC/cost_amines > 1:
+        print(" =>>>> Found a CLC threshold!")
 
 
 # ----------------- PLOTTING -----------------
@@ -116,7 +163,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 # --- Create a grid of mCO2 and xCO2 values ---
-mCO2_vals = np.linspace(30, 300, 50)     # [tCO2/h], adjust as needed
+mCO2_vals = np.linspace(30, 540, 50)     # [tCO2/h], adjust as needed
 xCO2_vals = np.linspace(0.05, 0.25, 50) # [-], adjust as needed
 M, X = np.meshgrid(mCO2_vals, xCO2_vals)
 
@@ -136,6 +183,8 @@ plant_mCO2 = np.array([p["mCO2"] for p in plants])
 plant_xCO2 = np.array([p["xCO2"] for p in plants])
 plant_CAPEX = np.array([p["CAPEX_target"] for p in plants])
 ax.scatter(plant_mCO2, plant_xCO2, plant_CAPEX, color='red', s=50, label='FOAK plants')
+
+ax.scatter(mCO2, xCO2, CAPEX_pred, color='green', s=50, label='Drax prediction')
 
 # --- Labels and title ---
 ax.set_xlabel('CO2 Mass Flow [tCO2/h]')
