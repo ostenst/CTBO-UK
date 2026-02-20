@@ -64,7 +64,7 @@ if __name__ == "__main__":
 
     # Levers: policy choices we can control
     model.levers = [
-        CategoricalParameter("ETS_SCENARIO", ['£200', '£300', '£400']),
+        CategoricalParameter("ETS_SCENARIO", ['£0', '£100', '£200', '£300']),
         RealParameter("DIFFUSE_END_FRACTION", 0.05, 0.40),
     ]
 
