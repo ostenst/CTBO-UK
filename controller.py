@@ -79,6 +79,7 @@ if __name__ == "__main__":
         ScalarOutcome("NPV_cost_ETS"),
         ScalarOutcome("NPV_profit_ETS"),
         ScalarOutcome("benefit2cost_ETS"),
+        ScalarOutcome("passthrough_ratio"),
         # Time series outcomes
         ArrayOutcome("supply_ktCO2f"),
         ArrayOutcome("emitted_ktCO2f"),
@@ -95,6 +96,9 @@ if __name__ == "__main__":
         ArrayOutcome("profit_CTBO_policy"),
         ArrayOutcome("cost_ETS_policy"),
         ArrayOutcome("profit_ETS_policy"),
+        ArrayOutcome("CTBO_passthrough"),
+        ArrayOutcome("ETS_passthrough"),
+        ArrayOutcome("total_passthrough"),
         ArrayOutcome("gas_increase_abs"),
         ArrayOutcome("gas_increase_pct"),
         ArrayOutcome("petrol_increase_abs"),

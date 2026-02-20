@@ -81,28 +81,29 @@ def plot_carbon_trajectories_uncertainty(results_dir='results', pounds_to_EUR=1.
     
     return fig
 
-def plot_gas_increase_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_scenario=None, debug=False):
+def plot_gas_increase_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_scenarios=None, suffix='', debug=False):
     """
     Plot gas_increase_abs as box plots for years 2030, 2035, 2040, 2045, 2050.
     
     Args:
         results_dir: Directory containing results files
         pounds_to_EUR: Conversion rate from pounds to EUR
-        ets_scenario: Optional ETS scenario to filter by (e.g., '£200', '£300', '£400'). Default: no filtering
+        ets_scenarios: Optional list of ETS scenarios to filter by (e.g., ['£100', '£200']). Default: no filtering
+        suffix: Optional suffix for output filename
         debug: If True, print debug information
     """
     if debug:
         print(f"Loading data from {results_dir}")
-        print(f"ETS scenario filter: {ets_scenario}")
+        print(f"ETS scenario filter: {ets_scenarios}")
     
     # Load experiments and data
     experiments = pd.read_csv(f'{results_dir}/experiments.csv')
     gas_increase_abs = np.load(f'{results_dir}/outcomes_gas_increase_abs.npy')  # [€/MWh]
     gas_increase_abs = gas_increase_abs / pounds_to_EUR * (100 / 1000)  # €→£, then £/MWh→pence/kWh
     
-    # Filter by ETS scenario if specified
-    if ets_scenario is not None:
-        mask = experiments['ETS_SCENARIO'] == ets_scenario
+    # Filter by ETS scenarios if specified
+    if ets_scenarios is not None:
+        mask = experiments['ETS_SCENARIO'].isin(ets_scenarios)
         gas_increase_abs = gas_increase_abs[mask]
     
     if debug:
@@ -160,31 +161,33 @@ def plot_gas_increase_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_sc
     ax2.tick_params(labelsize=12)
     
     title = 'Gas price increase'
-    if ets_scenario is not None:
-        title += f' (ETS {ets_scenario})'
+    if ets_scenarios is not None:
+        title += f' (ETS {", ".join(ets_scenarios)})'
     # ax.set_title(title, fontsize=14)
     
     fig.subplots_adjust(left=0.15, right=0.75, top=0.92, bottom=0.12)
-    plt.savefig(f'{results_dir}/3_gas_increase_boxplots.png', dpi=450)
+    filename = f'{results_dir}/3_gas_increase_boxplots{suffix}.png'
+    plt.savefig(filename, dpi=450)
     
     if debug:
-        print(f"Plot saved to {results_dir}/3_gas_increase_boxplots.png")
+        print(f"Plot saved to {filename}")
     
     return fig
 
-def plot_fuel_increase_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_scenario=None, debug=False):
+def plot_fuel_increase_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_scenarios=None, suffix='', debug=False):
     """
     Plot petrol, diesel, and kerosene price increases as box plots for years 2030, 2035, 2040, 2045, 2050.
     
     Args:
         results_dir: Directory containing results files
         pounds_to_EUR: Conversion rate from pounds to EUR
-        ets_scenario: Optional ETS scenario to filter by (e.g., '£200', '£300', '£400'). Default: no filtering
+        ets_scenarios: Optional list of ETS scenarios to filter by (e.g., ['£100', '£200']). Default: no filtering
+        suffix: Optional suffix for output filename
         debug: If True, print debug information
     """
     if debug:
         print(f"Loading data from {results_dir}")
-        print(f"ETS scenario filter: {ets_scenario}")
+        print(f"ETS scenario filter: {ets_scenarios}")
     
     # Load experiments and data
     experiments = pd.read_csv(f'{results_dir}/experiments.csv')
@@ -192,9 +195,9 @@ def plot_fuel_increase_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_s
     diesel = np.load(f'{results_dir}/outcomes_diesel_increase_abs.npy') / pounds_to_EUR *100 # €/L → £/L → p/L
     kerosene = np.load(f'{results_dir}/outcomes_kerosene_increase_abs.npy') / pounds_to_EUR *100 # €/L → £/L → p/L
     
-    # Filter by ETS scenario if specified
-    if ets_scenario is not None:
-        mask = experiments['ETS_SCENARIO'] == ets_scenario
+    # Filter by ETS scenarios if specified
+    if ets_scenarios is not None:
+        mask = experiments['ETS_SCENARIO'].isin(ets_scenarios)
         petrol = petrol[mask]
         diesel = diesel[mask]
         kerosene = kerosene[mask]
@@ -254,40 +257,42 @@ def plot_fuel_increase_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_s
     ax.legend(legend_handles, ['Petrol', 'Diesel', 'Kerosene'], fontsize=12, loc='upper left')
     
     title = 'Fuel price increases'
-    if ets_scenario is not None:
-        title += f' (ETS {ets_scenario})'
+    if ets_scenarios is not None:
+        title += f' (ETS {", ".join(ets_scenarios)})'
     ax.set_title(title, fontsize=14)
     
     fig.subplots_adjust(left=0.10, right=0.95, top=0.92, bottom=0.10)
-    plt.savefig(f'{results_dir}/3_fuel_increase_boxplots.png', dpi=450)
+    filename = f'{results_dir}/3_fuel_increase_boxplots{suffix}.png'
+    plt.savefig(filename, dpi=450)
     
     if debug:
-        print(f"Plot saved to {results_dir}/3_fuel_increase_boxplots.png")
+        print(f"Plot saved to {filename}")
     
     return fig
 
-def plot_cost_ctbo_producers_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_scenario=None, debug=False):
+def plot_cost_ctbo_producers_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_scenarios=None, suffix='', debug=False):
     """
     Plot cost_CTBO_producers as box plots for years 2030, 2035, 2040, 2045, 2050.
     
     Args:
         results_dir: Directory containing results files
         pounds_to_EUR: Conversion rate from pounds to EUR
-        ets_scenario: Optional ETS scenario to filter by (e.g., '£200', '£300', '£400'). Default: no filtering
+        ets_scenarios: Optional list of ETS scenarios to filter by (e.g., ['£100', '£200']). Default: no filtering
+        suffix: Optional suffix for output filename
         debug: If True, print debug information
     """
     if debug:
         print(f"Loading data from {results_dir}")
-        print(f"ETS scenario filter: {ets_scenario}")
+        print(f"ETS scenario filter: {ets_scenarios}")
     
     # Load experiments and data
     experiments = pd.read_csv(f'{results_dir}/experiments.csv')
     cost_CTBO_producers = np.load(f'{results_dir}/outcomes_cost_CTBO_producers.npy')  # [k€/yr]
     cost_CTBO_producers = cost_CTBO_producers / 1e6 / pounds_to_EUR  # k€/yr → B£/yr
     
-    # Filter by ETS scenario if specified
-    if ets_scenario is not None:
-        mask = experiments['ETS_SCENARIO'] == ets_scenario
+    # Filter by ETS scenarios if specified
+    if ets_scenarios is not None:
+        mask = experiments['ETS_SCENARIO'].isin(ets_scenarios)
         cost_CTBO_producers = cost_CTBO_producers[mask]
     
     if debug:
@@ -338,15 +343,16 @@ def plot_cost_ctbo_producers_boxplots(results_dir='results', pounds_to_EUR=1.15,
     ax.tick_params(labelsize=12)
     
     title = 'CTBO cost to producers'
-    if ets_scenario is not None:
-        title += f' (ETS {ets_scenario})'
+    if ets_scenarios is not None:
+        title += f' (ETS {", ".join(ets_scenarios)})'
     # ax.set_title(title, fontsize=14)
     
     fig.subplots_adjust(left=0.15, right=0.75, top=0.92, bottom=0.12)
-    plt.savefig(f'{results_dir}/3_cost_ctbo_producers_boxplots.png', dpi=450)
+    filename = f'{results_dir}/3_cost_ctbo_producers_boxplots{suffix}.png'
+    plt.savefig(filename, dpi=450)
     
     if debug:
-        print(f"Plot saved to {results_dir}/cost_ctbo_producers_boxplots.png")
+        print(f"Plot saved to {filename}")
     
     return fig
 
@@ -378,9 +384,9 @@ def plot_prices_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=False):
         p95 = np.percentile(arr, 95, axis=0)
         return median, p5, p95
     
-    scenarios = ['£200', '£300', '£400']
+    scenarios = ['£0', '£100', '£200', '£300']
     magma = plt.cm.magma
-    colors = [magma(0.10), magma(0.40), magma(0.70)]
+    colors = [magma(0.00), magma(0.30), magma(0.60), magma(0.90)]
     
     fig, ax = plt.subplots(figsize=(7, 5.5))
     
@@ -794,7 +800,7 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, debug=Fa
         print(f"Loaded {len(outcomes)} experiments")
         print(f"Columns: {outcomes.columns.tolist()}")
     
-    scenarios = ['£200', '£300', '£400']
+    scenarios = ['£0', '£100', '£200', '£300']
 
     # Labels and styling (reversed so first item appears at top in horizontal boxplot)
     npv_labels = ['Policy cost (CfD eq., +10% cost)', 'Policy cost (CTBO)', 'Fuel supplier costs (CTBO)', 'Emitter and T&S profits (CTBO)'][::-1]
@@ -984,19 +990,189 @@ def plot_macc_curves(results_dir='results', pounds_to_EUR=1.15, debug=False):
     
     return fig
 
+def plot_passthrough_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=False):
+    """
+    Plot CTBO, ETS, and total passthrough time series with uncertainty intervals,
+    in separate panels for each ETS scenario (£0, £100, £200, £300).
+    """
+    if debug:
+        print(f"Loading data from {results_dir}")
+    
+    # Load experiments and passthrough data
+    experiments = pd.read_csv(f'{results_dir}/experiments.csv')
+    CTBO_passthrough = np.load(f'{results_dir}/outcomes_CTBO_passthrough.npy') / 1e6 / pounds_to_EUR  # k€→B£
+    ETS_passthrough = np.load(f'{results_dir}/outcomes_ETS_passthrough.npy') / 1e6 / pounds_to_EUR  # k€→B£
+    total_passthrough = np.load(f'{results_dir}/outcomes_total_passthrough.npy') / 1e6 / pounds_to_EUR  # k€→B£
+    
+    if debug:
+        print(f"Shape of passthrough arrays: {CTBO_passthrough.shape}")
+        print(f"ETS scenarios: {experiments['ETS_SCENARIO'].unique()}")
+    
+    # Years array
+    START_YEAR = 2025
+    END_YEAR = 2055
+    years = np.arange(START_YEAR, END_YEAR + 1)
+    
+    def get_stats(arr):
+        median = np.median(arr, axis=0)
+        p5 = np.percentile(arr, 5, axis=0)
+        p95 = np.percentile(arr, 95, axis=0)
+        return median, p5, p95
+    
+    scenarios = ['£0', '£100', '£200', '£300']
+    
+    # Colors
+    magma = plt.cm.magma
+    color_ctbo = '#62a7a6'  # green
+    color_ets = magma(0.7)
+    color_total = magma(0.3)
+    
+    # Create 2x2 subplot grid
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True, sharey=True)
+    axes = axes.flatten()
+    
+    for idx, scenario in enumerate(scenarios):
+        ax = axes[idx]
+        mask = experiments['ETS_SCENARIO'] == scenario
+        
+        if mask.sum() == 0:
+            if debug:
+                print(f"No data for ETS_SCENARIO={scenario}")
+            ax.set_title(f'ETS {scenario} (no data)', fontsize=14)
+            continue
+        
+        ctbo_data = CTBO_passthrough[mask]
+        ets_data = ETS_passthrough[mask]
+        total_data = total_passthrough[mask]
+        
+        # CTBO passthrough
+        med, p5, p95 = get_stats(ctbo_data)
+        ax.plot(years, med, color=color_ctbo, linewidth=2, label='CTBO')
+        ax.fill_between(years, p5, p95, color=color_ctbo, alpha=0.25)
+        
+        # ETS passthrough
+        med, p5, p95 = get_stats(ets_data)
+        ax.plot(years, med, color=color_ets, linewidth=2, label='ETS')
+        ax.fill_between(years, p5, p95, color=color_ets, alpha=0.25)
+        
+        # Total passthrough
+        med, p5, p95 = get_stats(total_data)
+        ax.plot(years, med, color=color_total, linewidth=2, linestyle='--', label='Total')
+        ax.fill_between(years, p5, p95, color=color_total, alpha=0.15)
+        
+        ax.axhline(0, color='grey', linestyle='-', linewidth=0.5, alpha=0.7)
+        ax.set_title(f'ETS {scenario}', fontsize=14)
+        ax.grid(True, linestyle='--', alpha=0.4)
+        ax.tick_params(labelsize=11)
+        ax.set_xlim(START_YEAR, 2050)
+    
+    # Shared labels
+    fig.text(0.5, 0.02, 'Year', ha='center', fontsize=14)
+    fig.text(0.02, 0.5, 'Cost passthrough [B£/yr]', va='center', rotation='vertical', fontsize=14)
+    
+    # Single legend for all panels
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='upper right', fontsize=12, bbox_to_anchor=(0.98, 0.98))
+    
+    plt.tight_layout(rect=[0.04, 0.04, 0.96, 0.96])
+    plt.savefig(f'{results_dir}/7_passthrough_by_ets.png', dpi=450, bbox_inches='tight')
+    
+    if debug:
+        print(f"Plot saved to {results_dir}/7_passthrough_by_ets.png")
+    
+    return fig
+
+def plot_passthrough_ratio_boxplots(results_dir='results', debug=False):
+    """
+    Plot box plots of passthrough_ratio for different ETS price scenarios.
+    """
+    if debug:
+        print(f"Loading data from {results_dir}")
+    
+    # Load experiments (contains passthrough_ratio as scalar outcome)
+    experiments = pd.read_csv(f'{results_dir}/experiments.csv')
+    
+    if 'passthrough_ratio' not in experiments.columns:
+        print("Error: passthrough_ratio not found in experiments.csv")
+        return None
+    
+    if debug:
+        print(f"Loaded {len(experiments)} experiments")
+        print(f"ETS scenarios: {experiments['ETS_SCENARIO'].unique()}")
+    
+    scenarios = ['£0', '£100', '£200', '£300']
+    
+    # Extract data for each scenario
+    box_data = []
+    valid_scenarios = []
+    for scenario in scenarios:
+        mask = experiments['ETS_SCENARIO'] == scenario
+        data = experiments.loc[mask, 'passthrough_ratio'].values
+        if len(data) > 0:
+            box_data.append(data)
+            valid_scenarios.append(scenario)
+    
+    if len(box_data) == 0:
+        print("No valid data for any scenario")
+        return None
+    
+    # Hard-coded box color
+    magma = plt.cm.magma
+    box_color = magma(0.5)
+    median_color = magma(0.1)
+    
+    fig, ax = plt.subplots(figsize=(8, 5))
+    
+    plt.grid(True, axis='y', linestyle='--', alpha=0.4)
+    
+    bp = ax.boxplot(box_data, positions=range(len(valid_scenarios)), patch_artist=True, widths=0.6)
+    
+    # Style the boxes
+    for box in bp['boxes']:
+        box.set_facecolor(box_color)
+        box.set_alpha(0.7)
+    for median in bp['medians']:
+        median.set_color(median_color)
+        median.set_linewidth(2)
+    
+    # Formatting
+    ax.set_xticks(range(len(valid_scenarios)))
+    ax.set_xticklabels(valid_scenarios, fontsize=12)
+    ax.set_xlabel('ETS price scenario', fontsize=14)
+    ax.set_ylabel('Passthrough ratio (CTBO/ETS)', fontsize=14)
+    ax.set_title('Cost passthrough ratio by ETS scenario', fontsize=14)
+    ax.tick_params(labelsize=12)
+    ax.axhline(1, color='grey', linestyle='--', linewidth=1.5, alpha=0.7)
+    
+    plt.tight_layout()
+    plt.savefig(f'{results_dir}/7_passthrough_ratio_boxplots.png', dpi=450, bbox_inches='tight')
+    
+    if debug:
+        print(f"Plot saved to {results_dir}/7_passthrough_ratio_boxplots.png")
+    
+    return fig
+
 if __name__ == "__main__":
     
     plot_carbon_trajectories_uncertainty(debug=True)
-    plot_gas_increase_boxplots(debug=True)
-    plot_fuel_increase_boxplots(debug=True)
-    plot_cost_ctbo_producers_boxplots(debug=True)
+    # ETS £0 only
+    plot_gas_increase_boxplots(ets_scenarios=['£0'], suffix='_ets0', debug=True)
+    plot_fuel_increase_boxplots(ets_scenarios=['£0'], suffix='_ets0', debug=True)
+    plot_cost_ctbo_producers_boxplots(ets_scenarios=['£0'], suffix='_ets0', debug=True)
+    
+    # ETS £100 or higher
+    plot_gas_increase_boxplots(ets_scenarios=['£100', '£200', '£300'], suffix='_ets100plus', debug=True)
+    plot_fuel_increase_boxplots(ets_scenarios=['£100', '£200', '£300'], suffix='_ets100plus', debug=True)
+    plot_cost_ctbo_producers_boxplots(ets_scenarios=['£100', '£200', '£300'], suffix='_ets100plus', debug=True)
     plot_prices_by_ets(debug=True)
 
     plot_plant_npv_bubbles(debug=True)
     plot_plant_npv_csu_bubbles(debug=True, exclude_sectors=['drax']) # 'drax'
-    plot_plant_npv_ets_bubbles(debug=True, exclude_sectors=[])
+    # plot_plant_npv_ets_bubbles(debug=True, exclude_sectors=[])
     
-    plot_policy_npv_boxplots(debug=True)
+    # plot_policy_npv_boxplots(debug=True)
     plot_macc_curves(debug=True)
+    plot_passthrough_by_ets(debug=True)
+    plot_passthrough_ratio_boxplots(debug=True)
 
     plt.show()

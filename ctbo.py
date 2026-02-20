@@ -447,7 +447,7 @@ def simulate_ctbo(
     CTBO_QUADRATIC = 0.4,
     FOAK_CALIBRATION = 1.6379, # from calibrate_foak.py
     ETS_START = 45, # [£/tCO2]
-    ETS_SCENARIO = '£0', # [£/tCO2] 0, 100, 200, 300
+    ETS_SCENARIO = '£200', # [£/tCO2] 0, 100, 200, 300
     DACCS_SCENARIO = '£391', # [£/tCO2] 322, 391, 7th Carbon Budget
     
     START_YEAR = 2025,
@@ -745,7 +745,6 @@ def simulate_ctbo(
 
         # Base the CTBO mandate on coal, oil, and gas supply (ktCO2f)
         pointsource_supply = MACC['ktCO2f'].sum() + MACC['ktCO2f_inc'].where(MACC['invested'], 0).sum()
-        pointsource_supply_for_ETS = MACC['ktCO2f'].sum() + MACC['ktCO2f_inc'].where(MACC['invested'], 0).sum() + MACC['ktCO2cem'].sum() + MACC['ktCO2pl'].sum()
         supply_ktCO2f = pointsource_supply + diffuse_supply
 
         pointsource_emissions = MACC['ktCO2f'].where(~MACC['invested'], 0).sum() + MACC['ktCO2f_res'].where(MACC['invested'], 0).sum()
@@ -873,9 +872,9 @@ def simulate_ctbo(
             cost_CTBO += cost_CSU * stored_ktCO2daccs # [k€/y]
             cost_ETS += ets_price * stored_ktCO2daccs # [k€/y]
         
-        # Feedback: all ETS and CTBO costs are ultimately passed on to the consumer (I include both fossil and biogenic CCS)
-        ETS_passthrough = pointsource_supply_for_ETS * ets_price # [k€/y] including fuel, limestone, plastic, excluding BECCS/DACCS (no diffuse coverage!)
-        CTBO_passthrough = cost_CTBO + profit_CTBO # [k€/y] includes costs to deploy fossil CCS and BECCS, should add DACCS!
+        # Feedback: all ETS and CTBO costs are ultimately passed on to the consumer (I include both fossil and biogenic CCS) (only the STORED STUFF, not EMITTED)
+        ETS_passthrough = (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) * ets_price # [k€/y] assuming ETS covers costs of BECCS/DACCS as well!
+        CTBO_passthrough = cost_CTBO + profit_CTBO # [k€/y] assuming CTBO covers costs of BECCS/DACCS as well!
 
         _cost_CTBO_policy.append(cost_CTBO)
         _profit_CTBO_policy.append(profit_CTBO)
@@ -1066,6 +1065,8 @@ def simulate_ctbo(
     results['benefit2cost_ETS'] = benefit2cost_ETS
     results['NPV_ETS_passthrough'] = NPV_ETS_passthrough
     results['NPV_total_passthrough'] = NPV_total_passthrough
+    results['passthrough_ratio'] = NPV_CTBO_passthrough / NPV_total_passthrough
+
     return results
 
 def plot_opex_distributions_by_sector(plants_clean, opex_results, bins=30, ncols=2, debug=False):
