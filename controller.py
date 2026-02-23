@@ -27,6 +27,7 @@ if __name__ == "__main__":
     model.uncertainties = [
         # Scenario uncertainties
         CategoricalParameter("DACCS_SCENARIO", ['£322', '£391']),
+        RealParameter("CfD_INEFFICIENCY", 0.1, 1.0),
         # Sector-specific uncertainties
         RealParameter("fraction_limestone", 0.55, 0.65),  # [-] cementite fraction
         RealParameter("fraction_fossil_waste", 0.40, 0.55),  # [-] fossil fraction in waste
@@ -75,11 +76,12 @@ if __name__ == "__main__":
         ScalarOutcome("year_DACCS_marginal"),
         ScalarOutcome("NPV_cost_CTBO"),
         ScalarOutcome("NPV_profit_CTBO"),
-        ScalarOutcome("benefit2cost_CTBO"),
         ScalarOutcome("NPV_cost_ETS"),
         ScalarOutcome("NPV_profit_ETS"),
-        ScalarOutcome("benefit2cost_ETS"),
-        ScalarOutcome("passthrough_ratio"),
+        ScalarOutcome("NPV_CTBO_passthrough"),
+        ScalarOutcome("NPV_CfD_passthrough"),
+        ScalarOutcome("NPV_ETS_passthrough"),
+        ScalarOutcome("NPV_total_passthrough"),
         # Time series outcomes
         ArrayOutcome("supply_ktCO2f"),
         ArrayOutcome("emitted_ktCO2f"),
@@ -97,6 +99,7 @@ if __name__ == "__main__":
         ArrayOutcome("cost_ETS_policy"),
         ArrayOutcome("profit_ETS_policy"),
         ArrayOutcome("CTBO_passthrough"),
+        ArrayOutcome("CfD_passthrough"),
         ArrayOutcome("ETS_passthrough"),
         ArrayOutcome("total_passthrough"),
         ArrayOutcome("gas_increase_abs"),

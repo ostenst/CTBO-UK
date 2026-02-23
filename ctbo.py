@@ -449,6 +449,7 @@ def simulate_ctbo(
     ETS_START = 45, # [£/tCO2]
     ETS_SCENARIO = '£200', # [£/tCO2] 0, 100, 200, 300
     DACCS_SCENARIO = '£391', # [£/tCO2] 322, 391, 7th Carbon Budget
+    CfD_INEFFICIENCY = 0.2, # [-]
     
     START_YEAR = 2025,
     END_YEAR = 2055,
@@ -703,6 +704,7 @@ def simulate_ctbo(
     _cost_CTBO_policy = [] # Area under MACC
     _profit_CTBO_policy = [] # Area above MACC
     _CTBO_passthrough = [] # [k€/y]
+    _CfD_passthrough = []
     _cost_ETS_policy = []
     _profit_ETS_policy = []
     _ETS_passthrough = [] # [k€/y]
@@ -875,10 +877,12 @@ def simulate_ctbo(
         # Feedback: all ETS and CTBO costs are ultimately passed on to the consumer (I include both fossil and biogenic CCS) (only the STORED STUFF, not EMITTED)
         ETS_passthrough = (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) * ets_price # [k€/y] assuming ETS covers costs of BECCS/DACCS as well!
         CTBO_passthrough = cost_CTBO + profit_CTBO # [k€/y] assuming CTBO covers costs of BECCS/DACCS as well!
+        CfD_passthrough = cost_CTBO * (1 + CfD_INEFFICIENCY) # [k€/y]
 
         _cost_CTBO_policy.append(cost_CTBO)
         _profit_CTBO_policy.append(profit_CTBO)
         _CTBO_passthrough.append(CTBO_passthrough)
+        _CfD_passthrough.append(CfD_passthrough)
         _cost_ETS_policy.append(cost_ETS)
         _profit_ETS_policy.append(profit_ETS)
         _ETS_passthrough.append(ETS_passthrough)
@@ -892,6 +896,7 @@ def simulate_ctbo(
     NPV_cost_CTBO = (np.array(_cost_CTBO_policy) * discount_factors).sum()      # [k€]
     NPV_profit_CTBO = (np.array(_profit_CTBO_policy) * discount_factors).sum()  # [k€]
     NPV_CTBO_passthrough = (np.array(_CTBO_passthrough) * discount_factors).sum() # [k€]
+    NPV_CfD_passthrough = (np.array(_CfD_passthrough) * discount_factors).sum() # [k€]
     NPV_cost_ETS = (np.array(_cost_ETS_policy) * discount_factors).sum()        # [k€]
     NPV_profit_ETS = (np.array(_profit_ETS_policy) * discount_factors).sum()    # [k€]
     NPV_ETS_passthrough = (np.array(_ETS_passthrough) * discount_factors).sum() # [k€]
@@ -1035,6 +1040,7 @@ def simulate_ctbo(
     results['profit_ETS_policy'] = _profit_ETS_policy
     results['ETS_passthrough'] = _ETS_passthrough # [k€/y]
     results['total_passthrough'] = _total_passthrough # [k€/y]
+    results['CfD_passthrough'] = _CfD_passthrough # [k€/y]
 
     # Plant-level results, ordered alphabetically by stack
     npv_sorted = sorted(npv_results, key=lambda x: x['stack'])
@@ -1060,6 +1066,7 @@ def simulate_ctbo(
     results['NPV_profit_CTBO'] = NPV_profit_CTBO
     results['benefit2cost_CTBO'] = benefit2cost_CTBO
     results['NPV_CTBO_passthrough'] = NPV_CTBO_passthrough
+    results['NPV_CfD_passthrough'] = NPV_CfD_passthrough
     results['NPV_cost_ETS'] = NPV_cost_ETS
     results['NPV_profit_ETS'] = NPV_profit_ETS
     results['benefit2cost_ETS'] = benefit2cost_ETS

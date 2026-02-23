@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 def plot_carbon_trajectories_uncertainty(results_dir='results', pounds_to_EUR=1.15, debug=False):
     """
     Plot carbon trajectories with uncertainty intervals from EMA workbench results.
+    Shows 4 lines: supply, biogenic storage, DACCS storage, total storage.
     """
     if debug:
         print(f"Loading data from {results_dir}")
@@ -19,8 +20,7 @@ def plot_carbon_trajectories_uncertainty(results_dir='results', pounds_to_EUR=1.
         print(f"Shape of arrays: {supply_ktCO2f.shape}")
     
     # Calculate combined arrays
-    stored_bio_daccs = stored_ktCO2b + stored_ktCO2daccs  # Line 2: biogenic + DACCS
-    stored_total = stored_ktCO2g + stored_ktCO2b + stored_ktCO2daccs  # Line 3: all storage
+    stored_total = stored_ktCO2g + stored_ktCO2b + stored_ktCO2daccs  # all storage
     
     # Years array (from constants)
     START_YEAR = 2025
@@ -35,7 +35,8 @@ def plot_carbon_trajectories_uncertainty(results_dir='results', pounds_to_EUR=1.
         return median, p5, p95
     
     supply_med, supply_p5, supply_p95 = get_stats(supply_ktCO2f)
-    bio_daccs_med, bio_daccs_p5, bio_daccs_p95 = get_stats(stored_bio_daccs)
+    bio_med, bio_p5, bio_p95 = get_stats(stored_ktCO2b)
+    daccs_med, daccs_p5, daccs_p95 = get_stats(stored_ktCO2daccs)
     total_med, total_p5, total_p95 = get_stats(stored_total)
     
     # Convert to MtCO2
@@ -43,41 +44,43 @@ def plot_carbon_trajectories_uncertainty(results_dir='results', pounds_to_EUR=1.
     
     # Setup plot
     magma = plt.cm.magma
-    dark_magma = magma(0.1)
-    green = '#62a7a6'
-    purple = '#9F5994'
+    supply_color = magma(0.0) 
+    bio_color = '#62a7a6' # green
+    daccs_color = magma(0.8)
+    total_color = magma(0.4)
+
     fig, ax = plt.subplots(figsize=(7, 6.5))
     
     # Line 1: Supply
-    # color1 = magma(0.2)
-    ax.plot(years, supply_med / scale, color=dark_magma, linewidth=2.5, label='Fossil fuel supply (coal, oil, gas)')
-    ax.fill_between(years, supply_p5 / scale, supply_p95 / scale, color=dark_magma, alpha=0.30)
+    ax.plot(years, supply_med / scale, color=supply_color, linewidth=2.5, label='Fossil fuel supply (coal, oil, gas)')
+    ax.fill_between(years, supply_p5 / scale, supply_p95 / scale, color=supply_color, alpha=0.30)
     
-    # Line 2: Biogenic + DACCS storage
-    color2 = green
-    ax.plot(years, bio_daccs_med / scale, color=color2, linewidth=2.5, label='CDR storage (BECCS, DACCS)')
-    ax.fill_between(years, bio_daccs_p5 / scale, bio_daccs_p95 / scale, color=color2, alpha=0.40)
+    # Line 2: Biogenic storage (BECCS)
+    ax.plot(years, bio_med / scale, color=bio_color, linewidth=2.5, label='BECCS')
+    ax.fill_between(years, bio_p5 / scale, bio_p95 / scale, color=bio_color, alpha=0.40)
     
-    # Line 3: Total storage
-    # color3 = magma(0.8)
-    ax.plot(years, total_med / scale, color=purple, linewidth=2.5, label='Total storage (fossil CCS, BECCS, DACCS)')
-    ax.fill_between(years, total_p5 / scale, total_p95 / scale, color=purple, alpha=0.40)
+    # Line 3: DACCS storage
+    ax.plot(years, daccs_med / scale, color=daccs_color, linewidth=2.5, label='DACCS')
+    ax.fill_between(years, daccs_p5 / scale, daccs_p95 / scale, color=daccs_color, alpha=0.40)
+    
+    # Line 4: Total storage
+    ax.plot(years, total_med / scale, color=total_color, linewidth=2.5, label='Total storage (fossil CCS, BECCS, DACCS)')
+    ax.fill_between(years, total_p5 / scale, total_p95 / scale, color=total_color, alpha=0.40)
     
     # Formatting
-    # ax.set_xlabel('Year', fontsize=14)
     ax.set_ylabel('Carbon [MtCO₂/year]', fontsize=14)
-    # # ax.set_title('Carbon Trajectories with Uncertainty (5th-95th percentile)', fontsize=16)
-    # ax.legend(fontsize=12, loc='best')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
     ax.set_xlim(START_YEAR, END_YEAR)
-    ax.set_ylim(-20, 300)
+
+    # Add legend
+    ax.legend(fontsize=12, loc='best')
     
     plt.tight_layout()
     plt.savefig(f'{results_dir}/1_carbon_balances.png', dpi=450, bbox_inches='tight')
     
     if debug:
-        print(f"Plot saved to {results_dir}/carbon_balances.png")
+        print(f"Plot saved to {results_dir}/1_carbon_balances.png")
     
     return fig
 
@@ -129,7 +132,7 @@ def plot_gas_increase_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_sc
     box_color = magma(0.7)
     median_color = magma(0.1)
     
-    fig, ax = plt.subplots(figsize=(6, 5))
+    fig, ax = plt.subplots(figsize=(6, 3))
 
     plt.grid(True, axis='y', linestyle='--', alpha=0.4)
 
@@ -151,7 +154,7 @@ def plot_gas_increase_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_sc
     # ax.set_xlabel('Year', fontsize=14)
     ax.tick_params(labelsize=12)
     y1_min, y1_max = ax.get_ylim()
-    ax.set_ylim(y1_min, 4.9)
+    # ax.set_ylim(y1_min, 4.9)
     
     # Secondary y-axis: annual household bill (11200 kWh avg consumption)
     household_consumption = 11200  # kWh/year
@@ -218,7 +221,7 @@ def plot_fuel_increase_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_s
     }
     median_color = 'black'
     
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(6, 4))
     
     plt.grid(True, axis='y', linestyle='--', alpha=0.4)
     
@@ -318,7 +321,7 @@ def plot_cost_ctbo_producers_boxplots(results_dir='results', pounds_to_EUR=1.15,
     box_color = magma(0.1)
     median_color = magma(0.7)
     
-    fig, ax = plt.subplots(figsize=(6, 5))
+    fig, ax = plt.subplots(figsize=(6, 3))
     
     plt.grid(True, axis='y', linestyle='--', alpha=0.4)
 
@@ -338,7 +341,7 @@ def plot_cost_ctbo_producers_boxplots(results_dir='results', pounds_to_EUR=1.15,
     ax.set_xticklabels(target_years, fontsize=12)
     ax.set_ylabel('CTBO cost to producers [B£/yr]', fontsize=14)
     ylims = ax.get_ylim()
-    ax.set_ylim(ylims[0], 30)
+    # ax.set_ylim(ylims[0], 30)
     # ax.set_xlabel('Year', fontsize=14)
     ax.tick_params(labelsize=12)
     
@@ -532,7 +535,7 @@ def plot_plant_npv_bubbles(results_dir='results', ETS_filter=None, pounds_to_EUR
     ax.set_xlim(2025, 2050)
     ax.set_xticks(np.arange(2025, 2051, 5))
     y1_min, y1_max = ax.get_ylim()
-    ax.set_ylim(-6000, 8000)
+    # ax.set_ylim(-6000, 8000)
     
     fig.subplots_adjust(left=0.17, right=0.95, top=0.97, bottom=0.10)
     plt.savefig(f'{results_dir}/4_plant_npv_total_bubbles.png', dpi=450)
@@ -655,7 +658,7 @@ def plot_plant_npv_csu_bubbles(results_dir='results', ETS_filter=None, exclude_s
     ax.set_xlim(2025, 2050)
     ax.set_xticks(np.arange(2025, 2051, 5))
     y1_min, y1_max = ax.get_ylim()
-    ax.set_ylim(-50, 850)
+    # ax.set_ylim(-50, 850)
     
     fig.subplots_adjust(left=0.17, right=0.95, top=0.97, bottom=0.10)
     plt.savefig(f'{results_dir}/4_plant_npv_csu_bubbles.png', dpi=450)
@@ -1023,12 +1026,12 @@ def plot_passthrough_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=Fal
     
     # Colors
     magma = plt.cm.magma
-    color_ctbo = '#62a7a6'  # green
-    color_ets = magma(0.7)
+    color_ctbo = '#62a7a6' # green
+    color_ets = 'gray'
     color_total = magma(0.3)
     
     # Create 2x2 subplot grid
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True, sharey=True)
+    fig, axes = plt.subplots(2, 2, figsize=(10, 6), sharex=True, sharey=True)
     axes = axes.flatten()
     
     for idx, scenario in enumerate(scenarios):
@@ -1047,17 +1050,17 @@ def plot_passthrough_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=Fal
         
         # CTBO passthrough
         med, p5, p95 = get_stats(ctbo_data)
-        ax.plot(years, med, color=color_ctbo, linewidth=2, label='CTBO')
+        ax.plot(years, med, color=color_ctbo, linewidth=2, label='CTBO costs')
         ax.fill_between(years, p5, p95, color=color_ctbo, alpha=0.25)
         
         # ETS passthrough
         med, p5, p95 = get_stats(ets_data)
-        ax.plot(years, med, color=color_ets, linewidth=2, label='ETS')
+        ax.plot(years, med, color=color_ets, linewidth=2, label='ETS costs')
         ax.fill_between(years, p5, p95, color=color_ets, alpha=0.25)
         
         # Total passthrough
         med, p5, p95 = get_stats(total_data)
-        ax.plot(years, med, color=color_total, linewidth=2, linestyle='--', label='Total')
+        ax.plot(years, med, color=color_total, linewidth=2, linestyle='--', label='Total costs')
         ax.fill_between(years, p5, p95, color=color_total, alpha=0.15)
         
         ax.axhline(0, color='grey', linestyle='-', linewidth=0.5, alpha=0.7)
@@ -1068,7 +1071,7 @@ def plot_passthrough_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=Fal
     
     # Shared labels
     fig.text(0.5, 0.02, 'Year', ha='center', fontsize=14)
-    fig.text(0.02, 0.5, 'Cost passthrough [B£/yr]', va='center', rotation='vertical', fontsize=14)
+    fig.text(0.02, 0.5, 'Cost passthrough to consumers [B£/yr]', va='center', rotation='vertical', fontsize=14)
     
     # Single legend for all panels
     handles, labels = axes[0].get_legend_handles_labels()
@@ -1152,6 +1155,81 @@ def plot_passthrough_ratio_boxplots(results_dir='results', debug=False):
     
     return fig
 
+def plot_cfd_inefficiency_vs_passthrough(results_dir='results', debug=False):
+    """
+    Plot NPV_CfD_passthrough / NPV_CTBO_passthrough ratio vs CfD_INEFFICIENCY input,
+    in separate panels for each ETS scenario (£0, £100, £200, £300).
+    """
+    if debug:
+        print(f"Loading data from {results_dir}")
+    
+    # Load experiments (contains both inputs and NPV outcomes)
+    experiments = pd.read_csv(f'{results_dir}/experiments.csv')
+    
+    # Check required columns
+    required_cols = ['NPV_CTBO_passthrough', 'NPV_CfD_passthrough', 'CfD_INEFFICIENCY', 'ETS_SCENARIO']
+    missing = [c for c in required_cols if c not in experiments.columns]
+    if missing:
+        print(f"Error: Missing columns in experiments.csv: {missing}")
+        return None
+    
+    if debug:
+        print(f"Loaded {len(experiments)} experiments")
+        print(f"ETS scenarios: {experiments['ETS_SCENARIO'].unique()}")
+        print(f"CfD_INEFFICIENCY range: {experiments['CfD_INEFFICIENCY'].min():.2f} - {experiments['CfD_INEFFICIENCY'].max():.2f}")
+    
+    # Calculate ratio
+    experiments['passthrough_ratio_cfd'] = experiments['NPV_CfD_passthrough'] / experiments['NPV_CTBO_passthrough']
+    
+    scenarios = ['£0', '£100', '£200', '£300']
+    
+    # Colors
+    magma = plt.cm.magma
+    scatter_color = magma(0.5)
+    
+    # Create 2x2 subplot grid
+    fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharex=True, sharey=True)
+    axes = axes.flatten()
+    
+    for idx, scenario in enumerate(scenarios):
+        ax = axes[idx]
+        mask = experiments['ETS_SCENARIO'] == scenario
+        
+        if mask.sum() == 0:
+            if debug:
+                print(f"No data for ETS_SCENARIO={scenario}")
+            ax.set_title(f'ETS {scenario} (no data)', fontsize=14)
+            continue
+        
+        data = experiments[mask]
+        
+        ax.scatter(
+            data['CfD_INEFFICIENCY'],
+            data['passthrough_ratio_cfd'],
+            c=[scatter_color],
+            alpha=0.6,
+            s=30,
+            edgecolors='black',
+            linewidths=0.3
+        )
+        
+        ax.axhline(1, color='grey', linestyle='--', linewidth=1.5, alpha=0.7)
+        ax.set_title(f'ETS {scenario}', fontsize=14)
+        ax.grid(True, linestyle='--', alpha=0.4)
+        ax.tick_params(labelsize=11)
+    
+    # Shared labels
+    fig.text(0.5, 0.02, 'CfD inefficiency', ha='center', fontsize=14)
+    fig.text(0.02, 0.5, 'NPV ratio (CfD / CTBO passthrough)', va='center', rotation='vertical', fontsize=14)
+    
+    plt.tight_layout(rect=[0.04, 0.04, 0.98, 0.98])
+    plt.savefig(f'{results_dir}/8_cfd_inefficiency_vs_passthrough.png', dpi=450, bbox_inches='tight')
+    
+    if debug:
+        print(f"Plot saved to {results_dir}/8_cfd_inefficiency_vs_passthrough.png")
+    
+    return fig
+
 if __name__ == "__main__":
     
     plot_carbon_trajectories_uncertainty(debug=True)
@@ -1166,13 +1244,16 @@ if __name__ == "__main__":
     plot_cost_ctbo_producers_boxplots(ets_scenarios=['£100', '£200', '£300'], suffix='_ets100plus', debug=True)
     plot_prices_by_ets(debug=True)
 
-    plot_plant_npv_bubbles(debug=True)
-    plot_plant_npv_csu_bubbles(debug=True, exclude_sectors=['drax']) # 'drax'
+    # plot_plant_npv_bubbles(debug=True, ETS_filter=['£0'])
+    plot_plant_npv_bubbles(debug=True, ETS_filter=['£100', '£200', '£300'])
+    # plot_plant_npv_csu_bubbles(debug=True, exclude_sectors=['drax'], ETS_filter=['£0']) # 'drax' 16100 M£ when DEFOSSILIZE=FALSE and 21000 when TRUE
+    plot_plant_npv_csu_bubbles(debug=True, exclude_sectors=['drax'], ETS_filter=['£100', '£200', '£300'])
     # plot_plant_npv_ets_bubbles(debug=True, exclude_sectors=[])
     
     # plot_policy_npv_boxplots(debug=True)
     plot_macc_curves(debug=True)
     plot_passthrough_by_ets(debug=True)
     plot_passthrough_ratio_boxplots(debug=True)
+    plot_cfd_inefficiency_vs_passthrough(debug=True)
 
     plt.show()
