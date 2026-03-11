@@ -887,6 +887,98 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, debug=Fa
     
     return figs
 
+def plot_plant_costs_by_sector(results_dir='results', pounds_to_EUR=1.15, debug=False):
+    """
+    Plot plant costs as box plots, one box per sector.
+    Shows distribution of costs across all experiments for each sector.
+    """
+    if debug:
+        print(f"Loading plant data from {results_dir}")
+    
+    # Load plant reference and cost data
+    plant_ref = pd.read_csv(f'{results_dir}/plant_reference.csv')
+    plant_cost = np.load(f'{results_dir}/outcomes_plants_cost.npy')  # shape: (n_experiments, n_plants)
+    plant_cost = plant_cost / pounds_to_EUR  # Convert to pounds
+    
+    n_experiments, n_plants = plant_cost.shape
+    
+    if debug:
+        print(f"Shape: {n_experiments} experiments x {n_plants} plants")
+        print(f"Sectors: {plant_ref['sector'].unique()}")
+    
+    # Get unique sectors
+    sectors = plant_ref['sector'].unique()
+    
+    # Collect cost data for each sector (flatten across all experiments)
+    sector_costs = {}
+    for sector in sectors:
+        sector_mask = plant_ref['sector'] == sector
+        sector_plant_indices = np.where(sector_mask)[0]
+        
+        # Get costs for all plants in this sector across all experiments
+        costs = plant_cost[:, sector_plant_indices].flatten()
+        # Filter out NaN and invalid values
+        costs = costs[np.isfinite(costs)]
+        
+        if len(costs) > 0:
+            sector_costs[sector] = costs
+    
+    if debug:
+        for sector, costs in sector_costs.items():
+            print(f"{sector}: {len(costs)} values, median={np.median(costs):.1f}")
+    
+    # Prepare data for box plot
+    sector_order = ['cement', 'steel', 'refinery', 'ccgt', 'waste', 'drax']
+    sector_labels = {'cement': 'Cement', 'steel': 'Steel', 'refinery': 'Refinery', 
+                     'ccgt': 'Gas power', 'waste': 'Waste', 'drax': 'Drax'}
+    
+    box_data = []
+    labels = []
+    for sector in sector_order:
+        if sector in sector_costs:
+            box_data.append(sector_costs[sector])
+            labels.append(sector_labels.get(sector, sector))
+    
+    # Hard-coded box colors (matching other plots)
+    magma = plt.cm.magma
+    sector_colors = {
+        'Cement': magma(0.1),
+        'Gas power': magma(0.3),
+        'Refinery': magma(0.5),
+        'Steel': magma(0.7),
+        'Drax': magma(0.9),
+        'Waste': '#62a7a6'
+    }
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    plt.grid(True, axis='y', linestyle='--', alpha=0.4)
+    
+    bp = ax.boxplot(box_data, patch_artist=True, widths=0.6)
+    
+    # Style the boxes
+    for box, label in zip(bp['boxes'], labels):
+        box.set_facecolor(sector_colors.get(label, magma(0.5)))
+        box.set_alpha(0.7)
+    for median in bp['medians']:
+        median.set_color('black')
+        median.set_linewidth(2)
+    
+    # Formatting
+    ax.set_xticklabels(labels, fontsize=12)
+    ax.set_ylabel('Plant cost [£/tCO₂]', fontsize=14)
+    ax.set_xlabel('Sector', fontsize=14)
+    ax.tick_params(labelsize=12)
+    ax.axhline(0, color='grey', linestyle='--', linewidth=1, alpha=0.7)
+    
+    plt.tight_layout()
+    plt.savefig(f'{results_dir}/plant_costs_by_sector.png', dpi=450, bbox_inches='tight')
+    
+    if debug:
+        print(f"Plot saved to {results_dir}/plant_costs_by_sector.png")
+    
+    return fig
+
 def plot_macc_curves(results_dir='results', pounds_to_EUR=1.15, debug=False):
     """
     Plot Marginal Abatement Cost Curves (MACC) for each scenario.
@@ -1249,6 +1341,7 @@ if __name__ == "__main__":
     # plot_plant_npv_csu_bubbles(debug=True, exclude_sectors=['drax'], ETS_filter=['£0']) # 'drax' 16100 M£ when DEFOSSILIZE=FALSE and 21000 when TRUE
     plot_plant_npv_csu_bubbles(debug=True, exclude_sectors=['drax'], ETS_filter=['£100', '£200', '£300'])
     # plot_plant_npv_ets_bubbles(debug=True, exclude_sectors=[])
+    plot_plant_costs_by_sector(debug=True)
     
     # plot_policy_npv_boxplots(debug=True)
     plot_macc_curves(debug=True)
