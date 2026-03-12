@@ -65,8 +65,8 @@ if __name__ == "__main__":
 
     # Levers: policy choices we can control
     model.levers = [
-        CategoricalParameter("ETS_SCENARIO", ['£0', '£100', '£200', '£300']),
-        RealParameter("DIFFUSE_END_FRACTION", 0.05, 0.40),
+        CategoricalParameter("ETS_SCENARIO", ['£0-CTBO only', '£100-Mix', '£200-Mix', '£300-Mix', '£400-ETS only']),
+        RealParameter("DIFFUSE_END_FRACTION", 0.05, 0.50),
     ]
 
     # Outcomes: metrics to track
@@ -121,8 +121,9 @@ if __name__ == "__main__":
         Constant("plants_clean", plants_clean),
         Constant("transport_hubs", transport_hubs),
         Constant("single_run", False),
-        Constant("PHASEOUT", False),
+        Constant("PHASEOUT", True),
         Constant("ASSUME_FOAK", False),
+        Constant("DACCS_MAX_ANNUAL", 8800), # [ktCO2/y] maximum DACCS capacity that can be added per year before 2050
         Constant("CTBO_QUADRATIC", 0.4),
         Constant("DISCOUNT_RATE", 0.035),
         Constant("FOAK_CALIBRATION", 1.6379),
@@ -134,7 +135,7 @@ if __name__ == "__main__":
     ]
 
     # Run experiments
-    n_scenarios = 50
+    n_scenarios = 20
     n_policies = 20
     
     results = perform_experiments(
@@ -174,3 +175,15 @@ if __name__ == "__main__":
     print(f"Experiments + scalar outcomes saved to: results/experiments.csv")
     print(f"Array outcomes saved to: results/outcomes_*.npy")
     print(f"Plant reference saved to: results/plant_reference.csv")
+
+    print("\n===> I DON'T THINK THIS MODEL CAN REPRESENT A FULL-ECONOMY ETS SCENARIO <===")
+    print("Even though I promised to. This is because I can't make reasonable assumptions on how DACCS, BECCS etc is deployed to abate diffuse emissions")
+    print("The distincion between POINT and DIFFUSE allows for a rising CTBO fraction to determine the PACE of storage deployment")
+    print("However, I am not modelling a DECLINING CAP for ETS and diffuse emitters, which otherwise would determine the PACE of storage deployment")
+    print("Maybe: the model is for GEOLOGICAL NZ, while other models are for economy-wide ATMOSPHERIC NZ?")
+    print("Short explanation: the model is not set up to deal with (fully abate) diffuse emissions under a rising ETS price")
+    print("So any assumptions I make on how DACCS, BECCS etc. is deployed under the ETS-only scenario did not feel credible")
+    print("The model is however set up to deal with (fully abate) diffuse emissions under a rising CTBO fraction")
+    print("A possible workaround: just run a £500-Mix scenario, where DACCS constrains the price? NO! This is not representative of the cap-and-trade marginal logic, which has lower costs early on!")
+
+

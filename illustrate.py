@@ -387,30 +387,34 @@ def plot_prices_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=False):
         p95 = np.percentile(arr, 95, axis=0)
         return median, p5, p95
     
-    scenarios = ['£0', '£100', '£200', '£300']
+    groups = [
+        ('CTBO only', ['£0-CTBO only']),
+        ('Mix (£100-£300)', ['£100-Mix', '£200-Mix', '£300-Mix']),
+        ('ETS only', ['£400-ETS only']),
+    ]
     magma = plt.cm.magma
-    colors = [magma(0.00), magma(0.30), magma(0.60), magma(0.90)]
+    colors = [magma(0.00), magma(0.45), magma(0.85)]
     
     fig, ax = plt.subplots(figsize=(7, 5.5))
     
-    for scenario, color in zip(scenarios, colors):
-        mask = experiments['ETS_SCENARIO'] == scenario
+    for (label, scenario_list), color in zip(groups, colors):
+        mask = experiments['ETS_SCENARIO'].isin(scenario_list)
         csu_data = price_CSU[mask]
         ets_data = price_ETS[mask]
         
         if len(csu_data) == 0:
             if debug:
-                print(f"No data for ETS_SCENARIO={scenario}")
+                print(f"No data for {label}")
             continue
         
         # Price CSU with uncertainty
         med, p5, p95 = get_stats(csu_data)
-        ax.plot(years, med, color=color, linewidth=2.5, label=f'CSU price')
+        ax.plot(years, med, color=color, linewidth=2.5, label=f'CSU price ({label})')
         ax.fill_between(years, p5, p95, color=color, alpha=0.25)
         
         # Price ETS median only (dashed line)
         ets_med = np.median(ets_data, axis=0)
-        ax.plot(years, ets_med, color=color, linewidth=2, linestyle='--', alpha=0.8, label=f'ETS {scenario}')
+        ax.plot(years, ets_med, color=color, linewidth=2, linestyle='--', alpha=0.8, label=f'ETS ({label})')
     
     # Formatting
     ax.axhline(0, color='grey', linestyle='--', linewidth=1, alpha=0.7)
@@ -803,7 +807,11 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, debug=Fa
         print(f"Loaded {len(outcomes)} experiments")
         print(f"Columns: {outcomes.columns.tolist()}")
     
-    scenarios = ['£0', '£100', '£200', '£300']
+    groups = [
+        ('CTBO only', ['£0-CTBO only']),
+        ('Mix (£100-£300)', ['£100-Mix', '£200-Mix', '£300-Mix']),
+        ('ETS only', ['£400-ETS only']),
+    ]
 
     # Labels and styling (reversed so first item appears at top in horizontal boxplot)
     npv_labels = ['Policy cost (CfD eq., +10% cost)', 'Policy cost (CTBO)', 'Fuel supplier costs (CTBO)', 'Emitter and T&S profits (CTBO)'][::-1]
@@ -812,12 +820,12 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, debug=Fa
     box_colors = [green, green, green, green][::-1]
     box_alphas = [1, 1, 0.4, 0.4][::-1]
     
-    # First pass: calculate data for all scenarios and find global min/max
-    scenario_data = {}
+    # First pass: calculate data for all groups and find global min/max
+    group_data = {}
     global_min, global_max = float('inf'), float('-inf')
     
-    for scenario in scenarios:
-        mask = outcomes['ETS_SCENARIO'] == scenario
+    for label, scenario_list in groups:
+        mask = outcomes['ETS_SCENARIO'].isin(scenario_list)
         data = outcomes[mask]
         
         if len(data) == 0:
@@ -829,7 +837,7 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, debug=Fa
             (data['NPV_cost_CTBO']+data['NPV_profit_CTBO']) / 1e6 / pounds_to_EUR,
             data['NPV_profit_CTBO'] / 1e6 / pounds_to_EUR,
         ]
-        scenario_data[scenario] = npv_data
+        group_data[label] = npv_data
         
         # Update global min/max
         for arr in npv_data:
@@ -845,13 +853,13 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, debug=Fa
     
     # Second pass: create figures with consistent y-axis
     figs = []
-    for scenario in scenarios:
-        if scenario not in scenario_data:
+    for label, scenario_list in groups:
+        if label not in group_data:
             if debug:
-                print(f"No data for ETS_SCENARIO={scenario}")
+                print(f"No data for {label}")
             continue
         
-        npv_data = scenario_data[scenario][::-1]  # Reverse to match flipped labels/colors
+        npv_data = group_data[label][::-1]  # Reverse to match flipped labels/colors
 
         fig, ax = plt.subplots(figsize=(6.4, 3))
 
@@ -874,10 +882,10 @@ def plot_policy_npv_boxplots(results_dir='results', pounds_to_EUR=1.15, debug=Fa
         ax.tick_params(labelsize=12)
         ax.grid(True, linestyle='--', alpha=0.4, axis='x')
         ax.set_xlim(ylim)
-        # ax.legend(loc='upper right', fontsize=12)
 
         plt.tight_layout()
-        filename = f'{results_dir}/5_policy_npv_boxplots_{scenario.replace("£", "")}.png'
+        safe_label = label.replace(' ', '_').replace('(', '').replace(')', '').replace('£', '').replace('-', '')
+        filename = f'{results_dir}/5_policy_npv_boxplots_{safe_label}.png'
         plt.savefig(filename, dpi=450, bbox_inches='tight')
         
         if debug:
@@ -1114,7 +1122,11 @@ def plot_passthrough_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=Fal
         p95 = np.percentile(arr, 95, axis=0)
         return median, p5, p95
     
-    scenarios = ['£0', '£100', '£200', '£300']
+    groups = [
+        ('CTBO only', ['£0-CTBO only']),
+        ('Mix (£100-£300)', ['£100-Mix', '£200-Mix', '£300-Mix']),
+        ('ETS only', ['£400-ETS only']),
+    ]
     
     # Colors
     magma = plt.cm.magma
@@ -1122,18 +1134,17 @@ def plot_passthrough_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=Fal
     color_ets = 'gray'
     color_total = magma(0.3)
     
-    # Create 2x2 subplot grid
-    fig, axes = plt.subplots(2, 2, figsize=(10, 6), sharex=True, sharey=True)
-    axes = axes.flatten()
+    # Create 1x3 subplot grid
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4), sharex=True, sharey=True)
     
-    for idx, scenario in enumerate(scenarios):
+    for idx, (label, scenario_list) in enumerate(groups):
         ax = axes[idx]
-        mask = experiments['ETS_SCENARIO'] == scenario
+        mask = experiments['ETS_SCENARIO'].isin(scenario_list)
         
         if mask.sum() == 0:
             if debug:
-                print(f"No data for ETS_SCENARIO={scenario}")
-            ax.set_title(f'ETS {scenario} (no data)', fontsize=14)
+                print(f"No data for {label}")
+            ax.set_title(f'{label} (no data)', fontsize=14)
             continue
         
         ctbo_data = CTBO_passthrough[mask]
@@ -1156,7 +1167,7 @@ def plot_passthrough_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=Fal
         ax.fill_between(years, p5, p95, color=color_total, alpha=0.15)
         
         ax.axhline(0, color='grey', linestyle='-', linewidth=0.5, alpha=0.7)
-        ax.set_title(f'ETS {scenario}', fontsize=14)
+        ax.set_title(label, fontsize=14)
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.tick_params(labelsize=11)
         ax.set_xlim(START_YEAR, 2050)
@@ -1195,20 +1206,24 @@ def plot_passthrough_ratio_boxplots(results_dir='results', debug=False):
         print(f"Loaded {len(experiments)} experiments")
         print(f"ETS scenarios: {experiments['ETS_SCENARIO'].unique()}")
     
-    scenarios = ['£0', '£100', '£200', '£300']
+    groups = [
+        ('CTBO only', ['£0-CTBO only']),
+        ('Mix (£100-£300)', ['£100-Mix', '£200-Mix', '£300-Mix']),
+        ('ETS only', ['£400-ETS only']),
+    ]
     
-    # Extract data for each scenario
+    # Extract data for each group
     box_data = []
-    valid_scenarios = []
-    for scenario in scenarios:
-        mask = experiments['ETS_SCENARIO'] == scenario
+    valid_labels = []
+    for label, scenario_list in groups:
+        mask = experiments['ETS_SCENARIO'].isin(scenario_list)
         data = experiments.loc[mask, 'passthrough_ratio'].values
         if len(data) > 0:
             box_data.append(data)
-            valid_scenarios.append(scenario)
+            valid_labels.append(label)
     
     if len(box_data) == 0:
-        print("No valid data for any scenario")
+        print("No valid data for any group")
         return None
     
     # Hard-coded box color
@@ -1220,7 +1235,7 @@ def plot_passthrough_ratio_boxplots(results_dir='results', debug=False):
     
     plt.grid(True, axis='y', linestyle='--', alpha=0.4)
     
-    bp = ax.boxplot(box_data, positions=range(len(valid_scenarios)), patch_artist=True, widths=0.6)
+    bp = ax.boxplot(box_data, positions=range(len(valid_labels)), patch_artist=True, widths=0.6)
     
     # Style the boxes
     for box in bp['boxes']:
@@ -1231,9 +1246,9 @@ def plot_passthrough_ratio_boxplots(results_dir='results', debug=False):
         median.set_linewidth(2)
     
     # Formatting
-    ax.set_xticks(range(len(valid_scenarios)))
-    ax.set_xticklabels(valid_scenarios, fontsize=12)
-    ax.set_xlabel('ETS price scenario', fontsize=14)
+    ax.set_xticks(range(len(valid_labels)))
+    ax.set_xticklabels(valid_labels, fontsize=12)
+    ax.set_xlabel('Policy scenario', fontsize=14)
     ax.set_ylabel('Passthrough ratio (CTBO/ETS)', fontsize=14)
     ax.set_title('Cost passthrough ratio by ETS scenario', fontsize=14)
     ax.tick_params(labelsize=12)
@@ -1273,24 +1288,27 @@ def plot_cfd_inefficiency_vs_passthrough(results_dir='results', debug=False):
     # Calculate ratio
     experiments['passthrough_ratio_cfd'] = experiments['NPV_CfD_passthrough'] / experiments['NPV_CTBO_passthrough']
     
-    scenarios = ['£0', '£100', '£200', '£300']
+    groups = [
+        ('CTBO only', ['£0-CTBO only']),
+        ('Mix (£100-£300)', ['£100-Mix', '£200-Mix', '£300-Mix']),
+        ('ETS only', ['£400-ETS only']),
+    ]
     
     # Colors
     magma = plt.cm.magma
     scatter_color = magma(0.5)
     
-    # Create 2x2 subplot grid
-    fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharex=True, sharey=True)
-    axes = axes.flatten()
+    # Create 1x3 subplot grid
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4.5), sharex=True, sharey=True)
     
-    for idx, scenario in enumerate(scenarios):
+    for idx, (label, scenario_list) in enumerate(groups):
         ax = axes[idx]
-        mask = experiments['ETS_SCENARIO'] == scenario
+        mask = experiments['ETS_SCENARIO'].isin(scenario_list)
         
         if mask.sum() == 0:
             if debug:
-                print(f"No data for ETS_SCENARIO={scenario}")
-            ax.set_title(f'ETS {scenario} (no data)', fontsize=14)
+                print(f"No data for {label}")
+            ax.set_title(f'{label} (no data)', fontsize=14)
             continue
         
         data = experiments[mask]
@@ -1306,7 +1324,7 @@ def plot_cfd_inefficiency_vs_passthrough(results_dir='results', debug=False):
         )
         
         ax.axhline(1, color='grey', linestyle='--', linewidth=1.5, alpha=0.7)
-        ax.set_title(f'ETS {scenario}', fontsize=14)
+        ax.set_title(label, fontsize=14)
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.tick_params(labelsize=11)
     
@@ -1325,25 +1343,27 @@ def plot_cfd_inefficiency_vs_passthrough(results_dir='results', debug=False):
 if __name__ == "__main__":
     
     plot_carbon_trajectories_uncertainty(debug=True)
-    # ETS £0 only
-    plot_gas_increase_boxplots(ets_scenarios=['£0'], suffix='_ets0', debug=True)
-    plot_fuel_increase_boxplots(ets_scenarios=['£0'], suffix='_ets0', debug=True)
-    plot_cost_ctbo_producers_boxplots(ets_scenarios=['£0'], suffix='_ets0', debug=True)
+    # CTBO only
+    plot_gas_increase_boxplots(ets_scenarios=['£0-CTBO only'], suffix='_ctbo_only', debug=True)
+    plot_fuel_increase_boxplots(ets_scenarios=['£0-CTBO only'], suffix='_ctbo_only', debug=True)
+    plot_cost_ctbo_producers_boxplots(ets_scenarios=['£0-CTBO only'], suffix='_ctbo_only', debug=True)
     
-    # ETS £100 or higher
-    plot_gas_increase_boxplots(ets_scenarios=['£100', '£200', '£300'], suffix='_ets100plus', debug=True)
-    plot_fuel_increase_boxplots(ets_scenarios=['£100', '£200', '£300'], suffix='_ets100plus', debug=True)
-    plot_cost_ctbo_producers_boxplots(ets_scenarios=['£100', '£200', '£300'], suffix='_ets100plus', debug=True)
+    # Mix (£100-£300)
+    plot_gas_increase_boxplots(ets_scenarios=['£100-Mix', '£200-Mix', '£300-Mix'], suffix='_mix', debug=True)
+    plot_fuel_increase_boxplots(ets_scenarios=['£100-Mix', '£200-Mix', '£300-Mix'], suffix='_mix', debug=True)
+    plot_cost_ctbo_producers_boxplots(ets_scenarios=['£100-Mix', '£200-Mix', '£300-Mix'], suffix='_mix', debug=True)
+
+    # ETS only
+    plot_gas_increase_boxplots(ets_scenarios=['£400-ETS only'], suffix='_ets_only', debug=True)
+    plot_fuel_increase_boxplots(ets_scenarios=['£400-ETS only'], suffix='_ets_only', debug=True)
+    plot_cost_ctbo_producers_boxplots(ets_scenarios=['£400-ETS only'], suffix='_ets_only', debug=True)
+
     plot_prices_by_ets(debug=True)
 
-    # plot_plant_npv_bubbles(debug=True, ETS_filter=['£0'])
-    plot_plant_npv_bubbles(debug=True, ETS_filter=['£100', '£200', '£300'])
-    # plot_plant_npv_csu_bubbles(debug=True, exclude_sectors=['drax'], ETS_filter=['£0']) # 'drax' 16100 M£ when DEFOSSILIZE=FALSE and 21000 when TRUE
-    plot_plant_npv_csu_bubbles(debug=True, exclude_sectors=['drax'], ETS_filter=['£100', '£200', '£300'])
-    # plot_plant_npv_ets_bubbles(debug=True, exclude_sectors=[])
+    plot_plant_npv_bubbles(debug=True, ETS_filter=['£100-Mix', '£200-Mix', '£300-Mix'])
+    plot_plant_npv_csu_bubbles(debug=True, exclude_sectors=['drax'], ETS_filter=['£100-Mix', '£200-Mix', '£300-Mix'])
     plot_plant_costs_by_sector(debug=True)
     
-    # plot_policy_npv_boxplots(debug=True)
     plot_macc_curves(debug=True)
     plot_passthrough_by_ets(debug=True)
     plot_passthrough_ratio_boxplots(debug=True)

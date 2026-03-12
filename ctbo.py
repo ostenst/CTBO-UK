@@ -447,8 +447,9 @@ def simulate_ctbo(
     CTBO_QUADRATIC = 0.4,
     FOAK_CALIBRATION = 1.6379, # from calibrate_foak.py
     ETS_START = 45, # [£/tCO2]
-    ETS_SCENARIO = '£200', # [£/tCO2] 0, 100, 200, 300
-    DACCS_SCENARIO = '£391', # [£/tCO2] 322, 391, 7th Carbon Budget
+    ETS_SCENARIO = '£400-ETS only', # [£/tCO2] £0-CTBO only, £100-Mix, £200-Mix, £300-Mix, £400-ETS only
+    DACCS_SCENARIO = '£322', # [£/tCO2] 322, 391, 7th Carbon Budget
+    DACCS_MAX_ANNUAL = 8800, # [ktCO2/y] maximum DACCS capacity that can be added per year before 2050
     CfD_INEFFICIENCY = 0.2, # [-]
     
     START_YEAR = 2025,
@@ -667,25 +668,30 @@ def simulate_ctbo(
     )
     diffuse_trajectory = diffuse_ktCO2f * diffuse_fraction
 
-    # Calculate ETS and CTBO policy trajectories
+    # Calculate ETS (capped by DACCS costs) and CTBO policy trajectories
     if DACCS_SCENARIO == '£322':
         cost_DACCS = 322 * pounds_to_EUR
     elif DACCS_SCENARIO == '£391':
         cost_DACCS = 391 * pounds_to_EUR
-    if ETS_SCENARIO == '£0':
+    if ETS_SCENARIO == '£0-CTBO only':
         ETS_START = 0
         ETS_END = 0
-    elif ETS_SCENARIO == '£100':
+    elif ETS_SCENARIO == '£100-Mix':
         ETS_END = 100
-    elif ETS_SCENARIO == '£200':
+    elif ETS_SCENARIO == '£200-Mix':
         ETS_END = 200 
-    elif ETS_SCENARIO == '£300':
+    elif ETS_SCENARIO == '£300-Mix':
         ETS_END = 300 
-    ets_trajectory = np.where(
-        years <= DIFFUSE_END_YEAR,
-        ETS_START + (years - START_YEAR) * ((ETS_END - ETS_START) / (DIFFUSE_END_YEAR - START_YEAR)),
-        ETS_END
-    ) * pounds_to_EUR
+    elif ETS_SCENARIO == '£400-ETS only':
+        ETS_END = 400 
+    ets_trajectory = np.minimum(
+        np.where(
+            years <= DIFFUSE_END_YEAR,
+            ETS_START + (years - START_YEAR) * ((ETS_END - ETS_START) / (DIFFUSE_END_YEAR - START_YEAR)),
+            ETS_END
+        ) * pounds_to_EUR,
+        cost_DACCS
+    )
     ctbo_trajectory = ((years - START_YEAR) * CTBO_QUADRATIC)**2 / 100
 
     # Initialize results arrays for carbon (f=fuels, cem=cement, pl=plastic, g=f+cem+pl, b=biomass)
@@ -721,6 +727,7 @@ def simulate_ctbo(
     year_DACCS_marginal = None
 
     # Simulate the CTBO
+    ctbo_active = (ETS_SCENARIO != '£400-ETS only')
     stored_ktCO2daccs = 0
     cost_marginal = 0
     cost_CTBO_producers = 0
@@ -729,8 +736,11 @@ def simulate_ctbo(
     for i, year in enumerate(years):
 
         diffuse_supply = diffuse_trajectory[i]
-        ets_price = ets_trajectory[i] # NOTE: It could here be possible to re-shuffle the MAC each year based on ETS-priced extra fuel
         ctbo_fraction = ctbo_trajectory[i]
+        if year_DACCS_marginal is None:
+            ets_price = ets_trajectory[i] 
+        else:
+            ets_price = ets_trajectory[year_DACCS_marginal - min(years)] # Stabilize ETS prices if DACCS is marginal
 
         # Plants invest voluntarily if ETS price > MAC (adjusted by any increased fossil costs)
         for idx, plant in MACC.iterrows():
@@ -744,6 +754,8 @@ def simulate_ctbo(
                 if plant['MAC']+costs_extra < ets_price:
                     MACC.loc[idx, 'invested'] = True
                     MACC.loc[idx, 'year_invest'] = year
+        
+        # The CTBO only forces investments if the ETS<400£ by 2050... include condition!
 
         # Base the CTBO mandate on coal, oil, and gas supply (ktCO2f)
         pointsource_supply = MACC['ktCO2f'].sum() + MACC['ktCO2f_inc'].where(MACC['invested'], 0).sum()
@@ -752,47 +764,69 @@ def simulate_ctbo(
         pointsource_emissions = MACC['ktCO2f'].where(~MACC['invested'], 0).sum() + MACC['ktCO2f_res'].where(MACC['invested'], 0).sum()
         emitted_ktCO2f = pointsource_emissions + diffuse_supply
 
-        # Mandate CTBO compliance for which any CO2 type can be stored
-        ctbo_mandate = supply_ktCO2f * ctbo_fraction
         stored_ktCO2f = MACC['ktCO2f_ccs'].where(MACC['invested'], 0).sum()
         stored_ktCO2cem = MACC['ktCO2cem_ccs'].where(MACC['invested'], 0).sum()
         stored_ktCO2pl = MACC['ktCO2pl_ccs'].where(MACC['invested'], 0).sum()
         stored_ktCO2b = MACC['ktCO2b_ccs'].where(MACC['invested'], 0).sum()
 
-        stored_missing = ctbo_mandate - (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs)
+        if ctbo_active:
+            # Mandate CTBO compliance for which any CO2 type can be stored
+            ctbo_mandate = supply_ktCO2f * ctbo_fraction
+            stored_missing = ctbo_mandate - (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs)
 
-        j = 0
-        while stored_missing > 0 and j < len(MACC):
-            plant = MACC.iloc[j]
-            if not plant['invested']:
-                # Consider this plant for the CTBO if it's chepar than DACCS (ignoring extra ETS costs)
-                if plant['MAC'] > cost_DACCS:
-                    break
-                MACC.loc[MACC.index[j], 'invested'] = True
-                MACC.loc[MACC.index[j], 'year_invest'] = year
-                stored_ktCO2f += plant['ktCO2f_ccs']
-                stored_ktCO2cem += plant['ktCO2cem_ccs']
-                stored_ktCO2pl += plant['ktCO2pl_ccs']
-                stored_ktCO2b += plant['ktCO2b_ccs']
-                stored_missing = ctbo_mandate - (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs)
-            j += 1
-        
-        # Calculate costs
-        plants_invested = MACC[MACC['invested']]
-        if len(plants_invested) > 0:
-            plant_marginal = plants_invested.loc[plants_invested['MAC'].idxmax()]
-            cost_marginal = plant_marginal['MAC']
+            j = 0
+            while stored_missing > 0 and j < len(MACC):
+                plant = MACC.iloc[j]
+                if not plant['invested']:
+                    # Consider this plant for the CTBO if it's chepar than DACCS (ignoring extra ETS costs)
+                    if plant['MAC'] > cost_DACCS:
+                        break
+                    MACC.loc[MACC.index[j], 'invested'] = True
+                    MACC.loc[MACC.index[j], 'year_invest'] = year
+                    stored_ktCO2f += plant['ktCO2f_ccs']
+                    stored_ktCO2cem += plant['ktCO2cem_ccs']
+                    stored_ktCO2pl += plant['ktCO2pl_ccs']
+                    stored_ktCO2b += plant['ktCO2b_ccs']
+                    stored_missing = ctbo_mandate - (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs)
+                j += 1
+            
+            # Calculate costs
+            plants_invested = MACC[MACC['invested']]
+            if len(plants_invested) > 0:
+                plant_marginal = plants_invested.loc[plants_invested['MAC'].idxmax()]
+                cost_marginal = plant_marginal['MAC']
 
-        if stored_missing > 0 or year_DACCS_marginal is not None:
-            if stored_missing > 0:
-                stored_ktCO2daccs += stored_missing
-            cost_marginal = cost_DACCS
-            if year_DACCS_marginal is None:
-                year_DACCS_marginal = year
+            if stored_missing > 0 or year_DACCS_marginal is not None:
+                if stored_missing > 0:
+                    stored_ktCO2daccs += stored_missing
+                cost_marginal = cost_DACCS
+                if year_DACCS_marginal is None:
+                    year_DACCS_marginal = year
 
-        cost_CSU = max(0, cost_marginal - ets_price) # [€/tCO2]
-        cost_CTBO_producers = cost_CSU * (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) # [k€/y] 
-        cost_CSU_embedded = cost_CTBO_producers / supply_ktCO2f # [€/tCO2]
+            cost_CSU = max(0, cost_marginal - ets_price) # [€/tCO2]
+            cost_CTBO_producers = cost_CSU * (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) # [k€/y] 
+            cost_CSU_embedded = cost_CTBO_producers / supply_ktCO2f # [€/tCO2]
+
+        else:
+            # ETS-only: no CTBO mandate, no CSU costs
+            ctbo_mandate = 0
+            plants_invested = MACC[MACC['invested']]
+            if len(plants_invested) > 0:
+                plant_marginal = plants_invested.loc[plants_invested['MAC'].idxmax()]
+                cost_marginal = plant_marginal['MAC']
+
+            # DACCS invest to balance remaining fossil FUEL emissions if ETS price > DACCS cost
+            if ets_price >= cost_DACCS:
+                target_ktCO2f = emitted_ktCO2f - (stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b)
+                daccs_cap = target_ktCO2f if year >= 2050 else stored_ktCO2daccs + DACCS_MAX_ANNUAL # If before 2050, limit added DACCS capacity, otherwise unlimited additions
+                stored_ktCO2daccs = min(daccs_cap, target_ktCO2f)
+                cost_marginal = cost_DACCS
+                if year_DACCS_marginal is None:
+                    year_DACCS_marginal = year
+
+            cost_CSU = 0
+            cost_CTBO_producers = 0
+            cost_CSU_embedded = 0
 
         # Calculate the gas price increase and store interim results
         gas_increase_abs = cost_CSU_embedded * emission_factor_gas # [€/MWh]
@@ -803,7 +837,7 @@ def simulate_ctbo(
         petrol_increase_abs = cost_CSU_embedded * (emission_factor_petrol/1000) # [€/L]
         diesel_increase_abs = cost_CSU_embedded * (emission_factor_diesel/1000) # [€/L]
         kerosene_increase_abs = cost_CSU_embedded * (emission_factor_kerosene/1000) # [€/L]
-        
+
         _supply_ktCO2f.append(supply_ktCO2f)
         _emitted_ktCO2f.append(emitted_ktCO2f)
         _mandate_ktCO2.append(ctbo_mandate)
@@ -1535,5 +1569,5 @@ if __name__ == "__main__":
     results = simulate_ctbo(plants_clean, transport_hubs, single_run=True)
 
     results['plants_investment_year'] = [str(year) for year in results['plants_investment_year']] #Convert from np.float to string
-    print(f"\nThe stacks that have invested are (alphabetically ordered): {results['plants_stack']}")
-    print(f"\nThe investment years are (alphabetically ordered): {results['plants_investment_year']}")
+    # print(f"\nThe stacks that have invested are (alphabetically ordered): {results['plants_stack']}")
+    # print(f"\nThe investment years are (alphabetically ordered): {results['plants_investment_year']}")
