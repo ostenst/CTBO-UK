@@ -84,6 +84,97 @@ def plot_carbon_trajectories_uncertainty(results_dir='results', pounds_to_EUR=1.
     
     return fig
 
+def compare_carbon_trajectories(results_dir='results', debug=False):
+    """
+    Plot carbon trajectories in 5 side-by-side panels (one per ETS scenario),
+    with shared axes. Shows supply, fossil CCS, BECCS, DACCS, and total storage.
+    """
+    if debug:
+        print(f"Loading data from {results_dir}")
+
+    experiments = pd.read_csv(f'{results_dir}/experiments.csv')
+    supply_ktCO2f = np.load(f'{results_dir}/outcomes_supply_ktCO2f.npy')
+    stored_ktCO2g = np.load(f'{results_dir}/outcomes_stored_ktCO2g.npy')
+    stored_ktCO2b = np.load(f'{results_dir}/outcomes_stored_ktCO2b.npy')
+    stored_ktCO2daccs = np.load(f'{results_dir}/outcomes_stored_ktCO2daccs.npy')
+    stored_total = stored_ktCO2g + stored_ktCO2b + stored_ktCO2daccs
+
+    START_YEAR = 2025
+    PLOT_END = 2050
+    n_years = PLOT_END - START_YEAR + 1
+    years = np.arange(START_YEAR, PLOT_END + 1)
+    scale = 1000
+
+    groups = [
+        ('CTBO only (ETS2050=£0)', ['£0-CTBO only']),
+        ('Mix (ETS2050=£100)', ['£100-Mix']),
+        ('Mix (ETS2050=£200)', ['£200-Mix']),
+        ('Mix (ETS2050=£300)', ['£300-Mix']),
+        ('ETS only (ETS2050=£400)', ['£400-ETS only']),
+    ]
+
+    magma = plt.cm.magma
+    supply_color = magma(0.0)
+    bio_color = '#62a7a6'
+    daccs_color = magma(0.8)
+    total_color = magma(0.4)
+
+    def get_stats(arr):
+        median = np.median(arr, axis=0)
+        p5 = np.percentile(arr, 5, axis=0)
+        p95 = np.percentile(arr, 95, axis=0)
+        return median, p5, p95
+
+    fig, axes = plt.subplots(1, 5, figsize=(14, 6), sharex=True, sharey=True,
+                             gridspec_kw={'wspace': 0.20})
+
+    for idx, (label, scenario_list) in enumerate(groups):
+        ax = axes[idx]
+        mask = experiments['ETS_SCENARIO'].isin(scenario_list)
+
+        if mask.sum() == 0:
+            ax.set_title(f'{label} (no data)', fontsize=13)
+            continue
+
+        sup = supply_ktCO2f[mask][:, :n_years]
+        bio = stored_ktCO2b[mask][:, :n_years]
+        daccs = stored_ktCO2daccs[mask][:, :n_years]
+        tot = stored_total[mask][:, :n_years]
+
+        med, p5, p95 = get_stats(sup)
+        ax.plot(years, med / scale, color=supply_color, linewidth=2, label='Fossil fuel supply')
+        ax.fill_between(years, p5 / scale, p95 / scale, color=supply_color, alpha=0.25)
+
+        med, p5, p95 = get_stats(bio)
+        ax.plot(years, med / scale, color=bio_color, linewidth=2, label='BECCS')
+        ax.fill_between(years, p5 / scale, p95 / scale, color=bio_color, alpha=0.35)
+
+        med, p5, p95 = get_stats(daccs)
+        ax.plot(years, med / scale, color=daccs_color, linewidth=2, label='DACCS')
+        ax.fill_between(years, p5 / scale, p95 / scale, color=daccs_color, alpha=0.35)
+
+        med, p5, p95 = get_stats(tot)
+        ax.plot(years, med / scale, color=total_color, linewidth=2, linestyle='--', label='Total storage')
+        ax.fill_between(years, p5 / scale, p95 / scale, color=total_color, alpha=0.20)
+
+        ax.set_title(label, fontsize=13)
+        ax.grid(True, linestyle='--', alpha=0.4)
+        ax.tick_params(labelsize=11)
+        ax.set_xlim(START_YEAR, PLOT_END)
+
+    axes[0].set_ylabel('Carbon [MtCO₂/year]', fontsize=13)
+
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='upper right', fontsize=11, bbox_to_anchor=(0.98, 0.85))
+
+    fig.subplots_adjust(left=0.04, right=0.97, wspace=0.05)
+    plt.savefig(f'{results_dir}/1_compare_carbon_trajectories.png', dpi=450, bbox_inches='tight')
+
+    if debug:
+        print(f"Plot saved to {results_dir}/1_compare_carbon_trajectories.png")
+
+    return fig
+
 def plot_gas_increase_boxplots(results_dir='results', pounds_to_EUR=1.15, ets_scenarios=None, suffix='', debug=False):
     """
     Plot gas_increase_abs as box plots for years 2030, 2035, 2040, 2045, 2050.
@@ -389,11 +480,14 @@ def plot_prices_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=False):
     
     groups = [
         ('CTBO only', ['£0-CTBO only']),
-        ('Mix (£100-£300)', ['£100-Mix', '£200-Mix', '£300-Mix']),
-        ('ETS only', ['£400-ETS only']),
+        ('Mix £100', ['£100-Mix']),
+        ('Mix £200', ['£200-Mix']),
+        ('Mix £300', ['£300-Mix']),
+        ('ETS only £400', ['£400-ETS only']),
     ]
     magma = plt.cm.magma
-    colors = [magma(0.00), magma(0.45), magma(0.85)]
+    green = '#62a7a6'
+    colors = [magma(0.05), magma(0.35), magma(0.65), magma(0.95), green]
     
     fig, ax = plt.subplots(figsize=(7, 5.5))
     
@@ -409,19 +503,19 @@ def plot_prices_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=False):
         
         # Price CSU with uncertainty
         med, p5, p95 = get_stats(csu_data)
-        ax.plot(years, med, color=color, linewidth=2.5, label=f'CSU price ({label})')
+        ax.plot(years, med, color=color, linewidth=2.5, label=f'CSU price range ({label})')
         ax.fill_between(years, p5, p95, color=color, alpha=0.25)
         
         # Price ETS median only (dashed line)
         ets_med = np.median(ets_data, axis=0)
-        ax.plot(years, ets_med, color=color, linewidth=2, linestyle='--', alpha=0.8, label=f'ETS ({label})')
+        ax.plot(years, ets_med, color=color, linewidth=2, linestyle='--', alpha=0.8, label=f'ETS median price ({label})')
     
     # Formatting
-    ax.axhline(0, color='grey', linestyle='--', linewidth=1, alpha=0.7)
+    ax.axhline(0, color='black', linestyle='--', linewidth=2, alpha=0.8)
     # ax.set_xlabel('Year', fontsize=14)
     ax.set_ylabel('Price [£/tCO₂]', fontsize=14)
     # # ax.set_title('CSU Price (solid) and ETS Price (dashed) by Scenario', fontsize=16)
-    ax.legend(fontsize=12, loc='best')
+    ax.legend(fontsize=10, loc='best')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
     ax.set_xlim(START_YEAR, 2050)
@@ -547,6 +641,113 @@ def plot_plant_npv_tot_bubbles(results_dir='results', ETS_filter=None, pounds_to
     if debug:
         print(f"Plot saved to {results_dir}/plant_npv_total_bubbles.png")
     
+    return fig
+
+def compare_npv_tot(results_dir='results', pounds_to_EUR=1.15, debug=False):
+    """
+    Plot plant-level NPV total bubbles in 5 side-by-side panels (one per ETS scenario),
+    with shared axes. x=median investment year, y=median NPV total, size=ktCO2, color=sector.
+    """
+    if debug:
+        print(f"Loading plant data from {results_dir}")
+
+    plant_ref = pd.read_csv(f'{results_dir}/plant_reference.csv')
+    experiments = pd.read_csv(f'{results_dir}/experiments.csv')
+    investment_year = np.load(f'{results_dir}/outcomes_plants_investment_year.npy')
+    npv_total = np.load(f'{results_dir}/outcomes_plants_NPV_total.npy')
+    ktCO2tot_ccs = np.load(f'{results_dir}/outcomes_plants_ktCO2tot_ccs.npy')
+
+    groups = [
+        ('CTBO only (ETS2050=£0)', ['£0-CTBO only']),
+        ('Mix (ETS2050=£100)', ['£100-Mix']),
+        ('Mix (ETS2050=£200)', ['£200-Mix']),
+        ('Mix (ETS2050=£300)', ['£300-Mix']),
+        ('ETS only (ETS2050=£400)', ['£400-ETS only']),
+    ]
+
+    magma = plt.cm.magma
+    sector_colors = {
+        'cement': magma(0.1), 'ccgt': magma(0.3), 'refinery': magma(0.5),
+        'steel': magma(0.7), 'drax': magma(0.9), 'waste': '#62a7a6',
+    }
+    legend_labels = {
+        'cement': 'Cement', 'waste': 'Waste', 'ccgt': 'Gas power',
+        'drax': 'Drax', 'refinery': 'Refinery', 'steel': 'Steel',
+    }
+    size_scale = 0.3
+
+    fig, axes = plt.subplots(1, 5, figsize=(14, 6), sharex=True, sharey=True,
+                             gridspec_kw={'wspace': 0.20})
+
+    for idx, (label, scenario_list) in enumerate(groups):
+        ax = axes[idx]
+        mask = experiments['ETS_SCENARIO'].isin(scenario_list)
+
+        inv_yr = investment_year[mask]
+        npv = npv_total[mask]
+        co2 = ktCO2tot_ccs[mask]
+
+        med_inv = np.nanmedian(inv_yr, axis=0)
+        med_npv = np.nanmedian(npv, axis=0)
+        med_co2 = np.nanmedian(co2, axis=0)
+
+        df = pd.DataFrame({
+            'stack': plant_ref['stack'], 'sector': plant_ref['sector'],
+            'investment_year': med_inv, 'NPV_total': med_npv, 'ktCO2tot_ccs': med_co2,
+        })
+        df_valid = df.dropna(subset=['investment_year', 'NPV_total', 'ktCO2tot_ccs'])
+
+        if df_valid.empty:
+            ax.set_title(f'{label} (no data)', fontsize=13)
+            continue
+
+        outlier_stacks = ['Padeswood-cement', 'Protos-waste', 'Teeside-ccgt']
+        sizes = df_valid['ktCO2tot_ccs'] * size_scale
+        for sector in df_valid['sector'].unique():
+            smask = df_valid['sector'] == sector
+            ax.scatter(
+                df_valid.loc[smask, 'investment_year'],
+                df_valid.loc[smask, 'NPV_total'] / 1000 / pounds_to_EUR,
+                s=sizes[smask],
+                c=[sector_colors.get(sector, 'gray')],
+                alpha=0.7, edgecolors='black', linewidths=0.5,
+            )
+
+        # Overlay white hatches on outlier plants
+        omask = df_valid['stack'].isin(outlier_stacks)
+        if omask.any():
+            ax.scatter(
+                df_valid.loc[omask, 'investment_year'],
+                df_valid.loc[omask, 'NPV_total'] / 1000 / pounds_to_EUR,
+                s=sizes[omask],
+                facecolors='none', edgecolors='black', linewidths=1.5,
+                hatch='///', zorder=5,
+            )
+
+        ax.axhline(0, color='grey', linestyle='--', linewidth=1, alpha=0.7)
+        ax.set_title(label, fontsize=13)
+        ax.grid(True, linestyle='--', alpha=0.4)
+        ax.tick_params(labelsize=11)
+        ax.set_xlim(2025, 2050)
+        ax.set_xticks(np.arange(2025, 2051, 5))
+
+    axes[0].set_ylabel('Median NPV [M£]', fontsize=13)
+
+    # Single legend from all sectors
+    legend_handles = [
+        plt.scatter([], [], s=80, c=[sector_colors[s]], alpha=0.7,
+                    edgecolors='black', linewidths=0.5, label=legend_labels[s])
+        for s in ['cement', 'ccgt', 'refinery', 'steel', 'drax', 'waste']
+        if s in sector_colors
+    ]
+    fig.legend(handles=legend_handles, loc='lower right', fontsize=10)
+
+    fig.subplots_adjust(left=0.04, right=0.97, wspace=0.05)
+    plt.savefig(f'{results_dir}/4_compare_npv_tot.png', dpi=450, bbox_inches='tight')
+
+    if debug:
+        print(f"Plot saved to {results_dir}/4_compare_npv_tot.png")
+
     return fig
 
 def plot_plant_npv_csu_bubbles(results_dir='results', ETS_filter=None, exclude_sectors=None, pounds_to_EUR=1.15, debug=False):
@@ -1126,19 +1327,22 @@ def plot_passthrough_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=Fal
         return median, p5, p95
     
     groups = [
-        ('CTBO only', ['£0-CTBO only']),
-        ('Mix (£100-£300)', ['£100-Mix', '£200-Mix', '£300-Mix']),
-        ('ETS only', ['£400-ETS only']),
+        ('CTBO only (ETS2050=£0)', ['£0-CTBO only']),
+        ('Mix (ETS2050=£100)', ['£100-Mix']),
+        ('Mix (ETS2050=£200)', ['£200-Mix']),
+        ('Mix (ETS2050=£300)', ['£300-Mix']),
+        ('ETS only (ETS2050=£400)', ['£400-ETS only']),
     ]
     
     # Colors
     magma = plt.cm.magma
     color_ctbo = '#62a7a6' # green
-    color_ets = 'gray'
-    color_total = magma(0.3)
+    color_ets = magma(0.8)
+    color_total = magma(0.2)
     
     # Create 1x3 subplot grid
-    fig, axes = plt.subplots(1, 3, figsize=(14, 4), sharex=True, sharey=True)
+    fig, axes = plt.subplots(1, 5, figsize=(16, 6), sharex=True, sharey=True,
+                             gridspec_kw={'wspace': 0.15})
     
     for idx, (label, scenario_list) in enumerate(groups):
         ax = axes[idx]
@@ -1172,7 +1376,7 @@ def plot_passthrough_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=Fal
         
         # Annotate the NPV of total passthrough
         med, p5, p95 = get_stats(NPV_total_data)
-        ax.text(2026, 40, f'Total cost [B£ NPV]={p5:.0f}-{p95:.0f} ({med:.0f} median) ', fontsize=10, color=color_total)
+        ax.text(2028, 40, f'Total cost [B£ NPV]=\n{p5:.0f}-{p95:.0f} ({med:.0f} median) ', fontsize=10, color=color_total)
 
         ax.axhline(0, color='grey', linestyle='-', linewidth=0.5, alpha=0.7)
         ax.set_title(label, fontsize=14)
@@ -1181,14 +1385,16 @@ def plot_passthrough_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=Fal
         ax.set_xlim(START_YEAR, 2050)
     
     # Shared labels
-    fig.text(0.5, 0.02, 'Year', ha='center', fontsize=14)
+    # fig.text(0.5, 0.02, 'Year', ha='center', fontsize=14)
     fig.text(0.02, 0.5, 'Cost passthrough to consumers [B£/yr]', va='center', rotation='vertical', fontsize=14)
     
     # Single legend for all panels
     handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc='upper right', fontsize=12, bbox_to_anchor=(0.98, 0.98))
+    fig.legend(handles, labels, loc='lower right', fontsize=10)
+
     
-    plt.tight_layout(rect=[0.04, 0.04, 0.96, 0.96])
+    # plt.tight_layout()
+    fig.subplots_adjust(left=0.05, right=0.97, wspace=0.05)
     plt.savefig(f'{results_dir}/7_passthrough_by_ets.png', dpi=450, bbox_inches='tight')
     
     if debug:
@@ -1351,6 +1557,7 @@ def plot_cfd_inefficiency_vs_passthrough(results_dir='results', debug=False):
 if __name__ == "__main__":
     
     plot_carbon_trajectories_uncertainty(debug=True)
+    compare_carbon_trajectories(debug=True)
     # # CTBO only
     # plot_gas_increase_boxplots(ets_scenarios=['£0-CTBO only'], suffix='_ctbo_only', debug=True)
     # plot_fuel_increase_boxplots(ets_scenarios=['£0-CTBO only'], suffix='_ctbo_only', debug=True)
@@ -1368,12 +1575,8 @@ if __name__ == "__main__":
 
     plot_prices_by_ets(debug=True)
 
-    plot_plant_npv_tot_bubbles(debug=True, ETS_filter=['£0-CTBO only'])
-    plot_plant_npv_tot_bubbles(debug=True, ETS_filter=['£100-Mix'])
-    plot_plant_npv_tot_bubbles(debug=True, ETS_filter=['£200-Mix'])
-    plot_plant_npv_tot_bubbles(debug=True, ETS_filter=['£300-Mix'])
+    compare_npv_tot(debug=True)
     plot_plant_npv_csu_bubbles(debug=True, exclude_sectors=['drax'], ETS_filter=['£100-Mix', '£200-Mix', '£300-Mix'])
-    plot_plant_npv_ets_bubbles(debug=True, ETS_filter=['£400-ETS only'])
     # plot_plant_costs_by_sector(debug=True)
     
     plot_macc_curves(debug=True)
