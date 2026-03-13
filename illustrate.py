@@ -434,7 +434,7 @@ def plot_prices_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=False):
     
     return fig
 
-def plot_plant_npv_bubbles(results_dir='results', ETS_filter=None, pounds_to_EUR=1.15, debug=False):
+def plot_plant_npv_tot_bubbles(results_dir='results', ETS_filter=None, pounds_to_EUR=1.15, debug=False):
     """
     Plot plant-level NPV bubbles: x=median investment year, y=median NPV total,
     size=median ktCO2tot_ccs, color=sector.
@@ -656,7 +656,7 @@ def plot_plant_npv_csu_bubbles(results_dir='results', ETS_filter=None, exclude_s
     if ETS_filter:
         title += f'\nETS: {", ".join(ETS_filter)}'
     # # ax.set_title(title, fontsize=16)
-    # ax.legend(handles=legend_handles, fontsize=12, title_fontsize=12, loc='best')
+    ax.legend(handles=legend_handles, fontsize=12, title_fontsize=12, loc='best')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
     ax.set_xlim(2025, 2050)
@@ -778,7 +778,7 @@ def plot_plant_npv_ets_bubbles(results_dir='results', ETS_filter=None, exclude_s
     if ETS_filter:
         title += f'\nETS: {", ".join(ETS_filter)}'
     # # ax.set_title(title, fontsize=16)
-    # ax.legend(handles=legend_handles, fontsize=12, title_fontsize=12, loc='best')
+    ax.legend(handles=legend_handles, fontsize=12, title_fontsize=12, loc='best')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(labelsize=12)
     ax.set_xlim(2025, 2050)
@@ -1103,18 +1103,21 @@ def plot_passthrough_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=Fal
     
     # Load experiments and passthrough data
     experiments = pd.read_csv(f'{results_dir}/experiments.csv')
-    CTBO_passthrough = np.load(f'{results_dir}/outcomes_CTBO_passthrough.npy') / 1e6 / pounds_to_EUR  # k€→B£
-    ETS_passthrough = np.load(f'{results_dir}/outcomes_ETS_passthrough.npy') / 1e6 / pounds_to_EUR  # k€→B£
-    total_passthrough = np.load(f'{results_dir}/outcomes_total_passthrough.npy') / 1e6 / pounds_to_EUR  # k€→B£
+    START_YEAR = 2025
+    PLOT_END = 2050
+    n_years = PLOT_END - START_YEAR + 1
+
+    CTBO_passthrough = np.load(f'{results_dir}/outcomes_CTBO_passthrough.npy')[:, :n_years] / 1e6 / pounds_to_EUR  # k€→B£
+    ETS_passthrough = np.load(f'{results_dir}/outcomes_ETS_passthrough.npy')[:, :n_years] / 1e6 / pounds_to_EUR  # k€→B£
+    total_passthrough = np.load(f'{results_dir}/outcomes_total_passthrough.npy')[:, :n_years] / 1e6 / pounds_to_EUR  # k€→B£
+
+    NPV_total_passthrough = experiments['NPV_total_passthrough'].values / 1e6 / pounds_to_EUR  # k€→B£
     
     if debug:
         print(f"Shape of passthrough arrays: {CTBO_passthrough.shape}")
         print(f"ETS scenarios: {experiments['ETS_SCENARIO'].unique()}")
     
-    # Years array
-    START_YEAR = 2025
-    END_YEAR = 2055
-    years = np.arange(START_YEAR, END_YEAR + 1)
+    years = np.arange(START_YEAR, PLOT_END + 1)
     
     def get_stats(arr):
         median = np.median(arr, axis=0)
@@ -1150,6 +1153,7 @@ def plot_passthrough_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=Fal
         ctbo_data = CTBO_passthrough[mask]
         ets_data = ETS_passthrough[mask]
         total_data = total_passthrough[mask]
+        NPV_total_data = NPV_total_passthrough[mask]
         
         # CTBO passthrough
         med, p5, p95 = get_stats(ctbo_data)
@@ -1166,6 +1170,10 @@ def plot_passthrough_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=Fal
         ax.plot(years, med, color=color_total, linewidth=2, linestyle='--', label='Total costs')
         ax.fill_between(years, p5, p95, color=color_total, alpha=0.15)
         
+        # Annotate the NPV of total passthrough
+        med, p5, p95 = get_stats(NPV_total_data)
+        ax.text(2026, 40, f'Total cost [B£ NPV]={p5:.0f}-{p95:.0f} ({med:.0f} median) ', fontsize=10, color=color_total)
+
         ax.axhline(0, color='grey', linestyle='-', linewidth=0.5, alpha=0.7)
         ax.set_title(label, fontsize=14)
         ax.grid(True, linestyle='--', alpha=0.4)
@@ -1343,30 +1351,34 @@ def plot_cfd_inefficiency_vs_passthrough(results_dir='results', debug=False):
 if __name__ == "__main__":
     
     plot_carbon_trajectories_uncertainty(debug=True)
-    # CTBO only
-    plot_gas_increase_boxplots(ets_scenarios=['£0-CTBO only'], suffix='_ctbo_only', debug=True)
-    plot_fuel_increase_boxplots(ets_scenarios=['£0-CTBO only'], suffix='_ctbo_only', debug=True)
-    plot_cost_ctbo_producers_boxplots(ets_scenarios=['£0-CTBO only'], suffix='_ctbo_only', debug=True)
+    # # CTBO only
+    # plot_gas_increase_boxplots(ets_scenarios=['£0-CTBO only'], suffix='_ctbo_only', debug=True)
+    # plot_fuel_increase_boxplots(ets_scenarios=['£0-CTBO only'], suffix='_ctbo_only', debug=True)
+    # plot_cost_ctbo_producers_boxplots(ets_scenarios=['£0-CTBO only'], suffix='_ctbo_only', debug=True)
     
-    # Mix (£100-£300)
-    plot_gas_increase_boxplots(ets_scenarios=['£100-Mix', '£200-Mix', '£300-Mix'], suffix='_mix', debug=True)
-    plot_fuel_increase_boxplots(ets_scenarios=['£100-Mix', '£200-Mix', '£300-Mix'], suffix='_mix', debug=True)
-    plot_cost_ctbo_producers_boxplots(ets_scenarios=['£100-Mix', '£200-Mix', '£300-Mix'], suffix='_mix', debug=True)
+    # # Mix (£100-£300)
+    # plot_gas_increase_boxplots(ets_scenarios=['£100-Mix', '£200-Mix', '£300-Mix'], suffix='_mix', debug=True)
+    # plot_fuel_increase_boxplots(ets_scenarios=['£100-Mix', '£200-Mix', '£300-Mix'], suffix='_mix', debug=True)
+    # plot_cost_ctbo_producers_boxplots(ets_scenarios=['£100-Mix', '£200-Mix', '£300-Mix'], suffix='_mix', debug=True)
 
-    # ETS only
-    plot_gas_increase_boxplots(ets_scenarios=['£400-ETS only'], suffix='_ets_only', debug=True)
-    plot_fuel_increase_boxplots(ets_scenarios=['£400-ETS only'], suffix='_ets_only', debug=True)
-    plot_cost_ctbo_producers_boxplots(ets_scenarios=['£400-ETS only'], suffix='_ets_only', debug=True)
+    # # ETS only
+    # plot_gas_increase_boxplots(ets_scenarios=['£400-ETS only'], suffix='_ets_only', debug=True)
+    # plot_fuel_increase_boxplots(ets_scenarios=['£400-ETS only'], suffix='_ets_only', debug=True)
+    # plot_cost_ctbo_producers_boxplots(ets_scenarios=['£400-ETS only'], suffix='_ets_only', debug=True)
 
     plot_prices_by_ets(debug=True)
 
-    plot_plant_npv_bubbles(debug=True, ETS_filter=['£100-Mix', '£200-Mix', '£300-Mix'])
+    plot_plant_npv_tot_bubbles(debug=True, ETS_filter=['£0-CTBO only'])
+    plot_plant_npv_tot_bubbles(debug=True, ETS_filter=['£100-Mix'])
+    plot_plant_npv_tot_bubbles(debug=True, ETS_filter=['£200-Mix'])
+    plot_plant_npv_tot_bubbles(debug=True, ETS_filter=['£300-Mix'])
     plot_plant_npv_csu_bubbles(debug=True, exclude_sectors=['drax'], ETS_filter=['£100-Mix', '£200-Mix', '£300-Mix'])
-    plot_plant_costs_by_sector(debug=True)
+    plot_plant_npv_ets_bubbles(debug=True, ETS_filter=['£400-ETS only'])
+    # plot_plant_costs_by_sector(debug=True)
     
     plot_macc_curves(debug=True)
     plot_passthrough_by_ets(debug=True)
     plot_passthrough_ratio_boxplots(debug=True)
-    plot_cfd_inefficiency_vs_passthrough(debug=True)
+    # plot_cfd_inefficiency_vs_passthrough(debug=True)
 
     plt.show()

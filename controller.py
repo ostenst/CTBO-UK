@@ -121,7 +121,7 @@ if __name__ == "__main__":
         Constant("plants_clean", plants_clean),
         Constant("transport_hubs", transport_hubs),
         Constant("single_run", False),
-        Constant("PHASEOUT", True),
+        Constant("PHASEOUT", False),
         Constant("ASSUME_FOAK", False),
         Constant("DACCS_MAX_ANNUAL", 8800), # [ktCO2/y] maximum DACCS capacity that can be added per year before 2050
         Constant("CTBO_QUADRATIC", 0.4),
@@ -132,10 +132,11 @@ if __name__ == "__main__":
         Constant("END_YEAR", 2055),
         Constant("DIFFUSE_END_YEAR", 2050),
         Constant("pounds_to_EUR", 1.15),
+        Constant("CONSTRUCTION_YEARS", 3),
     ]
 
     # Run experiments
-    n_scenarios = 20
+    n_scenarios = 10
     n_policies = 20
     
     results = perform_experiments(

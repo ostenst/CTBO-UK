@@ -203,6 +203,28 @@ def _stack_capacity(row):
     return capacity_map.get(row['site'].strip(), np.nan)
 stacks_clean['ccgt_capacity'] = stacks_clean.apply(_stack_capacity, axis=1)
 
+# Add new-build outlier plants (Protos waste incinerator and Teeside CCGT)
+protos_lat, protos_lon = 53.28, -2.82
+hub, km_hub, land_transport, sea_transport = assign_hub(protos_lat, protos_lon, transport_hubs)
+stacks_clean.loc[len(stacks_clean)] = {
+    'sector': 'waste', 'site': 'Protos', 'stack': 'Protos-waste',
+    'ktCO2': 370, 'xCO2': 0.12, 'energy_strategy': 'Waste-HCN',
+    'latitude': protos_lat, 'longitude': protos_lon,
+    'hub': hub, 'km_hub': km_hub, 'land_transport': land_transport,
+    'sea_transport': sea_transport, 'ccgt_capacity': np.nan,
+}
+
+teeside_lat, teeside_lon = 54.60, -1.13
+hub, km_hub, land_transport, sea_transport = assign_hub(teeside_lat, teeside_lon, transport_hubs)
+teeside_ktCO2 = 2000 / 0.90 # Assumed 90% capture rate and 2Mt is captured annually
+stacks_clean.loc[len(stacks_clean)] = {
+    'sector': 'ccgt', 'site': 'Teeside', 'stack': 'Teeside-ccgt',
+    'ktCO2': teeside_ktCO2, 'xCO2': 0.04, 'energy_strategy': 'LP steam',
+    'latitude': teeside_lat, 'longitude': teeside_lon,
+    'hub': hub, 'km_hub': km_hub, 'land_transport': land_transport,
+    'sea_transport': sea_transport, 'ccgt_capacity': 742.0,
+}
+
 # Print CO2 emissions and plants with km_hub>200km
 total_ktCO2 = stacks_clean['ktCO2'].sum()
 print("Total CO2 emissions from all cleaned stacks: ", total_ktCO2," ... Below are stacks with emissions above 800 ktCO2:")

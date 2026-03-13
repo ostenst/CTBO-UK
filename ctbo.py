@@ -363,77 +363,25 @@ def offshore_OPEX(stack, transport_hubs, x):
     cost = UC * distance # [€/tCO2]
     return cost * (1 + x['transport_uncertainty']) + x['cstorage']
 
-def adjust_outliers(MACC, capture_rate, x):
+def subsidize_outliers(MACC, outliers, debug=False):
     """
-    Adjust MACC for outliers:
-    1. Set Padeswood-cement MAC to 0 (subsidized)
-    2. Add new-build waste incinerator with CCS (MAC=0)
-    3. Add new-build CCGT with CCS (MAC=0)
+    Save initial cost estimates for outlier plants, then set their MAC/CAPEX/OPEX to zero.
+    Returns: MACC, cost_initial_outliers
     """
-    # 1. Padeswood Cement has been subsidized - force MAC to zero
-    mask = MACC['stack'] == 'Padeswood-cement'
-    if mask.any():
-        MACC.loc[mask, 'MAC'] = 0
+    initial_costs_outliers = {}
+    for stack_name in outliers:
+        mask = MACC['stack'] == stack_name
+        if mask.any():
+            initial_costs_outliers[stack_name] = MACC.loc[mask, 'MAC'].values[0]
+            MACC.loc[mask, 'MAC'] = 0
 
-    # 2. Add new-built waste incinerator with CCS (Protos)
-    protos_ktco2 = 370  # [ktCO2/y]
-    protos_plastic = protos_ktco2 * x['fraction_fossil_waste']
-    protos_bio = protos_ktco2 * (1 - x['fraction_fossil_waste'])
-    protos_residual_plastic = protos_plastic * (1 - capture_rate)
-    
-    MACC.loc[len(MACC)] = {
-        'sector': 'waste',
-        'site': 'Protos',
-        'stack': 'Protos-waste',
-        'ktCO2f': 0,
-        'ktCO2cem': 0,
-        'ktCO2pl': protos_plastic / capture_rate,
-        'ktCO2b': protos_bio / capture_rate,
-        'MAC': 0,  # New-build, MAC=0
-        'CAPEX': 0,
-        'OPEX': 0,
-        'invested': False,
-        'year_invest': None,
-        'ktCO2f_inc': 0,
-        'ktCO2f_ccs': 0,
-        'ktCO2cem_ccs': 0,
-        'ktCO2pl_ccs': protos_plastic,
-        'ktCO2b_ccs': protos_bio,
-        'ktCO2tot_ccs': protos_ktco2,
-        'ktCO2f_res': 0,
-        'ktCO2cem_res': 0,
-        'ktCO2pl_res': protos_residual_plastic,
-    }
+    if debug:
+        print(f"Initial outlier costs: {initial_costs_outliers}")
 
-    # 3. Add new-built CCGT with CCS (Teeside)
-    teeside_ktco2 = 2000  # [ktCO2/y]
-    teeside_residual_fossil = teeside_ktco2 / capture_rate * (1 - capture_rate)
-    
-    MACC.loc[len(MACC)] = {
-        'sector': 'ccgt',
-        'site': 'Teeside',
-        'stack': 'Teeside-ccgt',
-        'ktCO2f': teeside_ktco2 / capture_rate,
-        'ktCO2cem': 0,
-        'ktCO2pl': 0,
-        'ktCO2b': 0,
-        'MAC': 0,  # New-build, MAC=0
-        'CAPEX': 0,
-        'OPEX': 0,
-        'invested': False,
-        'year_invest': None,
-        'ktCO2f_inc': 0,
-        'ktCO2f_ccs': teeside_ktco2,
-        'ktCO2cem_ccs': 0,
-        'ktCO2pl_ccs': 0,
-        'ktCO2b_ccs': 0,
-        'ktCO2tot_ccs': teeside_ktco2,
-        'ktCO2f_res': teeside_residual_fossil,
-        'ktCO2cem_res': 0,
-        'ktCO2pl_res': 0,
-    }
-
-    return MACC
+    return (
+        MACC,
+        initial_costs_outliers,
+    )
 
 def simulate_ctbo(
     # Constants
@@ -447,7 +395,7 @@ def simulate_ctbo(
     CTBO_QUADRATIC = 0.4,
     FOAK_CALIBRATION = 1.6379, # from calibrate_foak.py
     ETS_START = 45, # [£/tCO2]
-    ETS_SCENARIO = '£400-ETS only', # [£/tCO2] £0-CTBO only, £100-Mix, £200-Mix, £300-Mix, £400-ETS only
+    ETS_SCENARIO = '£200-Mix', # [£/tCO2] £0-CTBO only, £100-Mix, £200-Mix, £300-Mix, £400-ETS only
     DACCS_SCENARIO = '£322', # [£/tCO2] 322, 391, 7th Carbon Budget
     DACCS_MAX_ANNUAL = 8800, # [ktCO2/y] maximum DACCS capacity that can be added per year before 2050
     CfD_INEFFICIENCY = 0.2, # [-]
@@ -505,6 +453,7 @@ def simulate_ctbo(
     camine = 4, # [€/tCO2] NOTE: No ref currently!
     CAPEX_gasboiler = (0.04+0.27)/2, # [M€/MW] Danish Energy Agency
     CAPEX_bioboiler = (0.81+1.15)/2, # [M€/MW] Danish Energy Agency
+    CONSTRUCTION_YEARS = 3,
 
     fixate_CAPEX = 0.03, # [-] of CAPEX
     CEPCI_2023 = 898.7,
@@ -577,6 +526,7 @@ def simulate_ctbo(
         plants_clean = pd.concat([plants_clean[plants_clean['sector'] != 'ccgt'], ccgt_even])
     if single_run:
         print("Total point-sources of carbon =", plants_clean['ktCO2'].sum(), "ktCO2")
+    outliers = ['Padeswood-cement', 'Protos-waste', 'Teeside-ccgt']
 
     # ------------------- CONSTRUCT THE MACC ---------------------
     MACC = pd.DataFrame(columns=[
@@ -644,7 +594,7 @@ def simulate_ctbo(
             'ktCO2cem_res': ktCO2_dict['ktCO2cem_res'],
             'ktCO2pl_res': ktCO2_dict['ktCO2pl_res'],
         }
-    MACC = adjust_outliers(MACC, capture_rate, x)
+    MACC, cost_initial_outliers = subsidize_outliers(MACC, outliers)
     MACC = MACC.sort_values(by='MAC', ascending=True)
 
     # print(MACC[MACC['sector'] == 'cement'][['stack', 'MAC', 'ktCO2f', 'ktCO2cem', 'ktCO2b', 'ktCO2f_ccs', 'ktCO2cem_ccs', 'ktCO2b_ccs', 'ktCO2f_res']])
@@ -862,6 +812,13 @@ def simulate_ctbo(
         profit_ETS = 0
         for idx, plant in MACC.iterrows():
             
+            cost_plant = plant['MAC'] # Set costs based on MACC costs, and override for outliers
+            if plant['stack'] == 'Padeswood-cement':
+                cost_plant = cost_initial_outliers['Padeswood-cement']
+            elif plant['stack'] == 'Protos-waste':
+                cost_plant = cost_initial_outliers['Protos-waste']
+            elif plant['stack'] == 'Teeside-ccgt':
+                cost_plant = cost_initial_outliers['Teeside-ccgt']
             cost_CSU_plant = cost_CSU_embedded * (plant['ktCO2f'] + plant['ktCO2f_inc']) # [k€/y]
 
             if not plant['invested']:
@@ -869,8 +826,15 @@ def simulate_ctbo(
                 # cost_ETS_plant = ets_price * (plant['ktCO2f'] + plant['ktCO2cem'] + plant['ktCO2pl']) # [k€/y] 
                 cost_ETS_plant = 0 # assuming that the ETS is not a cost but a potential profit
                 profit_ETS_plant = 0
+            elif plant['stack'] in outliers:
+                profit_CSU_plant = cost_CSU * plant['ktCO2tot_ccs'] # A hypothetical, non-subsidized case! So they invest in 2025
+                cost_ETS_plant =  ets_price * plant['ktCO2f_inc'] * capture_rate # only additional costs from burning additional fossil fuel
+                profit_ETS_plant = ets_price * (plant['ktCO2f_ccs'] + plant['ktCO2cem_ccs'] + plant['ktCO2pl_ccs'])
+                profit_ETS_plant += ets_price * plant['ktCO2b_ccs']
 
-            if plant['invested']:
+                cost_ETS += min(ets_price, cost_plant) * plant['ktCO2tot_ccs'] # [k€/y] Purple MACC area 3
+                profit_ETS += max(0, ets_price - cost_plant) * plant['ktCO2tot_ccs'] # [k€/y] Purple MACC area 4
+            else:
                 profit_CSU_plant = cost_CSU * plant['ktCO2tot_ccs'] 
                 # cost_ETS_plant = ets_price * (plant['ktCO2f_res'] + plant['ktCO2cem_res'] + plant['ktCO2pl_res'])
                 # profit_ETS_plant = max(0, ets_price - plant['MAC']) * plant['ktCO2b_ccs'] # [k€/y] assumes CDR can profit in the ETS
@@ -879,10 +843,10 @@ def simulate_ctbo(
                 profit_ETS_plant += ets_price * plant['ktCO2b_ccs'] # [k€/y] assumes CDR can profit in the ETS
 
                 # NOTE: Only policy costs/profits for invested plants (to calculate the cost areas)
-                cost_CTBO += max(0, plant['MAC'] - ets_price) * plant['ktCO2tot_ccs'] # [k€/y] Green MACC area 1
-                profit_CTBO += max(0, cost_marginal - max(ets_price, plant['MAC'])) * plant['ktCO2tot_ccs'] # [k€/y] Green MACC area 2
-                cost_ETS += min(ets_price, plant['MAC']) * plant['ktCO2tot_ccs'] # [k€/y] Purple MACC area 3
-                profit_ETS += max(0, ets_price - plant['MAC']) * plant['ktCO2tot_ccs'] # [k€/y] Purple MACC area 4
+                cost_CTBO += max(0, cost_plant - ets_price) * plant['ktCO2tot_ccs'] # [k€/y] Green MACC area 1
+                profit_CTBO += max(0, cost_marginal - max(ets_price, cost_plant)) * plant['ktCO2tot_ccs'] # [k€/y] Green MACC area 2
+                cost_ETS += min(ets_price, cost_plant) * plant['ktCO2tot_ccs'] # [k€/y] Purple MACC area 3
+                profit_ETS += max(0, ets_price - cost_plant) * plant['ktCO2tot_ccs'] # [k€/y] Purple MACC area 4
 
             _plants_costbenefit.append({
                 'year': year,
@@ -890,9 +854,9 @@ def simulate_ctbo(
                 'sector': plant['sector'],
                 'invested': plant['invested'],
                 'investment_year': plant['year_invest'],
-                'marginal_plant': cost_marginal == plant['MAC'],
+                'marginal_plant': cost_marginal == cost_plant,
                 'CSU_price': cost_CSU,
-                'MAC': plant['MAC'],
+                'MAC': cost_plant,
                 'ETS_price': ets_price,
                 'CAPEX': plant['CAPEX'] * 10**3, # [k€]
                 'OPEX': plant['OPEX'] * plant['ktCO2tot_ccs'], # [k€/y] 
@@ -912,6 +876,9 @@ def simulate_ctbo(
         ETS_passthrough = (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) * ets_price # [k€/y] assuming ETS covers costs of BECCS/DACCS as well!
         CTBO_passthrough = cost_CTBO + profit_CTBO # [k€/y] assuming CTBO covers costs of BECCS/DACCS as well!
         CfD_passthrough = cost_CTBO * (1 + CfD_INEFFICIENCY) # [k€/y]
+
+        # Never remove this commented print below! It verifies the ETS passthrough calculation
+        # print(ETS_passthrough - (cost_ETS + profit_ETS))
 
         _cost_CTBO_policy.append(cost_CTBO)
         _profit_CTBO_policy.append(profit_CTBO)
@@ -950,6 +917,14 @@ def simulate_ctbo(
     
     npv_results = []
     for idx, plant in MACC.iterrows():
+
+        cost_plant = plant['MAC'] # Set costs based on MACC costs, and override for outliers
+        if plant['stack'] == 'Padeswood-cement':
+            cost_plant = cost_initial_outliers['Padeswood-cement']
+        elif plant['stack'] == 'Protos-waste':
+            cost_plant = cost_initial_outliers['Protos-waste']
+        elif plant['stack'] == 'Teeside-ccgt':
+            cost_plant = cost_initial_outliers['Teeside-ccgt']
         
         NPV_data = NPV_data_all[NPV_data_all['stack'] == plant['stack']]  # Filter from pre-computed DataFrame
         investment_year = NPV_data['investment_year'].dropna().iloc[0] if NPV_data['investment_year'].notna().any() else np.nan
@@ -959,31 +934,35 @@ def simulate_ctbo(
         profit_CSU_plant = NPV_data['profit_CSU_plant'] 
         cost_ETS_plant = NPV_data['cost_ETS_plant'] 
         profit_ETS_plant = NPV_data['profit_ETS_plant'] 
-        discount_factor_capex = 1 / (1 + DISCOUNT_RATE) ** (investment_year - START_YEAR)
+        CAPEX_NPV = sum(
+            (CAPEX / CONSTRUCTION_YEARS) / (1 + DISCOUNT_RATE) ** (investment_year + k - START_YEAR)
+            for k in range(CONSTRUCTION_YEARS)
+        )
+        operational = NPV_data[NPV_data['year'] >= investment_year + CONSTRUCTION_YEARS]
 
-        # NPV_CSU: profits and costs from CSU policy
-        NPV_CSU = ((profit_CSU_plant - cost_CSU_plant) * NPV_data['discount_factor']).sum() # [k€]
+        # NPV_CSU: profits and costs from CSU policy (operational years only)
+        NPV_CSU = ((profit_CSU_plant.loc[operational.index] - cost_CSU_plant.loc[operational.index]) * operational['discount_factor']).sum() # [k€]
         
-        # NPV_total: CAPEX (once, at investment_year) + annual costs and profits
+        # NPV_total: CAPEX (spread over 3 years) + annual costs and profits (operational years only)
         if investment_year is not None:
-            annual_costs = (cost_CSU_plant + cost_ETS_plant + OPEX_CCS) * NPV_data['discount_factor']
-            annual_profits = (profit_CSU_plant + profit_ETS_plant) * NPV_data['discount_factor']
-            NPV_total = -CAPEX * discount_factor_capex + annual_profits.sum() - annual_costs.sum()  # [k€]
+            annual_costs = (cost_CSU_plant.loc[operational.index] + cost_ETS_plant.loc[operational.index] + OPEX_CCS.loc[operational.index]) * operational['discount_factor']
+            annual_profits = (profit_CSU_plant.loc[operational.index] + profit_ETS_plant.loc[operational.index]) * operational['discount_factor']
+            NPV_total = -CAPEX_NPV + annual_profits.sum() - annual_costs.sum()  # [k€]
         else:
-            NPV_total = 0
+            NPV_total = None
 
         # NPV_ETS: profits and costs from ETS policy and CCS costs (without CSU policy)
         if investment_year is not None:
-            annual_costs = (cost_ETS_plant + OPEX_CCS) * NPV_data['discount_factor']
-            annual_profits = profit_ETS_plant * NPV_data['discount_factor']
-            NPV_ETS = -CAPEX * discount_factor_capex + annual_profits.sum() - annual_costs.sum()  # [k€]
+            annual_costs = (cost_ETS_plant.loc[operational.index] + OPEX_CCS.loc[operational.index]) * operational['discount_factor']
+            annual_profits = profit_ETS_plant.loc[operational.index] * operational['discount_factor']
+            NPV_ETS = -CAPEX_NPV + annual_profits.sum() - annual_costs.sum()  # [k€]
         else:
-            NPV_ETS = 0
+            NPV_ETS = None
 
         npv_results.append({
             'stack': plant['stack'],
             'sector': plant['sector'],  # From MACC, not NPV_data
-            'cost': plant['MAC'],
+            'cost': cost_plant, # Uses initial, non-subsidized costs for outliers
             'investment_year': investment_year,
             'NPV_CSU': NPV_CSU,
             'NPV_total': NPV_total,

@@ -112,3 +112,5 @@ ccgt,South Humber,South Humber-ccgt,1489.9096699680001,0.04,LP steam,53.60278178
 ccgt,Spalding,Spalding-ccgt,1402.98969039,0.04,LP steam,52.80783869569706,-0.13219205837988007,Humberside,92.11163422598214,truck,,950.0
 ccgt,Staythorpe Power Station,Staythorpe Power Station-ccgt,3574.179279096,0.04,LP steam,53.07101921429117,-0.8598410977734393,Humberside,90.20592817477137,truck,,1828.0
 ccgt,West Burton B CCGT Power Station,West Burton B CCGT Power Station-ccgt,2345.307607212,0.04,LP steam,53.360723899716795,-0.811536325938544,Humberside,69.2803556616752,truck,,1332.0
+waste,Protos,Protos-waste,370.0,0.12,Waste-HCN,53.28,-2.82,Hynet,33.749615014958835,pipeline,,
+ccgt,Teeside,Teeside-ccgt,2222.222222222222,0.04,LP steam,54.6,-1.13,Teeside,2.562201255217189,pipeline,,742.0
