@@ -395,7 +395,7 @@ def simulate_ctbo(
     CTBO_QUADRATIC = 0.4,
     FOAK_CALIBRATION = 1.6379, # from calibrate_foak.py
     ETS_START = 45, # [£/tCO2]
-    ETS_SCENARIO = '£200-Mix', # [£/tCO2] £0-CTBO only, £100-Mix, £200-Mix, £300-Mix, £400-ETS only
+    ETS_SCENARIO = '£0-CTBO only', # [£/tCO2] £0-CTBO only, £100-Mix, £200-Mix, £300-Mix, £400-ETS only
     DACCS_SCENARIO = '£322', # [£/tCO2] 322, 391, 7th Carbon Budget
     DACCS_MAX_ANNUAL = 8800, # [ktCO2/y] maximum DACCS capacity that can be added per year before 2050
     CfD_INEFFICIENCY = 0.2, # [-]
@@ -755,7 +755,7 @@ def simulate_ctbo(
 
             cost_CSU = max(0, cost_marginal - ets_price) # [€/tCO2]
             cost_CTBO_producers = cost_CSU * (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) # [k€/y] 
-            cost_CSU_embedded = cost_CTBO_producers / supply_ktCO2f # [€/tCO2]
+            cost_CSU_embedded = min(cost_CSU, cost_CTBO_producers / supply_ktCO2f) # [€/tCO2] beyond 2050, constrain the embedded cost to the CSU cost
 
         else:
             # ETS-only: no CTBO mandate, no CSU costs
@@ -810,6 +810,8 @@ def simulate_ctbo(
         profit_CTBO = 0
         cost_ETS = 0
         profit_ETS = 0
+
+        # print("---YEAR = ", year)
         for idx, plant in MACC.iterrows():
             
             cost_plant = plant['MAC'] # Set costs based on MACC costs, and override for outliers
@@ -866,6 +868,8 @@ def simulate_ctbo(
                 'profit_ETS_plant': profit_ETS_plant, # [k€/y]
                 'ktCO2tot_ccs': plant['ktCO2tot_ccs'],
             })
+            # if plant['sector']=='ccgt' and plant['invested']:
+            #     print(plant['OPEX'] * plant['ktCO2tot_ccs']+cost_CSU_plant, profit_CSU_plant, profit_CSU_plant / (plant['OPEX'] * plant['ktCO2tot_ccs']+cost_CSU_plant))
 
         # Add DACCS and calculate policy costs/profits
         if stored_ktCO2daccs > 0:
@@ -890,18 +894,21 @@ def simulate_ctbo(
         _total_passthrough.append(ETS_passthrough + CTBO_passthrough)
     
     # ========== NPV CALCULATIONS ==========
-    # Discount factors for annual values (relative to START_YEAR)
+    # Discount factors for annual values (relative to START_YEAR), truncated to 2050
+    NPV_END = 2050
+    n_npv = NPV_END - START_YEAR + 1
     discount_factors = 1 / (1 + DISCOUNT_RATE) ** (years - START_YEAR)
+    df_npv = discount_factors[:n_npv]
     
-    # --- Policy-level NPV ---
-    NPV_cost_CTBO = (np.array(_cost_CTBO_policy) * discount_factors).sum()      # [k€]
-    NPV_profit_CTBO = (np.array(_profit_CTBO_policy) * discount_factors).sum()  # [k€]
-    NPV_CTBO_passthrough = (np.array(_CTBO_passthrough) * discount_factors).sum() # [k€]
-    NPV_CfD_passthrough = (np.array(_CfD_passthrough) * discount_factors).sum() # [k€]
-    NPV_cost_ETS = (np.array(_cost_ETS_policy) * discount_factors).sum()        # [k€]
-    NPV_profit_ETS = (np.array(_profit_ETS_policy) * discount_factors).sum()    # [k€]
-    NPV_ETS_passthrough = (np.array(_ETS_passthrough) * discount_factors).sum() # [k€]
-    NPV_total_passthrough = (np.array(_total_passthrough) * discount_factors).sum() # [k€]
+    # --- Policy-level NPV (up to and including 2050) ---
+    NPV_cost_CTBO = (np.array(_cost_CTBO_policy)[:n_npv] * df_npv).sum()      # [k€]
+    NPV_profit_CTBO = (np.array(_profit_CTBO_policy)[:n_npv] * df_npv).sum()  # [k€]
+    NPV_CTBO_passthrough = (np.array(_CTBO_passthrough)[:n_npv] * df_npv).sum() # [k€]
+    NPV_CfD_passthrough = (np.array(_CfD_passthrough)[:n_npv] * df_npv).sum() # [k€]
+    NPV_cost_ETS = (np.array(_cost_ETS_policy)[:n_npv] * df_npv).sum()        # [k€]
+    NPV_profit_ETS = (np.array(_profit_ETS_policy)[:n_npv] * df_npv).sum()    # [k€]
+    NPV_ETS_passthrough = (np.array(_ETS_passthrough)[:n_npv] * df_npv).sum() # [k€]
+    NPV_total_passthrough = (np.array(_total_passthrough)[:n_npv] * df_npv).sum() # [k€]
     if NPV_cost_CTBO > 0:
         benefit2cost_CTBO = NPV_profit_CTBO / NPV_cost_CTBO  # [-] Net policy value for CTBO
     else:
@@ -911,8 +918,9 @@ def simulate_ctbo(
     else:
         benefit2cost_ETS = 0
     
-    # --- Plant-level NPV ---
+    # --- Plant-level NPV (up to and including 2050) ---
     NPV_data_all = pd.DataFrame(_plants_costbenefit)
+    NPV_data_all = NPV_data_all[NPV_data_all['year'] <= NPV_END]
     NPV_data_all['discount_factor'] = discount_factors[NPV_data_all['year'] - START_YEAR] 
     
     npv_results = []
@@ -934,10 +942,14 @@ def simulate_ctbo(
         profit_CSU_plant = NPV_data['profit_CSU_plant'] 
         cost_ETS_plant = NPV_data['cost_ETS_plant'] 
         profit_ETS_plant = NPV_data['profit_ETS_plant'] 
-        CAPEX_NPV = sum(
-            (CAPEX / CONSTRUCTION_YEARS) / (1 + DISCOUNT_RATE) ** (investment_year + k - START_YEAR)
-            for k in range(CONSTRUCTION_YEARS)
-        )
+        years_available = NPV_END - investment_year + 1 if not np.isnan(investment_year) else 0 # Dealing with edge cases of very later investors
+        if years_available >= CONSTRUCTION_YEARS:
+            CAPEX_NPV = sum(
+                (CAPEX / CONSTRUCTION_YEARS) / (1 + DISCOUNT_RATE) ** (investment_year + k - START_YEAR)
+                for k in range(CONSTRUCTION_YEARS)
+            )
+        else:
+            CAPEX_NPV = CAPEX / (1 + DISCOUNT_RATE) ** (investment_year - START_YEAR)
         operational = NPV_data[NPV_data['year'] >= investment_year + CONSTRUCTION_YEARS]
 
         # NPV_CSU: profits and costs from CSU policy (operational years only)
@@ -1066,6 +1078,16 @@ def simulate_ctbo(
     results['plants_ktCO2tot_ccs'] = [p['ktCO2tot_ccs'] for p in npv_sorted]
     results['plants_cost'] = [p['cost'] for p in npv_sorted]
     
+    # Teeside-ccgt plant-level time series [k€/y] aligned to years array
+    pembroke_df = pd.DataFrame(_plants_costbenefit)
+    pembroke_df = pembroke_df[pembroke_df['stack'] == 'Pembroke Power Station-ccgt'].sort_values('year')
+    results['pembroke_cost_CSU'] = pembroke_df['cost_CSU_plant'].values
+    results['pembroke_profit_CSU'] = pembroke_df['profit_CSU_plant'].values
+    results['pembroke_cost_ETS'] = pembroke_df['cost_ETS_plant'].values
+    results['pembroke_profit_ETS'] = pembroke_df['profit_ETS_plant'].values
+    results['pembroke_OPEX'] = pembroke_df['OPEX'].values
+    results['pembroke_CAPEX'] = pembroke_df['CAPEX'].iloc[0] if len(pembroke_df) > 0 else 0
+
     results['gas_increase_abs'] = _gas_increase_abs
     results['gas_increase_pct'] = _gas_increase_pct
     results['gas_increase_2040'] = gas_increase_2040

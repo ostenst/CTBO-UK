@@ -113,7 +113,14 @@ if __name__ == "__main__":
         ArrayOutcome("plants_NPV_total"),
         ArrayOutcome("plants_NPV_ETS"),
         ArrayOutcome("plants_ktCO2tot_ccs"),
-        ArrayOutcome("plants_cost")
+        ArrayOutcome("plants_cost"),
+        # Teeside-ccgt time series
+        ArrayOutcome("pembroke_cost_CSU"),
+        ArrayOutcome("pembroke_profit_CSU"),
+        ArrayOutcome("pembroke_cost_ETS"),
+        ArrayOutcome("pembroke_profit_ETS"),
+        ArrayOutcome("pembroke_OPEX"),
+        ScalarOutcome("pembroke_CAPEX"),
     ]
 
     # Constants: fixed parameters for all runs
@@ -123,9 +130,9 @@ if __name__ == "__main__":
         Constant("single_run", False),
         Constant("PHASEOUT", False),
         Constant("ASSUME_FOAK", False),
-        Constant("DACCS_MAX_ANNUAL", 8800), # [ktCO2/y] maximum DACCS capacity that can be added per year before 2050
+        Constant("DACCS_MAX_ANNUAL", 7500), # [ktCO2/y] maximum DACCS capacity that can be added per year before 2050
         Constant("CTBO_QUADRATIC", 0.4),
-        Constant("DISCOUNT_RATE", 0.035),
+        Constant("DISCOUNT_RATE", 0.035), # Can try 3.5% (social) or 9% (private)
         Constant("FOAK_CALIBRATION", 1.6379),
         Constant("ETS_START", 45),
         Constant("START_YEAR", 2025),

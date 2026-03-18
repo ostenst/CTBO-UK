@@ -126,7 +126,7 @@ def compare_carbon_trajectories(results_dir='results', debug=False):
         return median, p5, p95
 
     fig, axes = plt.subplots(1, 5, figsize=(14, 6), sharex=True, sharey=True,
-                             gridspec_kw={'wspace': 0.20})
+                             gridspec_kw={'wspace': 0.10})
 
     for idx, (label, scenario_list) in enumerate(groups):
         ax = axes[idx]
@@ -161,6 +161,8 @@ def compare_carbon_trajectories(results_dir='results', debug=False):
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.tick_params(labelsize=11)
         ax.set_xlim(START_YEAR, PLOT_END)
+        ax.set_xticks(np.arange(2025, 2051, 5))
+        ax.set_xticklabels(['' if y not in [2030, 2040, 2050] else str(y) for y in np.arange(2025, 2051, 5)])
 
     axes[0].set_ylabel('Carbon [MtCO₂/year]', fontsize=13)
 
@@ -487,7 +489,7 @@ def plot_prices_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=False):
     ]
     magma = plt.cm.magma
     green = '#62a7a6'
-    colors = [magma(0.05), magma(0.35), magma(0.65), magma(0.95), green]
+    colors = [magma(0.00), magma(0.25), magma(0.55), magma(0.85), green]
     
     fig, ax = plt.subplots(figsize=(7, 5.5))
     
@@ -503,12 +505,12 @@ def plot_prices_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=False):
         
         # Price CSU with uncertainty
         med, p5, p95 = get_stats(csu_data)
-        ax.plot(years, med, color=color, linewidth=2.5, label=f'CSU price range ({label})')
+        ax.plot(years, med, color=color, linewidth=2.5, label=f'CSU ({label})')
         ax.fill_between(years, p5, p95, color=color, alpha=0.25)
         
         # Price ETS median only (dashed line)
         ets_med = np.median(ets_data, axis=0)
-        ax.plot(years, ets_med, color=color, linewidth=2, linestyle='--', alpha=0.8, label=f'ETS median price ({label})')
+        ax.plot(years, ets_med, color=color, linewidth=2, linestyle='--', alpha=0.8, label=f'ETS ({label})')
     
     # Formatting
     ax.axhline(0, color='black', linestyle='--', linewidth=2, alpha=0.8)
@@ -589,9 +591,9 @@ def plot_plant_npv_tot_bubbles(results_dir='results', ETS_filter=None, pounds_to
     sector_colors = {
         'cement': magma(0.1),
         'ccgt': magma(0.3),
-        'refinery': magma(0.5),
+        'refinery': magma(0.9),
         'steel': magma(0.7),
-        'drax': magma(0.9),
+        'drax': magma(0.5),
         'waste': '#62a7a6'
     }
 
@@ -643,7 +645,7 @@ def plot_plant_npv_tot_bubbles(results_dir='results', ETS_filter=None, pounds_to
     
     return fig
 
-def compare_npv_tot(results_dir='results', pounds_to_EUR=1.15, debug=False):
+def compare_npv_tot(results_dir='results', pounds_to_EUR=1.15, exclude_sectors=None, debug=False):
     """
     Plot plant-level NPV total bubbles in 5 side-by-side panels (one per ETS scenario),
     with shared axes. x=median investment year, y=median NPV total, size=ktCO2, color=sector.
@@ -667,8 +669,8 @@ def compare_npv_tot(results_dir='results', pounds_to_EUR=1.15, debug=False):
 
     magma = plt.cm.magma
     sector_colors = {
-        'cement': magma(0.1), 'ccgt': magma(0.3), 'refinery': magma(0.5),
-        'steel': magma(0.7), 'drax': magma(0.9), 'waste': '#62a7a6',
+        'cement': magma(0.1), 'ccgt': magma(0.3), 'refinery': magma(0.9),
+        'steel': magma(0.7), 'drax': magma(0.5), 'waste': '#62a7a6',
     }
     legend_labels = {
         'cement': 'Cement', 'waste': 'Waste', 'ccgt': 'Gas power',
@@ -677,7 +679,7 @@ def compare_npv_tot(results_dir='results', pounds_to_EUR=1.15, debug=False):
     size_scale = 0.3
 
     fig, axes = plt.subplots(1, 5, figsize=(14, 6), sharex=True, sharey=True,
-                             gridspec_kw={'wspace': 0.20})
+                             gridspec_kw={'wspace': 0.10})
 
     for idx, (label, scenario_list) in enumerate(groups):
         ax = axes[idx]
@@ -704,6 +706,8 @@ def compare_npv_tot(results_dir='results', pounds_to_EUR=1.15, debug=False):
         outlier_stacks = ['Padeswood-cement', 'Protos-waste', 'Teeside-ccgt']
         sizes = df_valid['ktCO2tot_ccs'] * size_scale
         for sector in df_valid['sector'].unique():
+            if sector in exclude_sectors:
+                continue
             smask = df_valid['sector'] == sector
             ax.scatter(
                 df_valid.loc[smask, 'investment_year'],
@@ -723,6 +727,15 @@ def compare_npv_tot(results_dir='results', pounds_to_EUR=1.15, debug=False):
                 facecolors='none', edgecolors='black', linewidths=1.5,
                 hatch='///', zorder=5,
             )
+        omask = df_valid['stack'].isin(['Pembroke Power Station-ccgt'])
+        if omask.any():
+            ax.scatter(
+                df_valid.loc[omask, 'investment_year'],
+                df_valid.loc[omask, 'NPV_total'] / 1000 / pounds_to_EUR,
+                s=sizes[omask],
+                facecolors='none', edgecolors='white', linewidths=1.5,
+                hatch='///', zorder=5,
+            )
 
         ax.axhline(0, color='grey', linestyle='--', linewidth=1, alpha=0.7)
         ax.set_title(label, fontsize=13)
@@ -730,6 +743,7 @@ def compare_npv_tot(results_dir='results', pounds_to_EUR=1.15, debug=False):
         ax.tick_params(labelsize=11)
         ax.set_xlim(2025, 2050)
         ax.set_xticks(np.arange(2025, 2051, 5))
+        ax.set_xticklabels(['' if y not in [2030, 2040, 2050] else str(y) for y in np.arange(2025, 2051, 5)])
 
     axes[0].set_ylabel('Median NPV [M£]', fontsize=13)
 
@@ -749,6 +763,149 @@ def compare_npv_tot(results_dir='results', pounds_to_EUR=1.15, debug=False):
         print(f"Plot saved to {results_dir}/4_compare_npv_tot.png")
 
     return fig
+
+def compare_gas_inc(results_dir='results', pounds_to_EUR=1.15, debug=False):
+    """
+    Plot gas price increase box plots in 5 side-by-side panels (one per ETS scenario),
+    at years 2030, 2035, 2040, 2045, 2050. Includes secondary y-axis for household bill.
+    """
+    if debug:
+        print(f"Loading gas data from {results_dir}")
+
+    experiments = pd.read_csv(f'{results_dir}/experiments.csv')
+    gas_increase_abs = np.load(f'{results_dir}/outcomes_gas_increase_abs.npy')
+    gas_increase_abs = gas_increase_abs / pounds_to_EUR * (100 / 1000)  # €/MWh -> pence/kWh
+
+    START_YEAR = 2025
+    target_years = [2030, 2035, 2040, 2045, 2050]
+
+    groups = [
+        ('CTBO only (ETS2050=£0)', ['£0-CTBO only']),
+        ('Mix (ETS2050=£100)', ['£100-Mix']),
+        ('Mix (ETS2050=£200)', ['£200-Mix']),
+        ('Mix (ETS2050=£300)', ['£300-Mix']),
+        ('ETS only (ETS2050=£400)', ['£400-ETS only']),
+    ]
+
+    magma = plt.cm.magma
+    box_color = magma(0.7)
+    median_color = magma(0.1)
+    household_consumption = 11200  # kWh/year
+
+    fig, axes = plt.subplots(1, 5, figsize=(14, 6), sharey=True,
+                             gridspec_kw={'wspace': 0.10})
+
+    for idx, (label, scenario_list) in enumerate(groups):
+        ax = axes[idx]
+        mask = experiments['ETS_SCENARIO'].isin(scenario_list)
+
+        if mask.sum() == 0:
+            ax.set_title(label, fontsize=13)
+            continue
+
+        gas = gas_increase_abs[mask]
+        box_data = [gas[:, yr - START_YEAR] for yr in target_years]
+
+        bp = ax.boxplot(box_data, positions=range(len(target_years)), patch_artist=True, widths=0.6)
+        for box in bp['boxes']:
+            box.set_facecolor(box_color)
+            box.set_alpha(0.7)
+        for median in bp['medians']:
+            median.set_color(median_color)
+            median.set_linewidth(2)
+
+        ax.set_xticks(range(len(target_years)))
+        ax.set_xticklabels([str(y) if y in [2030, 2040, 2050] else '' for y in target_years], fontsize=11)
+        ax.set_title(label, fontsize=13)
+        ax.grid(True, axis='y', linestyle='--', alpha=0.4)
+        ax.tick_params(labelsize=11)
+
+        # Secondary y-axis for household bill
+        y1_min, y1_max = ax.get_ylim()
+        ax2 = ax.twinx()
+        ax2.set_ylim(y1_min * household_consumption / 100, y1_max * household_consumption / 100)
+        ax2.tick_params(labelsize=11)
+        if idx < 4:
+            ax2.set_yticklabels([])
+        else:
+            ax2.set_ylabel('Household bill increase [£/year]\n- assuming 11,200 kWh/year', fontsize=12)
+
+    axes[0].set_ylabel('Gas price increase [pence/kWh]', fontsize=13)
+
+    fig.subplots_adjust(left=0.06, right=0.88, wspace=0.10)
+    plt.savefig(f'{results_dir}/3_compare_gas_increase.png', dpi=450, bbox_inches='tight')
+
+    if debug:
+        print(f"Plot saved to {results_dir}/3_compare_gas_increase.png")
+
+    return fig
+
+
+def compare_producer_costs(results_dir='results', pounds_to_EUR=1.15, debug=False):
+    """
+    Plot CTBO cost to producers as box plots in 5 side-by-side panels (one per ETS scenario),
+    at years 2030, 2035, 2040, 2045, 2050.
+    """
+    if debug:
+        print(f"Loading producer cost data from {results_dir}")
+
+    experiments = pd.read_csv(f'{results_dir}/experiments.csv')
+    cost_CTBO_producers = np.load(f'{results_dir}/outcomes_cost_CTBO_producers.npy')
+    cost_CTBO_producers = cost_CTBO_producers / 1e6 / pounds_to_EUR  # k€/yr -> B£/yr
+
+    START_YEAR = 2025
+    target_years = [2030, 2035, 2040, 2045, 2050]
+
+    groups = [
+        ('CTBO only (ETS2050=£0)', ['£0-CTBO only']),
+        ('Mix (ETS2050=£100)', ['£100-Mix']),
+        ('Mix (ETS2050=£200)', ['£200-Mix']),
+        ('Mix (ETS2050=£300)', ['£300-Mix']),
+        ('ETS only (ETS2050=£400)', ['£400-ETS only']),
+    ]
+
+    magma = plt.cm.magma
+    box_color = magma(0.1)
+    median_color = magma(0.7)
+
+    fig, axes = plt.subplots(1, 5, figsize=(14, 6), sharey=True,
+                             gridspec_kw={'wspace': 0.10})
+
+    for idx, (label, scenario_list) in enumerate(groups):
+        ax = axes[idx]
+        mask = experiments['ETS_SCENARIO'].isin(scenario_list)
+
+        if mask.sum() == 0:
+            ax.set_title(label, fontsize=13)
+            continue
+
+        data = cost_CTBO_producers[mask]
+        box_data = [data[:, yr - START_YEAR] for yr in target_years]
+
+        bp = ax.boxplot(box_data, positions=range(len(target_years)), patch_artist=True, widths=0.6)
+        for box in bp['boxes']:
+            box.set_facecolor(box_color)
+            box.set_alpha(0.7)
+        for median in bp['medians']:
+            median.set_color(median_color)
+            median.set_linewidth(2)
+
+        ax.set_xticks(range(len(target_years)))
+        ax.set_xticklabels([str(y) if y in [2030, 2040, 2050] else '' for y in target_years], fontsize=11)
+        ax.set_title(label, fontsize=13)
+        ax.grid(True, axis='y', linestyle='--', alpha=0.4)
+        ax.tick_params(labelsize=11)
+
+    axes[0].set_ylabel('CTBO cost to producers [B£/yr]', fontsize=13)
+
+    fig.subplots_adjust(left=0.06, right=0.97, wspace=0.10)
+    plt.savefig(f'{results_dir}/3_compare_producer_costs.png', dpi=450, bbox_inches='tight')
+
+    if debug:
+        print(f"Plot saved to {results_dir}/3_compare_producer_costs.png")
+
+    return fig
+
 
 def plot_plant_npv_csu_bubbles(results_dir='results', ETS_filter=None, exclude_sectors=None, pounds_to_EUR=1.15, debug=False):
     """
@@ -819,9 +976,9 @@ def plot_plant_npv_csu_bubbles(results_dir='results', ETS_filter=None, exclude_s
     sector_colors = {
         'cement': magma(0.1),
         'ccgt': magma(0.3),
-        'refinery': magma(0.5),
+        'refinery': magma(0.9),
         'steel': magma(0.7),
-        'drax': magma(0.9),
+        'drax': magma(0.5),
         'waste': '#62a7a6'
     }
 
@@ -941,9 +1098,9 @@ def plot_plant_npv_ets_bubbles(results_dir='results', ETS_filter=None, exclude_s
     sector_colors = {
         'cement': magma(0.1),
         'ccgt': magma(0.3),
-        'refinery': magma(0.5),
+        'refinery': magma(0.9),
         'steel': magma(0.7),
-        'drax': magma(0.9),
+        'drax': magma(0.5),
         'waste': '#62a7a6'
     }
 
@@ -1153,9 +1310,9 @@ def plot_plant_costs_by_sector(results_dir='results', pounds_to_EUR=1.15, debug=
     sector_colors = {
         'Cement': magma(0.1),
         'Gas power': magma(0.3),
-        'Refinery': magma(0.5),
+        'refinery': magma(0.9),
         'Steel': magma(0.7),
-        'Drax': magma(0.9),
+        'drax': magma(0.5),
         'Waste': '#62a7a6'
     }
     
@@ -1342,7 +1499,7 @@ def plot_passthrough_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=Fal
     
     # Create 1x3 subplot grid
     fig, axes = plt.subplots(1, 5, figsize=(16, 6), sharex=True, sharey=True,
-                             gridspec_kw={'wspace': 0.15})
+                             gridspec_kw={'wspace': 0.10})
     
     for idx, (label, scenario_list) in enumerate(groups):
         ax = axes[idx]
@@ -1383,14 +1540,16 @@ def plot_passthrough_by_ets(results_dir='results', pounds_to_EUR=1.15, debug=Fal
         ax.grid(True, linestyle='--', alpha=0.4)
         ax.tick_params(labelsize=11)
         ax.set_xlim(START_YEAR, 2050)
+        ax.set_xticks(np.arange(2025, 2051, 5))
+        ax.set_xticklabels(['' if y not in [2030, 2040, 2050] else str(y) for y in np.arange(2025, 2051, 5)])
     
     # Shared labels
-    # fig.text(0.5, 0.02, 'Year', ha='center', fontsize=14)
     fig.text(0.02, 0.5, 'Cost passthrough to consumers [B£/yr]', va='center', rotation='vertical', fontsize=14)
     
     # Single legend for all panels
     handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc='lower right', fontsize=10)
+    fig.legend(handles, labels, loc='lower center', ncol=5, fontsize=11,
+               bbox_to_anchor=(0.5, -0.02))
 
     
     # plt.tight_layout()
@@ -1554,6 +1713,129 @@ def plot_cfd_inefficiency_vs_passthrough(results_dir='results', debug=False):
     
     return fig
 
+def plot_pembroke_costs_profits(results_dir='results', pounds_to_EUR=1.15, debug=False):
+    """
+    Plot pembroke-ccgt operational costs and profits over time in 5 panels (one per ETS scenario),
+    with uncertainty ranges (5th-95th percentile shading). Annotates NPV_total per panel.
+    """
+    if debug:
+        print(f"Loading pembroke data from {results_dir}")
+
+    experiments = pd.read_csv(f'{results_dir}/experiments.csv')
+    cost_CSU = np.load(f'{results_dir}/outcomes_pembroke_cost_CSU.npy') / pounds_to_EUR
+    profit_CSU = np.load(f'{results_dir}/outcomes_pembroke_profit_CSU.npy') / pounds_to_EUR
+    cost_ETS = np.load(f'{results_dir}/outcomes_pembroke_cost_ETS.npy') / pounds_to_EUR
+    profit_ETS = np.load(f'{results_dir}/outcomes_pembroke_profit_ETS.npy') / pounds_to_EUR
+    OPEX = np.load(f'{results_dir}/outcomes_pembroke_OPEX.npy') / pounds_to_EUR
+    # Read CAPEX from experiments.csv
+    CAPEX = experiments['pembroke_CAPEX'].values
+
+    plant_ref = pd.read_csv(f'{results_dir}/plant_reference.csv')
+    npv_total = np.load(f'{results_dir}/outcomes_plants_NPV_total.npy')
+    plants_cost = np.load(f'{results_dir}/outcomes_plants_cost.npy')
+    pembroke_idx = plant_ref[plant_ref['stack'] == 'Pembroke Power Station-ccgt'].index[0]
+
+    START_YEAR = 2025
+    PLOT_END = 2050
+    n_years = PLOT_END - START_YEAR + 1
+    years = np.arange(START_YEAR, PLOT_END + 1)
+    scale = 1e3  # k£ -> M£
+
+    groups = [
+        ('CTBO only (ETS2050=£0)', ['£0-CTBO only']),
+        ('Mix (ETS2050=£100)', ['£100-Mix']),
+        ('Mix (ETS2050=£200)', ['£200-Mix']),
+        ('Mix (ETS2050=£300)', ['£300-Mix']),
+        ('ETS only (ETS2050=£400)', ['£400-ETS only']),
+    ]
+
+    magma = plt.cm.magma
+    color_opex = 'tab:gray'
+    color_csu_costs = magma(0.45)   
+    color_csu_profits = magma(0.05) # '#62a7a6' # green
+    color_ets = magma(0.85)
+
+    def get_stats(arr):
+        return np.median(arr, axis=0), np.percentile(arr, 5, axis=0), np.percentile(arr, 95, axis=0)
+
+    fig, axes = plt.subplots(1, 5, figsize=(14, 6), sharex=True, sharey=True,
+                             gridspec_kw={'wspace': 0.10})
+
+    for idx, (label, scenario_list) in enumerate(groups):
+        ax = axes[idx]
+        mask = experiments['ETS_SCENARIO'].isin(scenario_list)
+        if mask.sum() == 0:
+            ax.set_title(label, fontsize=13)
+            continue
+
+        c_csu = cost_CSU[mask][:, :n_years] / scale
+        p_csu = profit_CSU[mask][:, :n_years] / scale
+        c_ets = cost_ETS[mask][:, :n_years] / scale
+        p_ets = profit_ETS[mask][:, :n_years] / scale
+        opex = OPEX[mask][:, :n_years] / scale
+
+        series = [
+            (opex,  'OPEX',        color_opex),
+            (c_csu, 'CSU cost',    color_csu_costs),
+            (p_csu, 'CSU profit',  color_csu_profits),
+            (c_ets, 'ETS cost',    color_ets),
+            (p_ets, 'ETS profit',  color_ets),
+        ]
+
+        for arr, name, color in series:
+            med, p5, p95 = get_stats(arr)
+            is_profit = 'profit' in name.lower()
+            ax.plot(years, med, color=color, linewidth=1.8,
+                    linestyle='--' if is_profit else '-', label=name)
+            ax.fill_between(years, p5, p95, color=color, alpha=0.15)
+
+        # Annotate NPV_total (M£) and CAPEX (M£)
+        npv_vals = npv_total[mask][:, pembroke_idx] / 1e3 / pounds_to_EUR  # k€ -> M£
+        npv_med = np.nanmedian(npv_vals)
+        npv_p5 = np.nanpercentile(npv_vals, 5)
+        npv_p95 = np.nanpercentile(npv_vals, 95)
+
+        capex_ml = CAPEX / 1e3 / pounds_to_EUR  # k€ -> M£
+        capex_med = np.nanmedian(capex_ml)
+        capex_p5 = np.nanpercentile(capex_ml, 5)
+        capex_p95 = np.nanpercentile(capex_ml, 95)
+        ax.annotate(
+            f'NPV: {npv_med:.0f} [{npv_p5:.0f}, {npv_p95:.0f}] M£ \nCAPEX: {capex_med:.0f} [{capex_p5:.0f}, {capex_p95:.0f}] M£',
+            xy=(0.03, 0.97), xycoords='axes fraction', fontsize=9,
+            ha='left', va='top',
+            bbox=dict(boxstyle='round,pad=0.3', fc='white', ec='gray', alpha=0.8),
+        )
+       
+        ax.axhline(0, color='grey', linewidth=0.8, alpha=0.5)
+        ax.set_title(label, fontsize=13)
+        ax.set_xlim(START_YEAR, PLOT_END)
+        ax.set_xticks(np.arange(2025, 2051, 5))
+        ax.set_xticklabels(['' if y not in [2030, 2040, 2050] else str(y) for y in np.arange(2025, 2051, 5)])
+        ax.grid(True, linestyle='--', alpha=0.4)
+        ax.tick_params(labelsize=11)
+        if idx == 0:
+            ax.set_ylabel('Pembroke Power Station [M£/yr]', fontsize=13)
+
+    # Print MAC / abatement cost uncertainty as well as CAPEX
+    mac_all = plants_cost[:, pembroke_idx] / pounds_to_EUR  # €/tCO2 -> £/tCO2
+    mac_med = np.nanmedian(mac_all)
+    mac_p5 = np.nanpercentile(mac_all, 5)
+    mac_p95 = np.nanpercentile(mac_all, 95)
+    print(f"pembroke MAC [£/tCO2]: median={mac_med:.1f}, 5th={mac_p5:.1f}, 95th={mac_p95:.1f}")
+    print(f"pembroke plant: {plant_ref.loc[pembroke_idx, 'stack']}")
+
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='lower center', ncol=5, fontsize=11,
+               bbox_to_anchor=(0.5, 0.06))
+    fig.subplots_adjust(left=0.05, right=0.97, bottom=0.18, wspace=0.08)
+    plt.savefig(f'{results_dir}/9_pembroke_costs_profits.png', dpi=450, bbox_inches='tight')
+
+    if debug:
+        print(f"Plot saved to {results_dir}/9_pembroke_costs_profits.png")
+
+    return fig
+
+
 if __name__ == "__main__":
     
     plot_carbon_trajectories_uncertainty(debug=True)
@@ -1573,9 +1855,11 @@ if __name__ == "__main__":
     # plot_fuel_increase_boxplots(ets_scenarios=['£400-ETS only'], suffix='_ets_only', debug=True)
     # plot_cost_ctbo_producers_boxplots(ets_scenarios=['£400-ETS only'], suffix='_ets_only', debug=True)
 
-    plot_prices_by_ets(debug=True)
+    plot_prices_by_ets(debug=True,)
 
-    compare_npv_tot(debug=True)
+    compare_gas_inc(debug=True)
+    compare_producer_costs(debug=True)
+    compare_npv_tot(debug=True, exclude_sectors=['drax'])
     plot_plant_npv_csu_bubbles(debug=True, exclude_sectors=['drax'], ETS_filter=['£100-Mix', '£200-Mix', '£300-Mix'])
     # plot_plant_costs_by_sector(debug=True)
     
@@ -1583,5 +1867,7 @@ if __name__ == "__main__":
     plot_passthrough_by_ets(debug=True)
     plot_passthrough_ratio_boxplots(debug=True)
     # plot_cfd_inefficiency_vs_passthrough(debug=True)
+
+    plot_pembroke_costs_profits(debug=True)
 
     plt.show()
