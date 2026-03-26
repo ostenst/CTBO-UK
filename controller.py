@@ -143,7 +143,7 @@ if __name__ == "__main__":
     ]
 
     # Run experiments
-    n_scenarios = 25
+    n_scenarios = 50
     n_policies = 40
     
     results = perform_experiments(
