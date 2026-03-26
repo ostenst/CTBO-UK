@@ -919,6 +919,7 @@ def simulate_ctbo(
         benefit2cost_ETS = 0
     
     # --- Plant-level NPV (up to and including 2050) ---
+    discount_factors = 1 / (1 + discount_rate_ccs) ** (years - START_YEAR)
     NPV_data_all = pd.DataFrame(_plants_costbenefit)
     NPV_data_all = NPV_data_all[NPV_data_all['year'] <= NPV_END]
     NPV_data_all['discount_factor'] = discount_factors[NPV_data_all['year'] - START_YEAR] 
@@ -945,11 +946,11 @@ def simulate_ctbo(
         years_available = NPV_END - investment_year + 1 if not np.isnan(investment_year) else 0 # Dealing with edge cases of very later investors
         if years_available >= CONSTRUCTION_YEARS:
             CAPEX_NPV = sum(
-                (CAPEX / CONSTRUCTION_YEARS) / (1 + DISCOUNT_RATE) ** (investment_year + k - START_YEAR)
+                (CAPEX / CONSTRUCTION_YEARS) / (1 + discount_rate_ccs) ** (investment_year + k - START_YEAR)
                 for k in range(CONSTRUCTION_YEARS)
             )
         else:
-            CAPEX_NPV = CAPEX / (1 + DISCOUNT_RATE) ** (investment_year - START_YEAR)
+            CAPEX_NPV = CAPEX / (1 + discount_rate_ccs) ** (investment_year - START_YEAR)
         operational = NPV_data[NPV_data['year'] >= investment_year + CONSTRUCTION_YEARS]
 
         # NPV_CSU: profits and costs from CSU policy (operational years only)
@@ -957,7 +958,8 @@ def simulate_ctbo(
         
         # NPV_total: CAPEX (spread over 3 years) + annual costs and profits (operational years only)
         if investment_year is not None:
-            annual_costs = (cost_CSU_plant.loc[operational.index] + cost_ETS_plant.loc[operational.index] + OPEX_CCS.loc[operational.index]) * operational['discount_factor']
+            # annual_costs = (cost_CSU_plant.loc[operational.index] + cost_ETS_plant.loc[operational.index] + OPEX_CCS.loc[operational.index]) * operational['discount_factor']
+            annual_costs = ( 0  + cost_ETS_plant.loc[operational.index] + OPEX_CCS.loc[operational.index]) * operational['discount_factor'] # TODO: BUG: CHECK CSU COSTS
             annual_profits = (profit_CSU_plant.loc[operational.index] + profit_ETS_plant.loc[operational.index]) * operational['discount_factor']
             NPV_total = -CAPEX_NPV + annual_profits.sum() - annual_costs.sum()  # [k€]
         else:

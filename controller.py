@@ -57,7 +57,7 @@ if __name__ == "__main__":
         RealParameter("CAPEX_bioboiler", 0.80, 1.20),  # [M€/MW]
         # Financial uncertainties
         RealParameter("fixate_CAPEX", 0.02, 0.05),  # [-] fixed OPEX fraction
-        RealParameter("discount_rate_ccs", 0.05, 0.10),
+        RealParameter("discount_rate_ccs", 0.06, 0.12),
         IntegerParameter("lifetime_ccs", 20, 30),  # [years]
         RealParameter("CEPCI_2025", 880, 980),
         RealParameter("NETL_2025", 5.0, 6.0),
@@ -143,7 +143,7 @@ if __name__ == "__main__":
     ]
 
     # Run experiments
-    n_scenarios = 50
+    n_scenarios = 25
     n_policies = 40
     
     results = perform_experiments(
