@@ -45,7 +45,7 @@ if __name__ == "__main__":
         # Cost uncertainties
         RealParameter("cgas", 10, 100),  # [€/MWh] 
         RealParameter("celc", 150, 300),  # [€/MWh]
-        RealParameter("cpellets", 150, 250),  # [€/t]
+        # RealParameter("cpellets", 150, 250),  # [€/t] #NOTE PELLETS ARE NOT USED
         RealParameter("cstraw", 100, 200),  # [€/t]
         RealParameter("cliquefy", 5, 10),  # [€/tCO2]
         RealParameter("cHCN", 4, 8),  # [€/t steam]
@@ -66,6 +66,7 @@ if __name__ == "__main__":
     # Levers: policy choices we can control
     model.levers = [
         CategoricalParameter("ETS_SCENARIO", ['£0-CTBO only', '£100-Mix', '£200-Mix', '£300-Mix', '£400-ETS only']),
+        CategoricalParameter("CBAM_CSU", [0.0, 0.25, 0.50, 0.75, 1.0]),
         RealParameter("DIFFUSE_END_FRACTION", 0.05, 0.50),
     ]
 

@@ -399,6 +399,7 @@ def simulate_ctbo(
     DACCS_SCENARIO = '£322', # [£/tCO2] 322, 391, 7th Carbon Budget
     DACCS_MAX_ANNUAL = 8800, # [ktCO2/y] maximum DACCS capacity that can be added per year before 2050
     CfD_INEFFICIENCY = 0.2, # [-]
+    CBAM_CSU = 1, # [-] % of CSU price passed on to the consumer
     
     START_YEAR = 2025,
     END_YEAR = 2055,
@@ -958,8 +959,7 @@ def simulate_ctbo(
         
         # NPV_total: CAPEX (spread over 3 years) + annual costs and profits (operational years only)
         if investment_year is not None:
-            # annual_costs = (cost_CSU_plant.loc[operational.index] + cost_ETS_plant.loc[operational.index] + OPEX_CCS.loc[operational.index]) * operational['discount_factor']
-            annual_costs = ( 0  + cost_ETS_plant.loc[operational.index] + OPEX_CCS.loc[operational.index]) * operational['discount_factor'] # TODO: BUG: CHECK CSU COSTS
+            annual_costs = ((1-CBAM_CSU)*cost_CSU_plant.loc[operational.index] + cost_ETS_plant.loc[operational.index] + OPEX_CCS.loc[operational.index]) * operational['discount_factor']
             annual_profits = (profit_CSU_plant.loc[operational.index] + profit_ETS_plant.loc[operational.index]) * operational['discount_factor']
             NPV_total = -CAPEX_NPV + annual_profits.sum() - annual_costs.sum()  # [k€]
         else:

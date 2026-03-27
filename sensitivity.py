@@ -121,7 +121,7 @@ def plot_src_by_sector(df, target="NPV_total", top_n=15, debug=False):
     ncols = 2
     nrows = (n + 1) // ncols
 
-    fig, axes = plt.subplots(nrows, ncols, figsize=(14, 4.5 * nrows))
+    fig, axes = plt.subplots(nrows, ncols,  figsize=(14, 3 * nrows))
     axes = axes.flatten()
 
     for i, sector in enumerate(sectors):
@@ -160,7 +160,7 @@ def plot_npv_vs_investment_year(df, debug=False):
     ncols = 2
     nrows = (n + 1) // ncols
 
-    fig, axes = plt.subplots(nrows, ncols, figsize=(14, 4.5 * nrows))
+    fig, axes = plt.subplots(nrows, ncols,  figsize=(14, 3 * nrows))
     axes = axes.flatten()
 
     for i, sector in enumerate(sectors):
@@ -251,7 +251,7 @@ def plot_logistic_by_sector(df, top_n=15, debug=False):
     ncols = 2
     nrows = (n + 1) // ncols
 
-    fig, axes = plt.subplots(nrows, ncols, figsize=(14, 4.5 * nrows))
+    fig, axes = plt.subplots(nrows, ncols,  figsize=(14, 3 * nrows))
     axes = axes.flatten()
 
     plot_idx = 0
@@ -286,7 +286,7 @@ def plot_logistic_by_sector(df, top_n=15, debug=False):
 
 if __name__ == "__main__":
     df = build_long_dataframe(debug=True)
-    plot_logistic_by_sector(df, top_n=15, debug=True)
-    plot_src_by_sector(df, target="NPV_total", top_n=15, debug=True)
-    plot_src_by_sector(df, target="investment_year", top_n=15, debug=True)
+    plot_logistic_by_sector(df, top_n=5, debug=True)
+    plot_src_by_sector(df, target="NPV_total", top_n=5, debug=True)
+    plot_src_by_sector(df, target="investment_year", top_n=5, debug=True)
     plt.show()

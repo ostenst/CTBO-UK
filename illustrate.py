@@ -764,6 +764,130 @@ def compare_npv_tot(results_dir='results', pounds_to_EUR=1.15, exclude_sectors=N
 
     return fig
 
+def compare_npv_by_cbam(policy='£0-CTBO only', results_dir='results', pounds_to_EUR=1.15,
+                        exclude_sectors=None, debug=False):
+    """
+    Plot plant-level NPV total bubbles in 5 side-by-side panels (one per CBAM_CSU level),
+    for a single ETS_SCENARIO policy. x=median investment year, y=median NPV total,
+    size=ktCO2, color=sector.
+    """
+    if exclude_sectors is None:
+        exclude_sectors = []
+
+    plant_ref = pd.read_csv(f'{results_dir}/plant_reference.csv')
+    experiments = pd.read_csv(f'{results_dir}/experiments.csv')
+    investment_year = np.load(f'{results_dir}/outcomes_plants_investment_year.npy')
+    npv_total = np.load(f'{results_dir}/outcomes_plants_NPV_total.npy')
+    ktCO2tot_ccs = np.load(f'{results_dir}/outcomes_plants_ktCO2tot_ccs.npy')
+
+    policy_mask = experiments['ETS_SCENARIO'] == policy
+    cbam_levels = sorted(experiments.loc[policy_mask, 'CBAM_CSU'].unique())
+    n_panels = len(cbam_levels)
+
+    if debug:
+        print(f"Policy: {policy}, CBAM_CSU levels: {cbam_levels}")
+
+    magma = plt.cm.magma
+    sector_colors = {
+        'cement': magma(0.1), 'ccgt': magma(0.3), 'refinery': magma(0.9),
+        'steel': magma(0.7), 'drax': magma(0.5), 'waste': '#62a7a6',
+    }
+    legend_labels = {
+        'cement': 'Cement', 'waste': 'Waste', 'ccgt': 'Gas power',
+        'drax': 'Drax', 'refinery': 'Refinery', 'steel': 'Steel',
+    }
+    size_scale = 0.3
+
+    fig, axes = plt.subplots(1, n_panels, figsize=(14, 6), sharex=True, sharey=True,
+                             gridspec_kw={'wspace': 0.10})
+    if n_panels == 1:
+        axes = [axes]
+
+    for idx, cbam_val in enumerate(cbam_levels):
+        ax = axes[idx]
+        mask = policy_mask & (experiments['CBAM_CSU'] == cbam_val)
+
+        inv_yr = investment_year[mask]
+        npv = npv_total[mask]
+        co2 = ktCO2tot_ccs[mask]
+
+        med_inv = np.nanmedian(inv_yr, axis=0)
+        med_npv = np.nanmedian(npv, axis=0)
+        med_co2 = np.nanmedian(co2, axis=0)
+
+        df = pd.DataFrame({
+            'stack': plant_ref['stack'], 'sector': plant_ref['sector'],
+            'investment_year': med_inv, 'NPV_total': med_npv, 'ktCO2tot_ccs': med_co2,
+        })
+        df_valid = df.dropna(subset=['investment_year', 'NPV_total', 'ktCO2tot_ccs'])
+
+        if df_valid.empty:
+            ax.set_title(f'CBAM_CSU={cbam_val} (no data)', fontsize=13)
+            continue
+
+        outlier_stacks = ['Padeswood-cement', 'Protos-waste', 'Teeside-ccgt']
+        sizes = df_valid['ktCO2tot_ccs'] * size_scale
+        for sector in df_valid['sector'].unique():
+            if sector in exclude_sectors:
+                continue
+            smask = df_valid['sector'] == sector
+            ax.scatter(
+                df_valid.loc[smask, 'investment_year'],
+                df_valid.loc[smask, 'NPV_total'] / 1000 / pounds_to_EUR,
+                s=sizes[smask],
+                c=[sector_colors.get(sector, 'gray')],
+                alpha=0.7, edgecolors='black', linewidths=0.5,
+            )
+
+        omask = df_valid['stack'].isin(outlier_stacks)
+        if omask.any():
+            ax.scatter(
+                df_valid.loc[omask, 'investment_year'],
+                df_valid.loc[omask, 'NPV_total'] / 1000 / pounds_to_EUR,
+                s=sizes[omask],
+                facecolors='none', edgecolors='black', linewidths=1.5,
+                hatch='///', zorder=5,
+            )
+        omask = df_valid['stack'].isin(['Pembroke Power Station-ccgt'])
+        if omask.any():
+            ax.scatter(
+                df_valid.loc[omask, 'investment_year'],
+                df_valid.loc[omask, 'NPV_total'] / 1000 / pounds_to_EUR,
+                s=sizes[omask],
+                facecolors='none', edgecolors='white', linewidths=1.5,
+                hatch='///', zorder=5,
+            )
+
+        ax.axhline(0, color='grey', linestyle='--', linewidth=1, alpha=0.7)
+        ax.set_title(f'CBAM_CSU = {cbam_val}', fontsize=13)
+        ax.grid(True, linestyle='--', alpha=0.4)
+        ax.tick_params(labelsize=11)
+        ax.set_xlim(2025, 2050)
+        ax.set_xticks(np.arange(2025, 2051, 5))
+        ax.set_xticklabels(['' if y not in [2030, 2040, 2050] else str(y)
+                            for y in np.arange(2025, 2051, 5)])
+
+    axes[0].set_ylabel('Median NPV [M£]', fontsize=13)
+
+    legend_handles = [
+        plt.scatter([], [], s=80, c=[sector_colors[s]], alpha=0.7,
+                    edgecolors='black', linewidths=0.5, label=legend_labels[s])
+        for s in ['cement', 'ccgt', 'refinery', 'steel', 'drax', 'waste']
+        if s in sector_colors and s not in exclude_sectors
+    ]
+    fig.legend(handles=legend_handles, loc='lower right', fontsize=10)
+
+    safe_policy = policy.replace('£', '').replace(' ', '_')
+    fig.suptitle(f'Median NPV by CBAM_CSU level — {policy}', fontsize=15, fontweight='bold')
+    fig.subplots_adjust(left=0.04, right=0.97, wspace=0.05)
+    plt.savefig(f'{results_dir}/4_compare_npv_cbam_{safe_policy}.png', dpi=450, bbox_inches='tight')
+
+    if debug:
+        print(f"Plot saved to {results_dir}/4_compare_npv_cbam_{safe_policy}.png")
+
+    return fig
+
+
 def compare_gas_inc(results_dir='results', pounds_to_EUR=1.15, debug=False):
     """
     Plot gas price increase box plots in 5 side-by-side panels (one per ETS scenario),
@@ -1860,6 +1984,9 @@ if __name__ == "__main__":
     compare_gas_inc(debug=True)
     compare_producer_costs(debug=True)
     compare_npv_tot(debug=True, exclude_sectors=['drax'])
+    compare_npv_by_cbam(policy='£0-CTBO only', exclude_sectors=['drax'])
+    compare_npv_by_cbam(policy='£200-Mix', exclude_sectors=['drax'])
+    compare_npv_by_cbam(policy='£400-ETS only', exclude_sectors=['drax'])
     plot_plant_npv_csu_bubbles(debug=True, exclude_sectors=['drax'], ETS_filter=['£100-Mix', '£200-Mix', '£300-Mix'])
     # plot_plant_costs_by_sector(debug=True)
     
