@@ -10,7 +10,12 @@ m = 0.8391
 
 original_params = np.array([a, b, c, n, m])
 
-dollar_to_euro = 0.85
+dollar_to_euro = 0.85 # Sherman CCS feasibility study
+sek_to_euro = 0.091 # Mälarenergi 4 BSEK CAPEX https://www.svt.se/nyheter/lokalt/vastmanland/lyckat-projekt-att-fanga-in-koldioxid-pausas-malarenergi-alldeles-for-dyrt
+
+# Mälarenergi has around 200kt fossil CO2 (uncertain biogenic fraction)
+malarenergi_mCO2 = 200*1000 / 0.40 # [tCO2 p.a. total] assuming a 40% fossil fraction
+malarenergi_mCO2 /= 8000 # [tCO2/h]
 
 # --- Plant data with target CAPEX ---
 plants = [
@@ -19,7 +24,8 @@ plants = [
     {"name":"shand", "mCO2": 272, "xCO2": 0.13, "CAPEX_target": 810},
     {"name":"klem", "mCO2": 52, "xCO2": 0.11, "CAPEX_target": 310},
     {"name":"norcem", "mCO2": 55, "xCO2": 0.20, "CAPEX_target": 390},
-    {"name":"sherman", "mCO2": 129, "xCO2": 0.06, "CAPEX_target": 477 * dollar_to_euro}
+    {"name":"sherman", "mCO2": 129, "xCO2": 0.06, "CAPEX_target": 477 * dollar_to_euro},
+    {"name":"malarenergi", "mCO2": malarenergi_mCO2, "xCO2": 0.11, "CAPEX_target": 4000 * sek_to_euro}
 ]
 
 # --- Model function ---
