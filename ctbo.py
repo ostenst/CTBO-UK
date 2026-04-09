@@ -399,7 +399,7 @@ def simulate_ctbo(
     DACCS_SCENARIO = '£322', # [£/tCO2] 322, 391, 7th Carbon Budget
     DACCS_MAX_ANNUAL = 8800, # [ktCO2/y] maximum DACCS capacity that can be added per year before 2050
     CfD_INEFFICIENCY = 0.2, # [-]
-    CBAM_CSU = 1, # [-] % of CSU price passed on to the consumer
+    CBAM_CSU = 1, # [-] % strength, i.e., the percentage of CSU price passed on to the consumer
     
     START_YEAR = 2025,
     END_YEAR = 2055,
