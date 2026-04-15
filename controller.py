@@ -27,7 +27,6 @@ if __name__ == "__main__":
     model.uncertainties = [
         # Scenario uncertainties
         CategoricalParameter("DACCS_SCENARIO", ['£322', '£391']),
-        RealParameter("CfD_INEFFICIENCY", 0.1, 1.0),
         # Sector-specific uncertainties
         RealParameter("fraction_limestone", 0.55, 0.65),  # [-] cementite fraction
         RealParameter("fraction_fossil_waste", 0.40, 0.55),  # [-] fossil fraction in waste
@@ -45,7 +44,6 @@ if __name__ == "__main__":
         # Cost uncertainties
         RealParameter("cgas", 10, 100),  # [€/MWh] 
         RealParameter("celc", 150, 300),  # [€/MWh]
-        # RealParameter("cpellets", 150, 250),  # [€/t] #NOTE PELLETS ARE NOT USED
         RealParameter("cstraw", 100, 200),  # [€/t]
         RealParameter("cliquefy", 5, 10),  # [€/tCO2]
         RealParameter("cHCN", 4, 8),  # [€/t steam]
@@ -65,8 +63,7 @@ if __name__ == "__main__":
 
     # Levers: policy choices we can control
     model.levers = [
-        CategoricalParameter("ETS_SCENARIO", ['£0-CTBO only', '£100-Mix', '£200-Mix', '£300-Mix', '£400-ETS only']),
-        CategoricalParameter("CBAM_CSU", [0.0, 0.25, 0.50, 0.75, 1.0]),
+        CategoricalParameter("ETS_SCENARIO", ['CTBO-only', 'ETS-eq', '£100-Mix', '£200-Mix', '£300-Mix']),
         RealParameter("DIFFUSE_END_FRACTION", 0.05, 0.50),
     ]
 
@@ -130,14 +127,11 @@ if __name__ == "__main__":
         Constant("transport_hubs", transport_hubs),
         Constant("single_run", False),
         Constant("PHASEOUT", False),
-        Constant("ASSUME_FOAK", False),
-        Constant("DACCS_MAX_ANNUAL", 7500), # [ktCO2/y] maximum DACCS capacity that can be added per year before 2050
         Constant("CTBO_QUADRATIC", 0.4),
         Constant("DISCOUNT_RATE", 0.035), # Can try 3.5% (social) or 9% (private)
-        Constant("FOAK_CALIBRATION", 1.6379),
         Constant("ETS_START", 45),
         Constant("START_YEAR", 2025),
-        Constant("END_YEAR", 2055),
+        Constant("END_YEAR", 2055), # But assume all prices stabilize by 2050
         Constant("DIFFUSE_END_YEAR", 2050),
         Constant("pounds_to_EUR", 1.15),
         Constant("CONSTRUCTION_YEARS", 3),

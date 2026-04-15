@@ -390,16 +390,11 @@ def simulate_ctbo(
     single_run = False,
 
     PHASEOUT = False,
-    ASSUME_FOAK = True,
     DISCOUNT_RATE = 0.035,
     CTBO_QUADRATIC = 0.4,
-    FOAK_CALIBRATION = 1.6379, # from calibrate_foak.py
     ETS_START = 45, # [£/tCO2]
-    ETS_SCENARIO = '£0-CTBO only', # [£/tCO2] £0-CTBO only, £100-Mix, £200-Mix, £300-Mix, £400-ETS only
+    ETS_SCENARIO = 'CTBO-only', # ['CTBO-only', 'ETS-eq', '£100-Mix', '£200-Mix', '£300-Mix']),
     DACCS_SCENARIO = '£322', # [£/tCO2] 322, 391, 7th Carbon Budget
-    DACCS_MAX_ANNUAL = 8800, # [ktCO2/y] maximum DACCS capacity that can be added per year before 2050
-    CfD_INEFFICIENCY = 0.2, # [-]
-    CBAM_CSU = 1, # [-] % strength, i.e., the percentage of CSU price passed on to the consumer
     
     START_YEAR = 2025,
     END_YEAR = 2055,
@@ -446,7 +441,6 @@ def simulate_ctbo(
 
     cgas = 40, # [€/MWh] Mersch et al. (2023)
     celc = 250, # [€/MWh]
-    cpellets = 200, # [€/t biopellets]
     cstraw = 150, # [€/t biostraw]
     cliquefy = 7, # [€/tCO2] @20bar includes CAPEX excludes electricity OPEX
     cHCN = 6, # [€/t steam] Biermann et al. (2022)
@@ -485,7 +479,6 @@ def simulate_ctbo(
 
         'cgas': cgas,
         'celc': celc,
-        'cpellets': cpellets,
         'cstraw': cstraw,
         'cliquefy': cliquefy,
         'cHCN': cHCN,
@@ -550,9 +543,7 @@ def simulate_ctbo(
 
         # Calculate CAPEX (of amine plant and Qboilers)
         tCO2_total = mCO2_total * FLH # [tCO2/y generated]
-        CAPEX, OPEX_fixed = approximate_CAPEX(mCO2_total, xCO2, fixate_CAPEX, CEPCI_2025, CEPCI_base=CEPCI_2025, NETL=NETL_2025, debug=False) # [M€], [M€/yr]
-        if ASSUME_FOAK:
-            CAPEX = CAPEX * FOAK_CALIBRATION
+        CAPEX, OPEX_fixed = approximate_CAPEX(mCO2_total, xCO2, fixate_CAPEX, CEPCI_2025, CEPCI_base=CEPCI_2023, NETL=NETL_2025, debug=False) # [M€], [M€/yr]
         OPEX_fixed = (OPEX_fixed * 10**6) / tCO2_total # [€/tCO2]
         CAPEX_boilers, CAPEX_liquefaction = auxiliary_CAPEX(Qgas_boiler, Qbio_boiler, x, liquefy=LIQUEFY) # [M€], [€/tCO2]
         CAPEX += CAPEX_boilers
@@ -598,16 +589,11 @@ def simulate_ctbo(
     MACC, cost_initial_outliers = subsidize_outliers(MACC, outliers)
     MACC = MACC.sort_values(by='MAC', ascending=True)
 
-    # print(MACC[MACC['sector'] == 'cement'][['stack', 'MAC', 'ktCO2f', 'ktCO2cem', 'ktCO2b', 'ktCO2f_ccs', 'ktCO2cem_ccs', 'ktCO2b_ccs', 'ktCO2f_res']])
-    # for sector in MACC['sector'].unique():
-    #     median_MAC = MACC[MACC['sector'] == sector]['MAC'].median()
-    #     print(f"Median MAC for sector {sector} = {median_MAC:.2f} €/tCO2")
-
     if single_run:
         MACC.to_csv('results/macc.csv', index=False)
         plot_macc(MACC, pounds_to_EUR=pounds_to_EUR, savefig=True)
 
-    # ------------------- SIMULATE THE CTBO ---------------------
+    # ------------------- SIMULATE THE CTBO/ETS policies ---------------------
     # Calculate diffuse carbon trajectories by subtracting point-source carbon from total supply
     years = np.arange(START_YEAR, END_YEAR + 1)
     supply_ktCO2f = (coal_2023 + oil_2023 + gas_2023) * 1000 
@@ -624,17 +610,18 @@ def simulate_ctbo(
         cost_DACCS = 322 * pounds_to_EUR
     elif DACCS_SCENARIO == '£391':
         cost_DACCS = 391 * pounds_to_EUR
-    if ETS_SCENARIO == '£0-CTBO only':
+    if ETS_SCENARIO == 'CTBO-only':
         ETS_START = 0
         ETS_END = 0
+    elif ETS_SCENARIO == 'ETS-eq': # NOTE: Must calculate ETS price organically!
+        ETS_START = 999
+        ETS_END = 999
     elif ETS_SCENARIO == '£100-Mix':
         ETS_END = 100
     elif ETS_SCENARIO == '£200-Mix':
         ETS_END = 200 
     elif ETS_SCENARIO == '£300-Mix':
         ETS_END = 300 
-    elif ETS_SCENARIO == '£400-ETS only':
-        ETS_END = 400 
     ets_trajectory = np.minimum(
         np.where(
             years <= DIFFUSE_END_YEAR,
@@ -661,7 +648,6 @@ def simulate_ctbo(
     _cost_CTBO_policy = [] # Area under MACC
     _profit_CTBO_policy = [] # Area above MACC
     _CTBO_passthrough = [] # [k€/y]
-    _CfD_passthrough = []
     _cost_ETS_policy = []
     _profit_ETS_policy = []
     _ETS_passthrough = [] # [k€/y]
@@ -678,7 +664,7 @@ def simulate_ctbo(
     year_DACCS_marginal = None
 
     # Simulate the CTBO
-    ctbo_active = (ETS_SCENARIO != '£400-ETS only')
+    ctbo_active = True # Always true in this model version
     stored_ktCO2daccs = 0
     cost_marginal = 0
     cost_CTBO_producers = 0
@@ -693,21 +679,14 @@ def simulate_ctbo(
         else:
             ets_price = ets_trajectory[year_DACCS_marginal - min(years)] # Stabilize ETS prices if DACCS is marginal
 
-        # Plants invest voluntarily if ETS price > MAC (adjusted by any increased fossil costs)
-        for idx, plant in MACC.iterrows():
-            if not plant['invested']:
-
-                if plant['ktCO2f_inc'] > 0:
-                    costs_extra = plant['ktCO2f_inc']/plant['ktCO2f'] * (1 - capture_rate) * ets_price # [€/tCO2] extra fossil costs from natural gas
-                else:
-                    costs_extra = 0
-                
-                if plant['MAC']+costs_extra < ets_price:
-                    MACC.loc[idx, 'invested'] = True
-                    MACC.loc[idx, 'year_invest'] = year
+        # Plants invest voluntarily if the forced ETS price > MAC
+        if ETS_SCENARIO == '£100-Mix' or ETS_SCENARIO == '£200-Mix' or ETS_SCENARIO == '£300-Mix':
+            for idx, plant in MACC.iterrows():
+                if not plant['invested']:
+                    if plant['MAC'] < ets_price:
+                        MACC.loc[idx, 'invested'] = True
+                        MACC.loc[idx, 'year_invest'] = year
         
-        # The CTBO only forces investments if the ETS<400£ by 2050... include condition!
-
         # Base the CTBO mandate on coal, oil, and gas supply (ktCO2f)
         pointsource_supply = MACC['ktCO2f'].sum() + MACC['ktCO2f_inc'].where(MACC['invested'], 0).sum()
         supply_ktCO2f = pointsource_supply + diffuse_supply
@@ -754,30 +733,20 @@ def simulate_ctbo(
                 if year_DACCS_marginal is None:
                     year_DACCS_marginal = year
 
+            # # CONTINUE FROM HERE: DETERMINE E/GAMMA COSTS DEPENDING ON THE POLICY CASE:
+            # if ETS_SCENARIO == 'ETS-eq':
+            #     E = ets_price
+            #     gamma = 0
+            # elif ETS_SCENARIO == '£100-Mix':
+            #     E = 100
+            #     gamma = 0
+            # elif ETS_SCENARIO == '£200-Mix':
+            #     E = 200
+            #     gamma = 0
+
             cost_CSU = max(0, cost_marginal - ets_price) # [€/tCO2]
             cost_CTBO_producers = cost_CSU * (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) # [k€/y] 
             cost_CSU_embedded = min(cost_CSU, cost_CTBO_producers / supply_ktCO2f) # [€/tCO2] beyond 2050, constrain the embedded cost to the CSU cost
-
-        else:
-            # ETS-only: no CTBO mandate, no CSU costs
-            ctbo_mandate = 0
-            plants_invested = MACC[MACC['invested']]
-            if len(plants_invested) > 0:
-                plant_marginal = plants_invested.loc[plants_invested['MAC'].idxmax()]
-                cost_marginal = plant_marginal['MAC']
-
-            # DACCS invest to balance remaining fossil FUEL emissions if ETS price > DACCS cost
-            if ets_price >= cost_DACCS:
-                target_ktCO2f = emitted_ktCO2f - (stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b)
-                daccs_cap = target_ktCO2f if year >= 2050 else stored_ktCO2daccs + DACCS_MAX_ANNUAL # If before 2050, limit added DACCS capacity, otherwise unlimited additions
-                stored_ktCO2daccs = min(daccs_cap, target_ktCO2f)
-                cost_marginal = cost_DACCS
-                if year_DACCS_marginal is None:
-                    year_DACCS_marginal = year
-
-            cost_CSU = 0
-            cost_CTBO_producers = 0
-            cost_CSU_embedded = 0
 
         # Calculate the gas price increase and store interim results
         gas_increase_abs = cost_CSU_embedded * emission_factor_gas # [€/MWh]
@@ -880,7 +849,6 @@ def simulate_ctbo(
         # Feedback: all ETS and CTBO costs are ultimately passed on to the consumer (I include both fossil and biogenic CCS) (only the STORED STUFF, not EMITTED)
         ETS_passthrough = (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) * ets_price # [k€/y] assuming ETS covers costs of BECCS/DACCS as well!
         CTBO_passthrough = cost_CTBO + profit_CTBO # [k€/y] assuming CTBO covers costs of BECCS/DACCS as well!
-        CfD_passthrough = cost_CTBO * (1 + CfD_INEFFICIENCY) # [k€/y]
 
         # Never remove this commented print below! It verifies the ETS passthrough calculation
         # print(ETS_passthrough - (cost_ETS + profit_ETS))
@@ -888,7 +856,6 @@ def simulate_ctbo(
         _cost_CTBO_policy.append(cost_CTBO)
         _profit_CTBO_policy.append(profit_CTBO)
         _CTBO_passthrough.append(CTBO_passthrough)
-        _CfD_passthrough.append(CfD_passthrough)
         _cost_ETS_policy.append(cost_ETS)
         _profit_ETS_policy.append(profit_ETS)
         _ETS_passthrough.append(ETS_passthrough)
@@ -905,7 +872,6 @@ def simulate_ctbo(
     NPV_cost_CTBO = (np.array(_cost_CTBO_policy)[:n_npv] * df_npv).sum()      # [k€]
     NPV_profit_CTBO = (np.array(_profit_CTBO_policy)[:n_npv] * df_npv).sum()  # [k€]
     NPV_CTBO_passthrough = (np.array(_CTBO_passthrough)[:n_npv] * df_npv).sum() # [k€]
-    NPV_CfD_passthrough = (np.array(_CfD_passthrough)[:n_npv] * df_npv).sum() # [k€]
     NPV_cost_ETS = (np.array(_cost_ETS_policy)[:n_npv] * df_npv).sum()        # [k€]
     NPV_profit_ETS = (np.array(_profit_ETS_policy)[:n_npv] * df_npv).sum()    # [k€]
     NPV_ETS_passthrough = (np.array(_ETS_passthrough)[:n_npv] * df_npv).sum() # [k€]
@@ -959,7 +925,7 @@ def simulate_ctbo(
         
         # NPV_total: CAPEX (spread over 3 years) + annual costs and profits (operational years only)
         if investment_year is not None:
-            annual_costs = ((1-CBAM_CSU)*cost_CSU_plant.loc[operational.index] + cost_ETS_plant.loc[operational.index] + OPEX_CCS.loc[operational.index]) * operational['discount_factor']
+            annual_costs = ((1-0)*cost_CSU_plant.loc[operational.index] + cost_ETS_plant.loc[operational.index] + OPEX_CCS.loc[operational.index]) * operational['discount_factor']
             annual_profits = (profit_CSU_plant.loc[operational.index] + profit_ETS_plant.loc[operational.index]) * operational['discount_factor']
             NPV_total = -CAPEX_NPV + annual_profits.sum() - annual_costs.sum()  # [k€]
         else:
@@ -1067,7 +1033,6 @@ def simulate_ctbo(
     results['profit_ETS_policy'] = _profit_ETS_policy
     results['ETS_passthrough'] = _ETS_passthrough # [k€/y]
     results['total_passthrough'] = _total_passthrough # [k€/y]
-    results['CfD_passthrough'] = _CfD_passthrough # [k€/y]
 
     # Plant-level results, ordered alphabetically by stack
     npv_sorted = sorted(npv_results, key=lambda x: x['stack'])
@@ -1103,7 +1068,6 @@ def simulate_ctbo(
     results['NPV_profit_CTBO'] = NPV_profit_CTBO
     results['benefit2cost_CTBO'] = benefit2cost_CTBO
     results['NPV_CTBO_passthrough'] = NPV_CTBO_passthrough
-    results['NPV_CfD_passthrough'] = NPV_CfD_passthrough
     results['NPV_cost_ETS'] = NPV_cost_ETS
     results['NPV_profit_ETS'] = NPV_profit_ETS
     results['benefit2cost_ETS'] = benefit2cost_ETS
