@@ -393,7 +393,7 @@ def simulate_ctbo(
     DISCOUNT_RATE = 0.035,
     CTBO_QUADRATIC = 0.4,
     ETS_START = 45, # [£/tCO2]
-    ETS_SCENARIO = '£100-Mix', # ['CTBO-only', 'ETS-eq', '£100-Mix', '£200-Mix', '£300-Mix']),
+    ETS_SCENARIO = 'ETS-eq', # ['CTBO-only', 'ETS-eq', '£100-Mix', '£200-Mix', '£300-Mix']),
     DACCS_SCENARIO = '£322', # [£/tCO2] 322, 391, 7th Carbon Budget
     
     START_YEAR = 2025,
@@ -544,7 +544,7 @@ def simulate_ctbo(
         # Calculate CAPEX (of amine plant and Qboilers)
         tCO2_total = mCO2_total * FLH * capture_rate # [tCO2/y captured]
         CAPEX, OPEX_fixed = approximate_CAPEX(mCO2_total, xCO2, fixate_CAPEX, CEPCI_2025, CEPCI_base=CEPCI_2023, NETL=NETL_2025, debug=False) # [M€], [M€/yr]
-        OPEX_fixed = (OPEX_fixed * 10**6) / tCO2_total # [€/tCO2]
+        OPEX_fixed = (OPEX_fixed * 10**6) / tCO2_total 
         OPEX += OPEX_fixed
         CAPEX_boilers, CAPEX_liquefaction = auxiliary_CAPEX(Qgas_boiler, Qbio_boiler, x, liquefy=LIQUEFY) # [M€], [€/tCO2]
         CAPEX += CAPEX_boilers
@@ -590,7 +590,7 @@ def simulate_ctbo(
         }
     MACC, cost_initial_outliers = subsidize_outliers(MACC, outliers)
     MACC = MACC.sort_values(by='MAC', ascending=True)
-
+  
     if single_run:
         MACC.to_csv('results/macc.csv', index=False)
         plot_macc(MACC, pounds_to_EUR=pounds_to_EUR, savefig=True)
@@ -637,6 +637,7 @@ def simulate_ctbo(
     # Initialize results arrays for carbon (f=fuels, cem=cement, pl=plastic, g=f+cem+pl, b=biomass)
     _supply_ktCO2f = []
     _emitted_ktCO2f = [] 
+    _emitted_ktCO2final = []
     _mandate_ktCO2 = []
     _stored_ktCO2g = []
     _stored_ktCO2b = []
@@ -650,30 +651,23 @@ def simulate_ctbo(
     _cost_tax = []
     _cost_consumers = []
     _cost_fuels = []
+    _profit_y_policy = []
+    _cost_y_policy = []
+    _profit_E_policy = []
+    _cost_E_policy = []
+    _tax_E_policy = []
     _gas_increase_abs = [] # €/MWh
     _gas_increase_pct = [] # % increase
     _petrol_increase_abs = [] # €/L
     _diesel_increase_abs = [] # €/L
     _kerosene_increase_abs = [] # €/L
-
-    _cost_CTBO_policy = [] # Area under MACC
-    _profit_CTBO_policy = [] # Area above MACC
-    _CTBO_passthrough = [] # [k€/y]
-    _cost_ETS_policy = []
-    _profit_ETS_policy = []
-    _ETS_passthrough = [] # [k€/y]
-    _total_passthrough = [] # [k€/y]
     _plants_costbenefit = []
 
-    gas_increase_2040 = None
-    year_DACCS_marginal = None
-
     # Simulate the CTBO
+    year_DACCS_marginal = None
     ctbo_active = True # Always true in this model version
     stored_ktCO2daccs = 0
     cost_marginal = 0
-    cost_suppliers = 0
-    cost_CSU_embedded = 0
 
     for i, year in enumerate(years):
 
@@ -697,10 +691,6 @@ def simulate_ctbo(
         supply_ktCO2f = pointsource_supply + diffuse_supply
         pointsource_emissions = MACC['ktCO2f'].where(~MACC['invested'], 0).sum() + MACC['ktCO2f_res'].where(MACC['invested'], 0).sum()
         emitted_ktCO2f = pointsource_emissions + diffuse_supply
-        emitted_ktCO2_ETS = (
-        MACC['ktCO2f'].where(~MACC['invested'], 0).sum() + MACC['ktCO2f_res'].where(MACC['invested'], 0).sum() +
-        MACC['ktCO2cem'].where(~MACC['invested'], 0).sum() + MACC['ktCO2cem_res'].where(MACC['invested'], 0).sum() +
-        MACC['ktCO2pl'].where(~MACC['invested'], 0).sum() + MACC['ktCO2pl_res'].where(MACC['invested'], 0).sum() )
 
         stored_ktCO2f = MACC['ktCO2f_ccs'].where(MACC['invested'], 0).sum()
         stored_ktCO2cem = MACC['ktCO2cem_ccs'].where(MACC['invested'], 0).sum()
@@ -741,7 +731,7 @@ def simulate_ctbo(
                 if year_DACCS_marginal is None:
                     year_DACCS_marginal = year
 
-            # Determine policy costs
+            # Determine policy costs from recalculated emissions
             if ETS_SCENARIO == 'CTBO-only':
                 E = 0
                 y = cost_marginal
@@ -751,6 +741,13 @@ def simulate_ctbo(
             else:
                 E = ets_price
                 y = max(0, cost_marginal - E) # Never negative!
+
+            pointsource_emissions = MACC['ktCO2f'].where(~MACC['invested'], 0).sum() + MACC['ktCO2f_res'].where(MACC['invested'], 0).sum()
+            emitted_ktCO2f = pointsource_emissions + diffuse_supply
+            emitted_ktCO2_ETS = (
+            MACC['ktCO2f'].where(~MACC['invested'], 0).sum() + MACC['ktCO2f_res'].where(MACC['invested'], 0).sum() +
+            MACC['ktCO2cem'].where(~MACC['invested'], 0).sum() + MACC['ktCO2cem_res'].where(MACC['invested'], 0).sum() +
+            MACC['ktCO2pl'].where(~MACC['invested'], 0).sum() + MACC['ktCO2pl_res'].where(MACC['invested'], 0).sum() )
 
             costs_suppliers = y * (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) # [k€/y] 
             costs_emitters = E * (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) # [k€/y] 
@@ -769,37 +766,6 @@ def simulate_ctbo(
             costs_consumers = costs_suppliers + costs_emitters + costs_tax # [k€/y]
             cost_fuels = (costs_suppliers + costs_emitters + costs_tax) / supply_ktCO2f # [€/tCO2] NOTE: No price ceiling implemented beyond 2050!
             
-            # # Below is old code:
-            # cost_CSU = max(0, cost_marginal - ets_price) # [€/tCO2]
-            # cost_CTBO_producers = cost_CSU * (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) # [k€/y] 
-            # cost_CSU_embedded = min(cost_CSU, cost_CTBO_producers / supply_ktCO2f) # [€/tCO2] beyond 2050, constrain the embedded cost to the CSU cost
-
-        # Calculate the fuel price increase and store interim results
-        gas_increase_abs = cost_fuels * emission_factor_gas # [€/MWh]
-        petrol_increase_abs = cost_fuels * (emission_factor_petrol/1000) # [€/L]
-        diesel_increase_abs = cost_fuels * (emission_factor_diesel/1000) # [€/L]
-        kerosene_increase_abs = cost_fuels * (emission_factor_kerosene/1000) # [€/L]
-
-        _supply_ktCO2f.append(supply_ktCO2f)
-        _emitted_ktCO2f.append(emitted_ktCO2f)
-        _mandate_ktCO2.append(ctbo_mandate)
-        _stored_ktCO2g.append(stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl)
-        _stored_ktCO2b.append(stored_ktCO2b)
-        _stored_ktCO2daccs.append(stored_ktCO2daccs)
-
-        _cost_marginal.append(cost_marginal)
-        _price_ETS.append(E)
-        _price_CSU.append(y)
-        _cost_suppliers.append(costs_suppliers)
-        _cost_emitters.append(costs_emitters)
-        _cost_tax.append(costs_tax)
-        _cost_consumers.append(costs_consumers)
-        _cost_fuels.append(cost_fuels)
-        _gas_increase_abs.append(gas_increase_abs)
-        _petrol_increase_abs.append(petrol_increase_abs)
-        _diesel_increase_abs.append(diesel_increase_abs)
-        _kerosene_increase_abs.append(kerosene_increase_abs)
-
         # Calculate plant and policy costs and profits based on MACC areas
         profit_y_tot = 0 # [k€/y] area A 
         cost_y_tot = 0 # [k€/y] area B
@@ -838,38 +804,6 @@ def simulate_ctbo(
                 cost_E_tot += cost_E
                 tax_E_tot += tax_E
 
-                # cost_CTBO += max(0, cost_plant - ets_price) * plant['ktCO2tot_ccs'] # [k€/y] Green MACC area 1
-                # profit_CTBO += max(0, cost_marginal - max(ets_price, cost_plant)) * plant['ktCO2tot_ccs'] # [k€/y] Green MACC area 2
-                # cost_ETS += min(ets_price, cost_plant) * plant['ktCO2tot_ccs'] # [k€/y] Purple MACC area 3
-                # profit_ETS += max(0, ets_price - cost_plant) * plant['ktCO2tot_ccs'] # [k€/y] Purple MACC area 4
-
-            # if not plant['invested']:
-            #     profit_CSU_plant = 0
-            #     # cost_ETS_plant = ets_price * (plant['ktCO2f'] + plant['ktCO2cem'] + plant['ktCO2pl']) # [k€/y] 
-            #     cost_ETS_plant = 0 # assuming that the ETS is not a cost but a potential profit
-            #     profit_ETS_plant = 0
-            # elif plant['stack'] in outliers:
-            #     profit_CSU_plant = cost_CSU * plant['ktCO2tot_ccs'] # A hypothetical, non-subsidized case! So they invest in 2025
-            #     cost_ETS_plant =  ets_price * plant['ktCO2f_inc'] * capture_rate # only additional costs from burning additional fossil fuel
-            #     profit_ETS_plant = ets_price * (plant['ktCO2f_ccs'] + plant['ktCO2cem_ccs'] + plant['ktCO2pl_ccs'])
-            #     profit_ETS_plant += ets_price * plant['ktCO2b_ccs']
-
-            #     cost_ETS += min(ets_price, cost_plant) * plant['ktCO2tot_ccs'] # [k€/y] Purple MACC area 3
-            #     profit_ETS += max(0, ets_price - cost_plant) * plant['ktCO2tot_ccs'] # [k€/y] Purple MACC area 4
-            # else:
-            #     profit_CSU_plant = cost_CSU * plant['ktCO2tot_ccs'] 
-            #     # cost_ETS_plant = ets_price * (plant['ktCO2f_res'] + plant['ktCO2cem_res'] + plant['ktCO2pl_res'])
-            #     # profit_ETS_plant = max(0, ets_price - plant['MAC']) * plant['ktCO2b_ccs'] # [k€/y] assumes CDR can profit in the ETS
-            #     cost_ETS_plant =  ets_price * plant['ktCO2f_inc'] * capture_rate # only additional costs from burning additional fossil fuel
-            #     profit_ETS_plant = ets_price * (plant['ktCO2f_ccs'] + plant['ktCO2cem_ccs'] + plant['ktCO2pl_ccs']) # profit from avoiding ETS charges
-            #     profit_ETS_plant += ets_price * plant['ktCO2b_ccs'] # [k€/y] assumes CDR can profit in the ETS
-
-            #     # NOTE: Only policy costs/profits for invested plants (to calculate the cost areas)
-            #     cost_CTBO += max(0, cost_plant - ets_price) * plant['ktCO2tot_ccs'] # [k€/y] Green MACC area 1
-            #     profit_CTBO += max(0, cost_marginal - max(ets_price, cost_plant)) * plant['ktCO2tot_ccs'] # [k€/y] Green MACC area 2
-            #     cost_ETS += min(ets_price, cost_plant) * plant['ktCO2tot_ccs'] # [k€/y] Purple MACC area 3
-            #     profit_ETS += max(0, ets_price - cost_plant) * plant['ktCO2tot_ccs'] # [k€/y] Purple MACC area 4
-
             _plants_costbenefit.append({
                 'year': year,
                 'stack': plant['stack'],
@@ -878,64 +812,77 @@ def simulate_ctbo(
                 'investment_year': plant['year_invest'],
                 'marginal_plant': cost_marginal == S,
                 'CSU_price': y,
-                'MAC': S,
                 'ETS_price': E,
+                'MAC': S,
                 'CAPEX': plant['CAPEX'] * 10**3, # [k€]
                 'OPEX': plant['OPEX'] * plant['ktCO2tot_ccs'], # [k€/y] 
-                'netprofit_y': y * plant['ktCO2tot_ccs'], # [k€/y] CHECK IF INVESTED!?!?
-                'netprofit_E': E * plant['ktCO2tot_ccs'], # [k€/y] 
+                'relative_profit_y': profit_y, # [k€/y] relative to a policy environment where y and E costs are passed on to the consumer
+                'relative_profit_E': profit_E, # [k€/y] relative to a policy environment where y and E costs are passed on to the consumer
                 'ktCO2tot_ccs': plant['ktCO2tot_ccs'],
             })
+            # if plant['year_invest'] == year:
+            #     print(profit_y, profit_E, cost_marginal==S, year)
 
         # Add DACCS and calculate policy costs/profits
         if stored_ktCO2daccs > 0:
             cost_y_tot += y * stored_ktCO2daccs # [k€/y]
             cost_E_tot += E * stored_ktCO2daccs # [k€/y]
 
-        # Check whether the policy costs/profits are consistent with the total costs/profits
-        print(" ")
-        print(costs_suppliers - (cost_y_tot+profit_y_tot), year)
-        print(costs_emitters - (cost_E_tot+profit_E_tot), year)
-        print(costs_tax - tax_E_tot, year) # BUG: This costs_tax is not zero in all years!
-        
-    #     # Feedback: all ETS and CTBO costs are ultimately passed on to the consumer (I include both fossil and biogenic CCS) (only the STORED STUFF, not EMITTED)
-    #     ETS_passthrough = (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) * ets_price # [k€/y] assuming ETS covers costs of BECCS/DACCS as well!
-    #     CTBO_passthrough = cost_CTBO + profit_CTBO # [k€/y] assuming CTBO covers costs of BECCS/DACCS as well!
+        # if single_run:
+        #     print("These two methods of calculating policy costs should yield zero")
+        #     print(costs_emitters - (cost_E_tot + profit_E_tot))
+        #     print(costs_suppliers - (cost_y_tot + profit_y_tot))
+        #     print(costs_tax - tax_E_tot)
 
-    #     # Never remove this commented print below! It verifies the ETS passthrough calculation
-    #     # print(ETS_passthrough - (cost_ETS + profit_ETS))
+        # Calculate the fuel price increase and store results
+        gas_increase_abs = cost_fuels * emission_factor_gas # [€/MWh]
+        petrol_increase_abs = cost_fuels * (emission_factor_petrol/1000) # [€/L]
+        diesel_increase_abs = cost_fuels * (emission_factor_diesel/1000) # [€/L]
+        kerosene_increase_abs = cost_fuels * (emission_factor_kerosene/1000) # [€/L]
 
-    #     _cost_CTBO_policy.append(cost_CTBO)
-    #     _profit_CTBO_policy.append(profit_CTBO)
-    #     _CTBO_passthrough.append(CTBO_passthrough)
-    #     _cost_ETS_policy.append(cost_ETS)
-    #     _profit_ETS_policy.append(profit_ETS)
-    #     _ETS_passthrough.append(ETS_passthrough)
-    #     _total_passthrough.append(ETS_passthrough + CTBO_passthrough)
+        _supply_ktCO2f.append(supply_ktCO2f)
+        _emitted_ktCO2f.append(emitted_ktCO2f)
+        _emitted_ktCO2final.append(emitted_ktCO2_ETS + diffuse_supply)
+        _mandate_ktCO2.append(ctbo_mandate)
+        _stored_ktCO2g.append(stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl)
+        _stored_ktCO2b.append(stored_ktCO2b)
+        _stored_ktCO2daccs.append(stored_ktCO2daccs)
+
+        _cost_marginal.append(cost_marginal)
+        _price_ETS.append(E)
+        _price_CSU.append(y)
+        _cost_suppliers.append(costs_suppliers)
+        _cost_emitters.append(costs_emitters)
+        _cost_tax.append(costs_tax)
+        _cost_consumers.append(costs_consumers)
+        _cost_fuels.append(cost_fuels)
+        _profit_y_policy.append(profit_y_tot)
+        _cost_y_policy.append(cost_y_tot)
+        _profit_E_policy.append(profit_E_tot)
+        _cost_E_policy.append(cost_E_tot)
+        _tax_E_policy.append(tax_E_tot)
+        _gas_increase_abs.append(gas_increase_abs)
+        _petrol_increase_abs.append(petrol_increase_abs)
+        _diesel_increase_abs.append(diesel_increase_abs)
+        _kerosene_increase_abs.append(kerosene_increase_abs)
     
-    # # ========== NPV CALCULATIONS ==========
-    # # Discount factors for annual values (relative to START_YEAR), truncated to 2050
-    # NPV_END = 2050
-    # n_npv = NPV_END - START_YEAR + 1
-    # discount_factors = 1 / (1 + DISCOUNT_RATE) ** (years - START_YEAR)
-    # df_npv = discount_factors[:n_npv]
+    # ========== NPV CALCULATIONS ==========
+    # Discount factors for annual values (relative to START_YEAR), truncated to 2050
+    NPV_END = 2050
+    n_npv = NPV_END - START_YEAR + 1
+    discount_factors = 1 / (1 + DISCOUNT_RATE) ** (years - START_YEAR)
+    df_npv = discount_factors[:n_npv]
     
-    # # --- Policy-level NPV (up to and including 2050) ---
-    # NPV_cost_CTBO = (np.array(_cost_CTBO_policy)[:n_npv] * df_npv).sum()      # [k€]
-    # NPV_profit_CTBO = (np.array(_profit_CTBO_policy)[:n_npv] * df_npv).sum()  # [k€]
-    # NPV_CTBO_passthrough = (np.array(_CTBO_passthrough)[:n_npv] * df_npv).sum() # [k€]
-    # NPV_cost_ETS = (np.array(_cost_ETS_policy)[:n_npv] * df_npv).sum()        # [k€]
-    # NPV_profit_ETS = (np.array(_profit_ETS_policy)[:n_npv] * df_npv).sum()    # [k€]
-    # NPV_ETS_passthrough = (np.array(_ETS_passthrough)[:n_npv] * df_npv).sum() # [k€]
-    # NPV_total_passthrough = (np.array(_total_passthrough)[:n_npv] * df_npv).sum() # [k€]
-    # if NPV_cost_CTBO > 0:
-    #     benefit2cost_CTBO = NPV_profit_CTBO / NPV_cost_CTBO  # [-] Net policy value for CTBO
-    # else:
-    #     benefit2cost_CTBO = 0
-    # if NPV_cost_ETS > 0:
-    #     benefit2cost_ETS = NPV_profit_ETS / NPV_cost_ETS      # [-] Net policy value for ETS
-    # else:
-    #     benefit2cost_ETS = 0
+    # --- Policy-level NPV (up to and including 2050) ---
+    NPV_costs_suppliers = (np.array(_cost_suppliers)[:n_npv] * df_npv).sum()   # [k€] equals NPV_profit_y_policy+NPV_cost_y_policy
+    NPV_costs_emitters = (np.array(_cost_emitters)[:n_npv] * df_npv).sum()     # [k€] equals NPV_profit_E_policy+NPV_cost_E_policy
+    NPV_costs_tax = (np.array(_cost_tax)[:n_npv] * df_npv).sum()               # [k€] equals NPV_tax_E_policy
+    NPV_costs_consumers = (np.array(_cost_consumers)[:n_npv] * df_npv).sum()   # [k€]
+    NPV_profit_y_policy = (np.array(_profit_y_policy)[:n_npv] * df_npv).sum()  # [k€]
+    NPV_cost_y_policy = (np.array(_cost_y_policy)[:n_npv] * df_npv).sum()      # [k€]
+    NPV_profit_E_policy = (np.array(_profit_E_policy)[:n_npv] * df_npv).sum()  # [k€]
+    NPV_cost_E_policy = (np.array(_cost_E_policy)[:n_npv] * df_npv).sum()      # [k€]
+    NPV_tax_E_policy = (np.array(_tax_E_policy)[:n_npv] * df_npv).sum()        # [k€]
     
     # # --- Plant-level NPV (up to and including 2050) ---
     # discount_factors = 1 / (1 + discount_rate_ccs) ** (years - START_YEAR)
@@ -1002,132 +949,154 @@ def simulate_ctbo(
     #         'ktCO2tot_ccs': plant['ktCO2tot_ccs']  # From MACC, not NPV_data
     #     })
 
-    # if single_run:
-    #     # Plot NPV bubble charts (Omit "Drax-power")
-    #     npv_results = [result for result in npv_results if result['stack'] != 'Drax-power']
-    #     plot_npv_bubbles(npv_results, savefig=True)
-    #     plot_npv_total_bubbles(npv_results, savefig=True)
-
-    #     # Plot carbon trajectories
-    #     plot_carbon_trajectories(
-    #         years, 
-    #         _supply_ktCO2f, 
-    #         _emitted_ktCO2f, 
-    #         _mandate_ktCO2, 
-    #         _stored_ktCO2g, 
-    #         _stored_ktCO2b, 
-    #         _stored_ktCO2daccs,
-    #         savefig=True
-    #     )
-        
-    #     # Plot cost trajectories
-    #     plot_cost_trajectories(
-    #         years,
-    #         _cost_marginal,
-    #         _price_ETS,
-    #         _price_CSU,
-    #         _cost_CSU_embedded,
-    #         savefig=True
-    #     )
-    #     # Plot line plot of the gas price increase
-    #     fig, ax = plt.subplots(figsize=(12, 7))
-    #     ax.plot(years, _gas_increase_pct, label='Gas price increase', color='tab:orange', linestyle='-')
-    #     ax.set_xlabel('Year', fontsize=14)
-    #     ax.set_ylabel('Gas price increase (%)', fontsize=14)
-    #     ax.set_title('Gas price increase over time', fontsize=16)
-    #     ax.legend(fontsize=12)
-    #     ax.grid(True, linestyle='--', alpha=0.4)
-    #     ax.tick_params(labelsize=12)
-
-    #     # Plot ETS and CTBO passthrough over time
-    #     fig, ax = plt.subplots(figsize=(12, 7))
-    #     ax.plot(years, np.array(_ETS_passthrough) / 1e6, label='ETS passthrough', color='tab:blue', linestyle='-', linewidth=2)
-    #     ax.plot(years, np.array(_CTBO_passthrough) / 1e6, label='CTBO passthrough', color='tab:green', linestyle='-', linewidth=2)
-    #     ax.plot(years, np.array(_total_passthrough) / 1e6, label='Total passthrough', color='tab:red', linestyle='-', linewidth=2)
-    #     ax.set_xlabel('Year', fontsize=14)
-    #     ax.set_ylabel('Cost passthrough [B€/yr]', fontsize=14)
-    #     ax.set_title('ETS vs CTBO cost passthrough over time', fontsize=16)
-    #     ax.legend(fontsize=12)
-    #     ax.grid(True, linestyle='--', alpha=0.4)
-    #     ax.tick_params(labelsize=12)
-    #     ax.axhline(0, color='grey', linestyle='--', linewidth=1, alpha=0.7)
-
-    #     # Print NPV values
-    #     print(f"\n--- Cost Passthrough NPV ---")
-    #     print(f"NPV ETS passthrough:  {NPV_ETS_passthrough / 1e6:.2f} B€")
-    #     print(f"NPV CTBO passthrough: {NPV_CTBO_passthrough / 1e6:.2f} B€")
-    #     print(f"NPV total passthrough: {NPV_total_passthrough / 1e6:.2f} B€")
-    #     print(f"Ratio (CTBO vs. total): {NPV_CTBO_passthrough / NPV_total_passthrough:.2f}")
-    #     print(f"Ratio (ETS vs. total): {NPV_ETS_passthrough / NPV_total_passthrough:.2f}")
-
-    #     plt.show()
-
     results = {}
     results['ctbo_trajectory'] = ctbo_trajectory
     results['ETS_trajectory'] = ets_trajectory
 
+    # Results group 1
     results['supply_ktCO2f'] = _supply_ktCO2f
     results['emitted_ktCO2f'] = _emitted_ktCO2f
+    results['emitted_ktCO2final'] = _emitted_ktCO2final
     results['mandate_ktCO2'] = _mandate_ktCO2
     results['stored_ktCO2g'] = _stored_ktCO2g
     results['stored_ktCO2b'] = _stored_ktCO2b
     results['stored_ktCO2daccs'] = _stored_ktCO2daccs
 
-    # results['cost_marginal'] = _cost_marginal
-    # results['price_ETS'] = _price_ETS
-    # results['price_CSU'] = _price_CSU
-    # results['cost_CTBO_producers'] = _cost_CTBO_producers
-    # results['cost_CSU_embedded'] = _cost_CSU_embedded
-    # results['cost_CTBO_policy'] = _cost_CTBO_policy
-    # results['profit_CTBO_policy'] = _profit_CTBO_policy
-    # results['CTBO_passthrough'] = _CTBO_passthrough # [k€/y]
-    # results['cost_ETS_policy'] = _cost_ETS_policy
-    # results['profit_ETS_policy'] = _profit_ETS_policy
-    # results['ETS_passthrough'] = _ETS_passthrough # [k€/y]
-    # results['total_passthrough'] = _total_passthrough # [k€/y]
+    # Results group 2
+    results['cost_marginal'] = _cost_marginal
+    results['price_ETS'] = _price_ETS
+    results['price_CSU'] = _price_CSU
+    results['cost_fuels'] = _cost_fuels
 
-    # # Plant-level results, ordered alphabetically by stack
-    # npv_sorted = sorted(npv_results, key=lambda x: x['stack'])
-    # results['plants_stack'] = [p['stack'] for p in npv_sorted]
-    # results['plants_sector'] = [p['sector'] for p in npv_sorted]
-    # results['plants_investment_year'] = [p['investment_year'] for p in npv_sorted]
-    # results['plants_NPV_CSU'] = [p['NPV_CSU'] for p in npv_sorted]
-    # results['plants_NPV_total'] = [p['NPV_total'] for p in npv_sorted]
-    # results['plants_NPV_ETS'] = [p['NPV_ETS'] for p in npv_sorted]
-    # results['plants_ktCO2tot_ccs'] = [p['ktCO2tot_ccs'] for p in npv_sorted]
-    # results['plants_cost'] = [p['cost'] for p in npv_sorted]
+    # Results group 3
+    results['costs_suppliers'] = _cost_suppliers
+    results['costs_emitters'] = _cost_emitters
+    results['costs_tax'] = _cost_tax
+    results['costs_consumers'] = _cost_consumers
+    results['profit_y_policy'] = _profit_y_policy
+    results['cost_y_policy'] = _cost_y_policy
+    results['profit_E_policy'] = _profit_E_policy
+    results['cost_E_policy'] = _cost_E_policy
+    results['tax_E_policy'] = _tax_E_policy
     
-    # # Teeside-ccgt plant-level time series [k€/y] aligned to years array
-    # pembroke_df = pd.DataFrame(_plants_costbenefit)
-    # pembroke_df = pembroke_df[pembroke_df['stack'] == 'Pembroke Power Station-ccgt'].sort_values('year')
-    # results['pembroke_cost_CSU'] = pembroke_df['cost_CSU_plant'].values
-    # results['pembroke_profit_CSU'] = pembroke_df['profit_CSU_plant'].values
-    # results['pembroke_cost_ETS'] = pembroke_df['cost_ETS_plant'].values
-    # results['pembroke_profit_ETS'] = pembroke_df['profit_ETS_plant'].values
-    # results['pembroke_OPEX'] = pembroke_df['OPEX'].values
-    # results['pembroke_CAPEX'] = pembroke_df['CAPEX'].iloc[0] if len(pembroke_df) > 0 else 0
+    results['NPV_costs_suppliers'] = NPV_costs_suppliers
+    results['NPV_costs_emitters'] = NPV_costs_emitters
+    results['NPV_costs_tax'] = NPV_costs_tax
+    results['NPV_costs_consumers'] = NPV_costs_consumers
+    results['NPV_profit_y_policy'] = NPV_profit_y_policy
+    results['NPV_cost_y_policy'] = NPV_cost_y_policy
+    results['NPV_profit_E_policy'] = NPV_profit_E_policy
+    results['NPV_cost_E_policy'] = NPV_cost_E_policy
+    results['NPV_tax_E_policy'] = NPV_tax_E_policy
 
-    # results['gas_increase_abs'] = _gas_increase_abs
-    # results['gas_increase_pct'] = _gas_increase_pct
-    # results['gas_increase_2040'] = gas_increase_2040
-    # results['petrol_increase_abs'] = _petrol_increase_abs
-    # results['diesel_increase_abs'] = _diesel_increase_abs
-    # results['kerosene_increase_abs'] = _kerosene_increase_abs
-    # results['year_DACCS_marginal'] = year_DACCS_marginal
-    
-    # # Policy-level NPV results
-    # results['NPV_cost_CTBO'] = NPV_cost_CTBO
-    # results['NPV_profit_CTBO'] = NPV_profit_CTBO
-    # results['benefit2cost_CTBO'] = benefit2cost_CTBO
-    # results['NPV_CTBO_passthrough'] = NPV_CTBO_passthrough
-    # results['NPV_cost_ETS'] = NPV_cost_ETS
-    # results['NPV_profit_ETS'] = NPV_profit_ETS
-    # results['benefit2cost_ETS'] = benefit2cost_ETS
-    # results['NPV_ETS_passthrough'] = NPV_ETS_passthrough
-    # results['NPV_total_passthrough'] = NPV_total_passthrough
-    # results['passthrough_ratio'] = NPV_CTBO_passthrough / NPV_total_passthrough
+    # Results group 4
+    results['gas_increase_abs'] = _gas_increase_abs
+    results['petrol_increase_abs'] = _petrol_increase_abs
+    results['diesel_increase_abs'] = _diesel_increase_abs
+    results['kerosene_increase_abs'] = _kerosene_increase_abs
+
+    if single_run:
+        plot_results_groups(years, results, savefig=True)
 
     return results
+
+def plot_results_groups(years, results, savefig=False, debug=False):
+    """
+    Plot four time-series figures, one for each results group.
+    NPVs are annotated in Group 3 instead of plotted as lines.
+    """
+    if debug:
+        print(f"plot_results_groups inputs: years={len(years)}")
+
+    # Group 1: Carbon flows
+    fig, ax = plt.subplots(figsize=(12, 7))
+    ax.plot(years, results['supply_ktCO2f'], lw=2, label='Supply [ktCO2f]')
+    # ax.plot(years, results['emitted_ktCO2f'], lw=2, label='Emitted [ktCO2f]')
+    ax.plot(years, results['emitted_ktCO2final'], lw=2, label='Emitted final [ktCO2f]')
+    ax.plot(years, results['mandate_ktCO2'], lw=2, label='Mandate [ktCO2]')
+    ax.plot(years, results['stored_ktCO2g'], lw=2, label='Stored g [ktCO2]')
+    ax.plot(years, results['stored_ktCO2b'], lw=2, label='Stored b [ktCO2]')
+    ax.plot(years, results['stored_ktCO2daccs'], lw=2, label='Stored DACCS [ktCO2]')
+    ax.set_title('Results Group 1: Carbon flows', fontsize=16)
+    ax.set_xlabel('Year', fontsize=14)
+    ax.set_ylabel('ktCO2/y', fontsize=14)
+    ax.tick_params(labelsize=12)
+    ax.grid(True, linestyle='--', alpha=0.4)
+    ax.legend(fontsize=11)
+    plt.tight_layout()
+    if savefig:
+        plt.savefig('results/group1_timeseries.png', dpi=450, bbox_inches='tight')
+
+    # Group 2: Prices and marginal costs
+    fig, ax = plt.subplots(figsize=(12, 7))
+    ax.plot(years, results['cost_marginal'], lw=2, label='Marginal cost [€/tCO2]')
+    ax.plot(years, results['price_ETS'], lw=2, label='E / ETS price [€/tCO2]')
+    ax.plot(years, results['price_CSU'], lw=2, label='gamma / CSU price [€/tCO2]')
+    ax.plot(years, results['cost_fuels'], lw=2, label='Fuel cost [€/tCO2]')
+    ax.set_title('Results Group 2: Prices and costs', fontsize=16)
+    ax.set_xlabel('Year', fontsize=14)
+    ax.set_ylabel('€/tCO2', fontsize=14)
+    ax.tick_params(labelsize=12)
+    ax.grid(True, linestyle='--', alpha=0.4)
+    ax.legend(fontsize=11)
+    plt.tight_layout()
+    if savefig:
+        plt.savefig('results/group2_timeseries.png', dpi=450, bbox_inches='tight')
+
+    # Group 3: Annual policy costs/profits + NPV annotation
+    fig, ax = plt.subplots(figsize=(12, 7))
+    scale_billion = 1e-6  # [B€/k€]
+    ax.plot(years, np.array(results['costs_suppliers']) * scale_billion, lw=2, label='Costs suppliers [B€/y]')
+    ax.plot(years, np.array(results['costs_emitters']) * scale_billion, lw=2, label='Costs emitters [B€/y]')
+    ax.plot(years, np.array(results['costs_tax']) * scale_billion, lw=2, label='Costs tax [B€/y]')
+    ax.plot(years, np.array(results['costs_consumers']) * scale_billion, lw=2, label='Costs consumers [B€/y]')
+    # ax.plot(years, results['profit_y_policy'], lw=2, label='Profit y policy [k€/y]')
+    # ax.plot(years, results['cost_y_policy'], lw=2, label='Cost y policy [k€/y]')
+    # ax.plot(years, results['profit_E_policy'], lw=2, label='Profit E policy [k€/y]')
+    # ax.plot(years, results['cost_E_policy'], lw=2, label='Cost E policy [k€/y]')
+    # ax.plot(years, results['tax_E_policy'], lw=2, label='Tax E policy [k€/y]')
+    npv_text = (
+        f"NPV costs suppliers: {results['NPV_costs_suppliers'] * scale_billion:.3f} B€\n"
+        f"NPV costs emitters: {results['NPV_costs_emitters'] * scale_billion:.3f} B€\n"
+        f"NPV costs tax: {results['NPV_costs_tax'] * scale_billion:.3f} B€\n"
+        f"NPV costs consumers: {results['NPV_costs_consumers'] * scale_billion:.3f} B€\n"
+        # f"NPV profit y: {results['NPV_profit_y_policy']:.1f} kEUR\n"
+        # f"NPV cost y: {results['NPV_cost_y_policy']:.1f} kEUR\n"
+        # f"NPV profit E: {results['NPV_profit_E_policy']:.1f} kEUR\n"
+        # f"NPV cost E: {results['NPV_cost_E_policy']:.1f} kEUR\n"
+        # f"NPV tax E: {results['NPV_tax_E_policy']:.1f} kEUR"
+    )
+    ax.text(
+        0.02, 0.98, npv_text, transform=ax.transAxes, va='top', ha='left', fontsize=10,
+        bbox=dict(facecolor='white', alpha=0.85, edgecolor='gray')
+    )
+    ax.set_title('Results Group 3: Policy annual values', fontsize=16)
+    ax.set_xlabel('Year', fontsize=14)
+    ax.set_ylabel('B€/y', fontsize=14)
+    ax.tick_params(labelsize=12)
+    ax.grid(True, linestyle='--', alpha=0.4)
+    ax.legend(fontsize=10, ncol=2)
+    plt.tight_layout()
+    if savefig:
+        plt.savefig('results/group3_timeseries.png', dpi=450, bbox_inches='tight')
+
+    # Group 4: Fuel price impacts
+    fig, ax = plt.subplots(figsize=(12, 7))
+    ax.plot(years, results['gas_increase_abs'], lw=2, label='Gas increase [€/MWh]')
+    ax.plot(years, results['petrol_increase_abs'], lw=2, label='Petrol increase [€/L]')
+    ax.plot(years, results['diesel_increase_abs'], lw=2, label='Diesel increase [€/L]')
+    ax.plot(years, results['kerosene_increase_abs'], lw=2, label='Kerosene increase [€/L]')
+    ax.set_title('Results Group 4: Fuel price impacts', fontsize=16)
+    ax.set_xlabel('Year', fontsize=14)
+    ax.set_ylabel('Absolute increase', fontsize=14)
+    ax.tick_params(labelsize=12)
+    ax.grid(True, linestyle='--', alpha=0.4)
+    ax.legend(fontsize=11)
+    plt.tight_layout()
+    if savefig:
+        plt.savefig('results/group4_timeseries.png', dpi=450, bbox_inches='tight')
+
+    plt.show()
 
 def plot_opex_distributions_by_sector(plants_clean, opex_results, bins=30, ncols=2, debug=False):
     """
