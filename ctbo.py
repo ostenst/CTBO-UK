@@ -393,7 +393,7 @@ def simulate_ctbo(
     DISCOUNT_RATE = 0.035,
     CTBO_QUADRATIC = 0.4,
     ETS_START = 45, # [£/tCO2]
-    ETS_SCENARIO = 'ETS-eq', # ['CTBO-only', 'ETS-eq', '£100-Mix', '£200-Mix', '£300-Mix']),
+    ETS_SCENARIO = '£300-Mix', # ['CTBO-only', 'ETS-eq', '£100-Mix', '£200-Mix', '£300-Mix']),
     DACCS_SCENARIO = '£322', # [£/tCO2] 322, 391, 7th Carbon Budget
     
     START_YEAR = 2025,
@@ -658,9 +658,9 @@ def simulate_ctbo(
     _tax_E_policy = []
     _gas_increase_abs = [] # €/MWh
     _gas_increase_pct = [] # % increase
-    _petrol_increase_abs = [] # €/L
-    _diesel_increase_abs = [] # €/L
-    _kerosene_increase_abs = [] # €/L
+    _petrol_increase_abs = [] # cent/L
+    _diesel_increase_abs = [] # cent/L
+    _kerosene_increase_abs = [] # cent/L
     _plants_costbenefit = []
 
     # Simulate the CTBO
@@ -836,15 +836,15 @@ def simulate_ctbo(
 
         # Calculate the fuel price increase and store results
         gas_increase_abs = cost_fuels * emission_factor_gas # [€/MWh]
-        petrol_increase_abs = cost_fuels * (emission_factor_petrol/1000) # [€/L]
-        diesel_increase_abs = cost_fuels * (emission_factor_diesel/1000) # [€/L]
-        kerosene_increase_abs = cost_fuels * (emission_factor_kerosene/1000) # [€/L]
+        petrol_increase_abs = cost_fuels * (emission_factor_petrol/1000) / pounds_to_EUR * 100 # [cent/L]
+        diesel_increase_abs = cost_fuels * (emission_factor_diesel/1000) / pounds_to_EUR * 100 # [cent/L]
+        kerosene_increase_abs = cost_fuels * (emission_factor_kerosene/1000) / pounds_to_EUR * 100 # [cent/L]
 
         _supply_ktCO2f.append(supply_ktCO2f)
         _emitted_ktCO2f.append(emitted_ktCO2f)
         _emitted_ktCO2final.append(emitted_ktCO2_ETS + diffuse_supply)
         _mandate_ktCO2.append(ctbo_mandate)
-        _stored_ktCO2g.append(stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl)
+        _stored_ktCO2g.append(stored_ktCO2b+stored_ktCO2daccs+stored_ktCO2cem + stored_ktCO2pl) # Can balance remaining fossil FUEL emissions
         _stored_ktCO2b.append(stored_ktCO2b)
         _stored_ktCO2daccs.append(stored_ktCO2daccs)
 
@@ -1012,11 +1012,12 @@ def plot_results_groups(years, results, savefig=False, debug=False):
     fig, ax = plt.subplots(figsize=(12, 7))
     ax.plot(years, results['supply_ktCO2f'], lw=2, label='Supply [ktCO2f]')
     # ax.plot(years, results['emitted_ktCO2f'], lw=2, label='Emitted [ktCO2f]')
-    ax.plot(years, results['emitted_ktCO2final'], lw=2, label='Emitted final [ktCO2f]')
+    ax.plot(years, results['emitted_ktCO2final'], lw=2, label='Emitted final [ktCO2f,c,p]')
+    ax.plot(years, results['emitted_ktCO2f'], lw=2, label='Emitted fuel [ktCO2f]')
     ax.plot(years, results['mandate_ktCO2'], lw=2, label='Mandate [ktCO2]')
-    ax.plot(years, results['stored_ktCO2g'], lw=2, label='Stored g [ktCO2]')
-    ax.plot(years, results['stored_ktCO2b'], lw=2, label='Stored b [ktCO2]')
-    ax.plot(years, results['stored_ktCO2daccs'], lw=2, label='Stored DACCS [ktCO2]')
+    ax.plot(years, results['stored_ktCO2g'], lw=2, label='Stored [ktCO2,b,daccs,cem,pl]')
+    ax.plot(years, results['stored_ktCO2b'], lw=2, label='Stored [ktCO2,b]')
+    ax.plot(years, results['stored_ktCO2daccs'], lw=2, label='Stored [ktCO2,daccs]')
     ax.set_title('Results Group 1: Carbon flows', fontsize=16)
     ax.set_xlabel('Year', fontsize=14)
     ax.set_ylabel('ktCO2/y', fontsize=14)
@@ -1083,9 +1084,9 @@ def plot_results_groups(years, results, savefig=False, debug=False):
     # Group 4: Fuel price impacts
     fig, ax = plt.subplots(figsize=(12, 7))
     ax.plot(years, results['gas_increase_abs'], lw=2, label='Gas increase [€/MWh]')
-    ax.plot(years, results['petrol_increase_abs'], lw=2, label='Petrol increase [€/L]')
-    ax.plot(years, results['diesel_increase_abs'], lw=2, label='Diesel increase [€/L]')
-    ax.plot(years, results['kerosene_increase_abs'], lw=2, label='Kerosene increase [€/L]')
+    ax.plot(years, results['petrol_increase_abs'], lw=2, label='Petrol increase [cent/L]')
+    ax.plot(years, results['diesel_increase_abs'], lw=2, label='Diesel increase [cent/L]')
+    ax.plot(years, results['kerosene_increase_abs'], lw=2, label='Kerosene increase [cent/L]')
     ax.set_title('Results Group 4: Fuel price impacts', fontsize=16)
     ax.set_xlabel('Year', fontsize=14)
     ax.set_ylabel('Absolute increase', fontsize=14)
