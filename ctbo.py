@@ -383,6 +383,136 @@ def subsidize_outliers(MACC, outliers, debug=False):
         initial_costs_outliers,
     )
 
+def extend_plant_npv_data(npv_data_all, lifetime_ccs, debug=False):
+    """
+    Extend each invested plant's annual rows to its individual NPV horizon.
+    The horizon is [investment_year, investment_year + lifetime_ccs - 1].
+    For years beyond the simulation window, reuse the plant's last available annual values.
+    """
+    if debug:
+        print(
+            "extend_plant_npv_data inputs:",
+            f"rows={len(npv_data_all)}, lifetime_ccs={lifetime_ccs}",
+        )
+
+    extended_rows = []
+    for stack, plant_df in npv_data_all.groupby('stack', sort=False):
+        plant_df = plant_df.sort_values('year').copy()
+        extended_rows.append(plant_df)
+
+        investment_year_series = plant_df['investment_year'].dropna()
+        if investment_year_series.empty:
+            continue
+
+        investment_year = int(investment_year_series.iloc[0])
+        npv_end_year = investment_year + int(lifetime_ccs) - 1
+        last_year_available = int(plant_df['year'].max())
+        if npv_end_year <= last_year_available:
+            continue
+
+        last_row = plant_df.iloc[-1].copy()
+        for year in range(last_year_available + 1, npv_end_year + 1):
+            row = last_row.copy()
+            row['year'] = year
+            row['invested'] = True
+            row['investment_year'] = investment_year
+            extended_rows.append(pd.DataFrame([row]))
+
+    npv_extended = pd.concat(extended_rows, ignore_index=True)
+    npv_extended = npv_extended.sort_values(['stack', 'year']).reset_index(drop=True)
+
+    if debug:
+        print(
+            "extend_plant_npv_data output:",
+            f"rows={len(npv_extended)}, max_year={int(npv_extended['year'].max())}",
+        )
+    return npv_extended
+
+def calculate_plant_npv(npv_data_all, lifetime_ccs, debug=False):
+    """
+    Calculate plant-level NPV using plant-specific investment horizons.
+    Rules:
+    - CAPEX split evenly across investment year + next 2 years
+    - OPEX starts after construction years
+    - Revenues = full cash inflow from y and E after construction years
+    - All discounted with per-row discount_factor
+    """
+    if debug:
+        print(
+            "calculate_plant_npv inputs:",
+            f"rows={len(npv_data_all)}, lifetime_ccs={lifetime_ccs}",
+        )
+
+    records = []
+    for stack, plant_df in npv_data_all.groupby('stack', sort=False):
+        plant_df = plant_df.sort_values('year').copy()
+        sector = plant_df['sector'].iloc[0] if 'sector' in plant_df and len(plant_df) > 0 else None
+        investment_year_series = plant_df['investment_year'].dropna()
+        if investment_year_series.empty:
+            records.append({
+                'stack': stack,
+                'sector': sector,
+                'investment_year': np.nan,
+                'npv_end_year': np.nan,
+                'NPV_CAPEX': 0.0,
+                'NPV_OPEX': 0.0,
+                'NPV_REVENUE': 0.0,
+                'NPV_total': np.nan,
+            })
+            continue
+
+        investment_year = int(investment_year_series.iloc[0])
+        npv_end_year = investment_year + int(lifetime_ccs) - 1
+        period = plant_df[(plant_df['year'] >= investment_year) & (plant_df['year'] <= npv_end_year)].copy()
+        if period.empty:
+            records.append({
+                'stack': stack,
+                'sector': sector,
+                'investment_year': investment_year,
+                'npv_end_year': npv_end_year,
+                'NPV_CAPEX': 0.0,
+                'NPV_OPEX': 0.0,
+                'NPV_REVENUE': 0.0,
+                'NPV_total': np.nan,
+            })
+            continue
+
+        capex_total = float(period['CAPEX'].dropna().iloc[0]) if period['CAPEX'].notna().any() else 0.0
+        capex_annual = capex_total / 3.0
+
+        year_values = period['year'].to_numpy()
+        discount = period['discount_factor'].to_numpy(dtype=float)
+        opex_values = period['OPEX'].to_numpy(dtype=float)
+        revenue_values = (period['cash_inflow_y'] + period['cash_inflow_E']).to_numpy(dtype=float)
+
+        in_construction = year_values <= (investment_year + 2)
+        in_operation = year_values >= (investment_year + 3)
+
+        capex_stream = np.where(in_construction, capex_annual, 0.0)
+        opex_stream = np.where(in_operation, opex_values, 0.0)
+        revenue_stream = np.where(in_operation, revenue_values, 0.0)
+
+        npv_capex = float(np.sum(capex_stream * discount))
+        npv_opex = float(np.sum(opex_stream * discount))
+        npv_revenue = float(np.sum(revenue_stream * discount))
+        npv_total = npv_revenue - npv_opex - npv_capex
+
+        records.append({
+            'stack': stack,
+            'sector': sector,
+            'investment_year': investment_year,
+            'npv_end_year': npv_end_year,
+            'NPV_CAPEX': npv_capex,
+            'NPV_OPEX': npv_opex,
+            'NPV_REVENUE': npv_revenue,
+            'NPV_total': npv_total,
+        })
+
+    npv_plants = pd.DataFrame(records)
+    if debug:
+        print(f"calculate_plant_npv output: plants={len(npv_plants)}")
+    return npv_plants
+
 def simulate_ctbo(
     # Constants
     plants_clean,
@@ -393,7 +523,7 @@ def simulate_ctbo(
     DISCOUNT_RATE = 0.035,
     CTBO_QUADRATIC = 0.4,
     ETS_START = 45, # [£/tCO2]
-    ETS_SCENARIO = '£300-Mix', # ['CTBO-only', 'ETS-eq', '£100-Mix', '£200-Mix', '£300-Mix']),
+    ETS_SCENARIO = 'CTBO-only', # ['CTBO-only', 'ETS-eq', '£100-Mix', '£200-Mix', '£300-Mix']),
     DACCS_SCENARIO = '£322', # [£/tCO2] 322, 391, 7th Carbon Budget
     
     START_YEAR = 2025,
@@ -506,21 +636,30 @@ def simulate_ctbo(
     }
     # Calculate the point-source carbon supply. Low-concentration refinery stacks that have NaN as energy_strategy are considered "diffuse" and excluded. Also subtract waste emissions, Drax, and limestone emissions
     plants_clean = plants_clean[plants_clean['energy_strategy'].notna()]
+    plants_pre_phaseout = plants_clean.copy()
     total_ktCO2 = plants_clean['ktCO2'].sum()
     waste_ktCO2 = plants_clean[plants_clean['sector'] == 'waste']['ktCO2'].sum()
     drax_ktCO2 = plants_clean[plants_clean['sector'] == 'drax']['ktCO2'].sum()
     cement_ktCO2 = plants_clean[plants_clean['sector'] == 'cement']['ktCO2'].sum() * fraction_limestone
     pointsources_ktCO2f = total_ktCO2 - (waste_ktCO2 + drax_ktCO2 + cement_ktCO2) # [ktCO2f] supplied and emitted in 2023
     
-    # Specify whether plants defossilize. 
+    # Specify whether plants defossilize.
+    outliers = ['Padeswood-cement', 'Protos-waste', 'Teeside-ccgt']
     if PHASEOUT:
         plants_clean = plants_clean[~plants_clean['sector'].isin(['steel', 'refinery'])]
         ccgt_plants = plants_clean[plants_clean['sector'] == 'ccgt']
         ccgt_even = ccgt_plants.iloc[::2]
         plants_clean = pd.concat([plants_clean[plants_clean['sector'] != 'ccgt'], ccgt_even])
+        # Safeguard: always keep the three designated outlier stacks in the model.
+        for outlier_name in outliers:
+            if outlier_name not in plants_clean['stack'].values:
+                outlier_row = plants_pre_phaseout[plants_pre_phaseout['stack'] == outlier_name]
+                if outlier_row.empty:
+                    raise ValueError(f"Required outlier stack missing from source data: {outlier_name}")
+                plants_clean = pd.concat([plants_clean, outlier_row], ignore_index=True)
+        plants_clean = plants_clean.drop_duplicates(subset=['stack'], keep='first')
     if single_run:
         print("Total point-sources of carbon =", plants_clean['ktCO2'].sum(), "ktCO2")
-    outliers = ['Padeswood-cement', 'Protos-waste', 'Teeside-ccgt']
 
     # ------------------- CONSTRUCT THE MACC ---------------------
     MACC = pd.DataFrame(columns=[
@@ -789,12 +928,16 @@ def simulate_ctbo(
                 profit_E = 0
                 cost_E = 0
                 tax_E = E * (plant['ktCO2f'] + plant['ktCO2cem'] + plant['ktCO2pl']) # [k€/y]
+                cash_inflow_y = 0
+                cash_inflow_E = 0
             else:
                 profit_y = max(0, cost_marginal - max(E, S)) * plant['ktCO2tot_ccs'] # [k€/y] area A 
                 cost_y = max(0, S - E) * plant['ktCO2tot_ccs'] # [k€/y] area B
                 profit_E = max(0, E - S) * plant['ktCO2tot_ccs'] # [k€/y] area C
                 cost_E = min(E, S) * plant['ktCO2tot_ccs'] # [k€/y] area D
                 tax_E = E * (plant['ktCO2f_res'] + plant['ktCO2cem_res'] + plant['ktCO2pl_res']) # [k€/y] area E
+                cash_inflow_y = profit_y + cost_y # Full y inflow = area A + area B
+                cash_inflow_E = profit_E + cost_E # Full E inflow = area C + area D
             
             # If plant is not an outlier, add its profits and costs to the total
             if plant['stack'] not in outliers: 
@@ -816,12 +959,12 @@ def simulate_ctbo(
                 'MAC': S,
                 'CAPEX': plant['CAPEX'] * 10**3, # [k€]
                 'OPEX': plant['OPEX'] * plant['ktCO2tot_ccs'], # [k€/y] 
-                'relative_profit_y': profit_y, # [k€/y] relative to a policy environment where y and E costs are passed on to the consumer
-                'relative_profit_E': profit_E, # [k€/y] relative to a policy environment where y and E costs are passed on to the consumer
+                'cash_inflow_y': cash_inflow_y, # [k€/y] full cash inflow from y-policy
+                'cash_inflow_E': cash_inflow_E, # [k€/y] full cash inflow from E-policy
+                # 'relative_profit_y': profit_y, # [k€/y] old relative-profit-only definition
+                # 'relative_profit_E': profit_E, # [k€/y] old relative-profit-only definition
                 'ktCO2tot_ccs': plant['ktCO2tot_ccs'],
             })
-            # if plant['year_invest'] == year:
-            #     print(profit_y, profit_E, cost_marginal==S, year)
 
         # Add DACCS and calculate policy costs/profits
         if stored_ktCO2daccs > 0:
@@ -884,70 +1027,20 @@ def simulate_ctbo(
     NPV_cost_E_policy = (np.array(_cost_E_policy)[:n_npv] * df_npv).sum()      # [k€]
     NPV_tax_E_policy = (np.array(_tax_E_policy)[:n_npv] * df_npv).sum()        # [k€]
     
-    # # --- Plant-level NPV (up to and including 2050) ---
-    # discount_factors = 1 / (1 + discount_rate_ccs) ** (years - START_YEAR)
-    # NPV_data_all = pd.DataFrame(_plants_costbenefit)
-    # NPV_data_all = NPV_data_all[NPV_data_all['year'] <= NPV_END]
-    # NPV_data_all['discount_factor'] = discount_factors[NPV_data_all['year'] - START_YEAR] 
-    
-    # npv_results = []
-    # for idx, plant in MACC.iterrows():
-
-    #     cost_plant = plant['MAC'] # Set costs based on MACC costs, and override for outliers
-    #     if plant['stack'] == 'Padeswood-cement':
-    #         cost_plant = cost_initial_outliers['Padeswood-cement']
-    #     elif plant['stack'] == 'Protos-waste':
-    #         cost_plant = cost_initial_outliers['Protos-waste']
-    #     elif plant['stack'] == 'Teeside-ccgt':
-    #         cost_plant = cost_initial_outliers['Teeside-ccgt']
-        
-    #     NPV_data = NPV_data_all[NPV_data_all['stack'] == plant['stack']]  # Filter from pre-computed DataFrame
-    #     investment_year = NPV_data['investment_year'].dropna().iloc[0] if NPV_data['investment_year'].notna().any() else np.nan
-    #     CAPEX = NPV_data['CAPEX'].iloc[0] if len(NPV_data['CAPEX']) > 0 else 0  # [k€] CAPEX is same across years
-    #     OPEX_CCS = NPV_data['OPEX'] # [k€/y] for each year
-    #     cost_CSU_plant = NPV_data['cost_CSU_plant'] 
-    #     profit_CSU_plant = NPV_data['profit_CSU_plant'] 
-    #     cost_ETS_plant = NPV_data['cost_ETS_plant'] 
-    #     profit_ETS_plant = NPV_data['profit_ETS_plant'] 
-    #     years_available = NPV_END - investment_year + 1 if not np.isnan(investment_year) else 0 # Dealing with edge cases of very later investors
-    #     if years_available >= CONSTRUCTION_YEARS:
-    #         CAPEX_NPV = sum(
-    #             (CAPEX / CONSTRUCTION_YEARS) / (1 + discount_rate_ccs) ** (investment_year + k - START_YEAR)
-    #             for k in range(CONSTRUCTION_YEARS)
-    #         )
-    #     else:
-    #         CAPEX_NPV = CAPEX / (1 + discount_rate_ccs) ** (investment_year - START_YEAR)
-    #     operational = NPV_data[NPV_data['year'] >= investment_year + CONSTRUCTION_YEARS]
-
-    #     # NPV_CSU: profits and costs from CSU policy (operational years only)
-    #     NPV_CSU = ((profit_CSU_plant.loc[operational.index] - cost_CSU_plant.loc[operational.index]) * operational['discount_factor']).sum() # [k€]
-        
-    #     # NPV_total: CAPEX (spread over 3 years) + annual costs and profits (operational years only)
-    #     if investment_year is not None:
-    #         annual_costs = ((1-0)*cost_CSU_plant.loc[operational.index] + cost_ETS_plant.loc[operational.index] + OPEX_CCS.loc[operational.index]) * operational['discount_factor']
-    #         annual_profits = (profit_CSU_plant.loc[operational.index] + profit_ETS_plant.loc[operational.index]) * operational['discount_factor']
-    #         NPV_total = -CAPEX_NPV + annual_profits.sum() - annual_costs.sum()  # [k€]
-    #     else:
-    #         NPV_total = None
-
-    #     # NPV_ETS: profits and costs from ETS policy and CCS costs (without CSU policy)
-    #     if investment_year is not None:
-    #         annual_costs = (cost_ETS_plant.loc[operational.index] + OPEX_CCS.loc[operational.index]) * operational['discount_factor']
-    #         annual_profits = profit_ETS_plant.loc[operational.index] * operational['discount_factor']
-    #         NPV_ETS = -CAPEX_NPV + annual_profits.sum() - annual_costs.sum()  # [k€]
-    #     else:
-    #         NPV_ETS = None
-
-    #     npv_results.append({
-    #         'stack': plant['stack'],
-    #         'sector': plant['sector'],  # From MACC, not NPV_data
-    #         'cost': cost_plant, # Uses initial, non-subsidized costs for outliers
-    #         'investment_year': investment_year,
-    #         'NPV_CSU': NPV_CSU,
-    #         'NPV_total': NPV_total,
-    #         'NPV_ETS': NPV_ETS,
-    #         'ktCO2tot_ccs': plant['ktCO2tot_ccs']  # From MACC, not NPV_data
-    #     })
+    # --- Plant-level NPV preprocessing (plant-specific horizons) ---
+    NPV_data_all = pd.DataFrame(_plants_costbenefit)
+    NPV_data_all = extend_plant_npv_data(NPV_data_all, lifetime_ccs, debug=False)
+    investment_year_series = pd.to_numeric(NPV_data_all['investment_year'], errors='coerce')
+    years_since_investment = NPV_data_all['year'] - investment_year_series
+    NPV_data_all['discount_factor'] = np.where(
+        investment_year_series.notna() & (years_since_investment >= 0),
+        1 / (1 + discount_rate_ccs) ** years_since_investment,
+        np.nan,
+    )
+    npv_plants = calculate_plant_npv(NPV_data_all, lifetime_ccs, debug=False)
+    if single_run:
+        NPV_data_all.to_csv('results/plants_costbenefit_extended.csv', index=False)
+        npv_plants.to_csv('results/plants_npv.csv', index=False)
 
     results = {}
     results['ctbo_trajectory'] = ctbo_trajectory
@@ -995,8 +1088,19 @@ def simulate_ctbo(
     results['diesel_increase_abs'] = _diesel_increase_abs
     results['kerosene_increase_abs'] = _kerosene_increase_abs
 
+    # Plant-level NPV results (plant-specific lifetime horizons)
+    results['plants_stack'] = npv_plants['stack'].tolist()
+    results['plants_sector'] = npv_plants['sector'].tolist()
+    results['plants_investment_year'] = npv_plants['investment_year'].tolist()
+    results['plants_npv_end_year'] = npv_plants['npv_end_year'].tolist()
+    results['plants_NPV_CAPEX'] = npv_plants['NPV_CAPEX'].tolist()
+    results['plants_NPV_OPEX'] = npv_plants['NPV_OPEX'].tolist()
+    results['plants_NPV_REVENUE'] = npv_plants['NPV_REVENUE'].tolist()
+    results['plants_NPV_total'] = npv_plants['NPV_total'].tolist()
+
     if single_run:
         plot_results_groups(years, results, savefig=True)
+        plot_plants_npv_scatter(npv_plants, savefig=True)
 
     return results
 
@@ -1099,331 +1203,56 @@ def plot_results_groups(years, results, savefig=False, debug=False):
 
     plt.show()
 
-def plot_opex_distributions_by_sector(plants_clean, opex_results, bins=30, ncols=2, debug=False):
+def plot_plants_npv_scatter(npv_plants, savefig=False, debug=False):
     """
-    Create one distribution plot per sector using the computed OPEX values.
+    Scatter plot of plant NPVs with x=investment year and y=NPV_total.
+    Plants in the drax sector are excluded.
     """
+    df = pd.DataFrame(npv_plants).copy()
     if debug:
-        print(
-            "plot_opex_distributions_by_sector inputs:",
-            f"plants={len(plants_clean)}, opex_entries={len(opex_results)}, bins={bins}, ncols={ncols}",
-        )
+        print(f"plot_plants_npv_scatter inputs: n_plants={len(df)}")
 
-    opex_df = plants_clean[['sector', 'stack']].copy()
-    opex_df['OPEX'] = opex_df['stack'].map(opex_results)
-    opex_df = opex_df.dropna(subset=['sector', 'OPEX'])
-
-    sectors = sorted(opex_df['sector'].dropna().unique())
-    if not sectors:
-        if debug:
-            print("plot_opex_distributions_by_sector output: sectors_plotted=0")
-        return 0
-
-    ncols = max(1, min(ncols, len(sectors)))
-    nrows = math.ceil(len(sectors) / ncols)
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(6 * ncols, 5 * nrows))
-    if isinstance(axes, np.ndarray):
-        axes_flat = list(axes.flatten())
-    else:
-        axes_flat = [axes]
-
-    plotted = 0
-    for idx, sector in enumerate(sectors):
-        ax = axes_flat[idx]
-        sector_data = opex_df.loc[opex_df['sector'] == sector, 'OPEX']
-        hist_bins = max(1, min(bins, len(sector_data)))
-        single_value = sector_data.nunique() == 1
-        hist_kwargs = dict(density=True, alpha=0.55, color='tab:blue', label='Histogram')
-        if single_value:
-            value = sector_data.iloc[0]
-            hist_kwargs['range'] = (value - 0.5, value + 0.5)
-        try:
-            ax.hist(sector_data, bins=hist_bins, **hist_kwargs)
-        except ValueError:
-            hist_kwargs['bins'] = 1
-            hist_kwargs['range'] = (sector_data.min() - 0.5, sector_data.max() + 0.5)
-            ax.hist(sector_data, **hist_kwargs)
-
-        if len(sector_data) > 1:
-            try:
-                kde = gaussian_kde(sector_data)
-                x_values = np.linspace(sector_data.min(), sector_data.max(), 200)
-                ax.plot(x_values, kde(x_values), color='tab:orange', lw=2, label='KDE')
-            except Exception:
-                pass
-
-        ax.set_title(f"OPEX distribution — {sector}", fontsize=16)
-        ax.set_xlabel("OPEX (€/tCO2)", fontsize=14)
-        ax.set_ylabel("Density", fontsize=14)
-        ax.tick_params(labelsize=12)
-        ax.grid(True, linestyle='--', alpha=0.4)
-        ax.legend(fontsize=12)
-        plotted += 1
-
-    for extra_ax in axes_flat[len(sectors):]:
-        extra_ax.set_visible(False)
-
-    plt.tight_layout()
-    plt.show()
-
-    if debug:
-        print(f"plot_opex_distributions_by_sector output: sectors_plotted={plotted}")
-    return plotted
-
-def plot_capex_distributions_by_sector(plants_clean, capex_results, bins=30, ncols=2, debug=False):
-    """
-    Create one distribution plot per sector using the computed levelized CAPEX values.
-    """
-    if debug:
-        print(
-            "plot_capex_distributions_by_sector inputs:",
-            f"plants={len(plants_clean)}, capex_entries={len(capex_results)}, bins={bins}, ncols={ncols}",
-        )
-
-    capex_df = plants_clean[['sector', 'stack']].copy()
-    capex_df['CAPEX'] = capex_df['stack'].map(capex_results)
-    capex_df = capex_df.dropna(subset=['sector', 'CAPEX'])
-
-    sectors = sorted(capex_df['sector'].dropna().unique())
-    if not sectors:
-        if debug:
-            print("plot_capex_distributions_by_sector output: sectors_plotted=0")
-        return 0
-
-    adjusted_ncols = max(1, min(ncols, len(sectors)))
-    nrows = math.ceil(len(sectors) / adjusted_ncols)
-    fig, axes = plt.subplots(nrows=nrows, ncols=adjusted_ncols, figsize=(6 * adjusted_ncols, 5 * nrows))
-    if isinstance(axes, np.ndarray):
-        axes_flat = list(axes.flatten())
-    else:
-        axes_flat = [axes]
-
-    plotted = 0
-    for idx, sector in enumerate(sectors):
-        ax = axes_flat[idx]
-        sector_data = capex_df.loc[capex_df['sector'] == sector, 'CAPEX']
-        hist_bins = max(1, min(bins, len(sector_data)))
-        single_value = sector_data.nunique() == 1
-        hist_kwargs = dict(density=True, alpha=0.55, color='tab:green', label='Histogram')
-        if single_value:
-            value = sector_data.iloc[0]
-            hist_kwargs['range'] = (value - 0.5, value + 0.5)
-        try:
-            ax.hist(sector_data, bins=hist_bins, **hist_kwargs)
-        except ValueError:
-            hist_kwargs['bins'] = 1
-            hist_kwargs['range'] = (sector_data.min() - 0.5, sector_data.max() + 0.5)
-            ax.hist(sector_data, **hist_kwargs)
-
-        if len(sector_data) > 1:
-            try:
-                kde = gaussian_kde(sector_data)
-                x_values = np.linspace(sector_data.min(), sector_data.max(), 200)
-                ax.plot(x_values, kde(x_values), color='tab:orange', lw=2, label='KDE')
-            except Exception:
-                pass
-
-        ax.set_title(f"Levelized CAPEX distribution — {sector}", fontsize=16)
-        ax.set_xlabel("CAPEX (€/tCO2)", fontsize=14)
-        ax.set_ylabel("Density", fontsize=14)
-        ax.tick_params(labelsize=12)
-        ax.grid(True, linestyle='--', alpha=0.4)
-        ax.legend(fontsize=12)
-        plotted += 1
-
-    for extra_ax in axes_flat[len(sectors):]:
-        extra_ax.set_visible(False)
-
-    plt.tight_layout()
-    plt.show()
-
-    if debug:
-        print(f"plot_capex_distributions_by_sector output: sectors_plotted={plotted}")
-    return plotted
-
-def plot_ts_costs_by_sector(plants_clean, ts_results, bins=30, ncols=2, debug=False):
-    """
-    Plot total transport & storage costs per sector.
-    """
-    if debug:
-        print(
-            "plot_ts_costs_by_sector inputs:",
-            f"plants={len(plants_clean)}, ts_entries={len(ts_results)}, bins={bins}, ncols={ncols}",
-        )
-
-    ts_df = plants_clean[['sector', 'stack']].copy()
-    ts_df['TS'] = ts_df['stack'].map(ts_results)
-    ts_df = ts_df.dropna(subset=['sector', 'TS'])
-
-    sectors = sorted(ts_df['sector'].dropna().unique())
-    if not sectors:
-        if debug:
-            print("plot_ts_costs_by_sector output: sectors_plotted=0")
-        return 0
-
-    adjusted_ncols = max(1, min(ncols, len(sectors)))
-    nrows = math.ceil(len(sectors) / adjusted_ncols)
-    fig, axes = plt.subplots(nrows=nrows, ncols=adjusted_ncols, figsize=(6 * adjusted_ncols, 5 * nrows))
-    if isinstance(axes, np.ndarray):
-        axes_flat = list(axes.flatten())
-    else:
-        axes_flat = [axes]
-
-    plotted = 0
-    for idx, sector in enumerate(sectors):
-        ax = axes_flat[idx]
-        sector_data = ts_df.loc[ts_df['sector'] == sector, 'TS']
-        hist_bins = max(1, min(bins, len(sector_data)))
-        single_value = sector_data.nunique() == 1
-        hist_kwargs = dict(density=True, alpha=0.55, color='tab:purple', label='Histogram')
-        if single_value:
-            value = sector_data.iloc[0]
-            hist_kwargs['range'] = (value - 0.5, value + 0.5)
-        try:
-            ax.hist(sector_data, bins=hist_bins, **hist_kwargs)
-        except ValueError:
-            hist_kwargs['bins'] = 1
-            hist_kwargs['range'] = (sector_data.min() - 0.5, sector_data.max() + 0.5)
-            ax.hist(sector_data, **hist_kwargs)
-
-        if len(sector_data) > 1:
-            try:
-                kde = gaussian_kde(sector_data)
-                x_values = np.linspace(sector_data.min(), sector_data.max(), 200)
-                ax.plot(x_values, kde(x_values), color='tab:orange', lw=2, label='KDE')
-            except Exception:
-                pass
-
-        ax.set_title(f"Transport & storage distribution — {sector}", fontsize=16)
-        ax.set_xlabel("T&S cost (€/tCO2)", fontsize=14)
-        ax.set_ylabel("Density", fontsize=14)
-        ax.tick_params(labelsize=12)
-        ax.grid(True, linestyle='--', alpha=0.4)
-        ax.legend(fontsize=12)
-        plotted += 1
-
-    for extra_ax in axes_flat[len(sectors):]:
-        extra_ax.set_visible(False)
-
-    plt.tight_layout()
-    plt.show()
-
-    if debug:
-        print(f"plot_ts_costs_by_sector output: sectors_plotted={plotted}")
-    return plotted
-
-def plot_npv_bubbles(npv_results, savefig=False, debug=False):
-    """
-    Plot NPV bubble chart: x=investment_year, y=NPV_CSU, size=ktCO2tot_ccs, color=sector.
-    """
-    if debug:
-        print(f"plot_npv_bubbles inputs: n_plants={len(npv_results)}")
-    
-    df = pd.DataFrame(npv_results)
-    n_before = len(df)
-    df = df.dropna(subset=['investment_year', 'NPV_CSU', 'ktCO2tot_ccs'])
-    print(f"plot_npv_bubbles: {n_before} plants total, {len(df)} with valid investment_year (filtered {n_before - len(df)})")
-    
+    if 'sector' in df.columns:
+        df = df[df['sector'].str.lower() != 'drax']
+    df = df.dropna(subset=['investment_year', 'NPV_total', 'sector'])
     if df.empty:
         if debug:
-            print("plot_npv_bubbles output: no data to plot")
+            print("plot_plants_npv_scatter output: no data to plot")
         return 0
-    
-    sectors = df['sector'].unique()
-    colors = plt.cm.tab10(np.linspace(0, 1, len(sectors)))
-    sector_colors = {s: c for s, c in zip(sectors, colors)}
-    
-    fig, ax = plt.subplots(figsize=(12, 8))
-    
-    # Scale bubble sizes (adjust multiplier for visual clarity)
-    size_scale = 0.05
-    sizes = df['ktCO2tot_ccs'] * size_scale
-    
-    for sector in sectors:
-        mask = df['sector'] == sector
-        ax.scatter(
-            df.loc[mask, 'investment_year'],
-            df.loc[mask, 'NPV_CSU'] / 1000,  # Convert to M€
-            s=sizes[mask],
-            c=[sector_colors[sector]],
-            alpha=0.7,
-            edgecolors='black',
-            linewidths=0.5,
-            label=sector
-        )
-    
-    ax.axhline(0, color='grey', linestyle='--', linewidth=1, alpha=0.7)
-    ax.set_xlabel('Investment Year', fontsize=14)
-    ax.set_ylabel('NPV CSU [M€]', fontsize=14)
-    ax.set_title('NPV of CSU Policy by Plant', fontsize=18)
-    ax.tick_params(labelsize=12)
-    ax.legend(title='Sector', fontsize=11, title_fontsize=12, loc='best')
-    ax.grid(True, linestyle='--', alpha=0.4)
-    
-    plt.tight_layout()
-    if savefig:
-        plt.savefig('results/npv_bubbles.png', dpi=450, bbox_inches='tight')
-    
-    if debug:
-        print(f"plot_npv_bubbles output: n_plotted={len(df)}")
-    
-    return len(df)
 
-def plot_npv_total_bubbles(npv_results, savefig=False, debug=False):
-    """
-    Plot NPV bubble chart: x=investment_year, y=NPV_total, size=ktCO2tot_ccs, color=sector.
-    """
-    if debug:
-        print(f"plot_npv_total_bubbles inputs: n_plants={len(npv_results)}")
-    
-    df = pd.DataFrame(npv_results)
-    n_before = len(df)
-    df = df.dropna(subset=['investment_year', 'NPV_total', 'ktCO2tot_ccs'])
-    print(f"plot_npv_total_bubbles: {n_before} plants total, {len(df)} with valid data (filtered {n_before - len(df)})")
-    
-    if df.empty:
-        if debug:
-            print("plot_npv_total_bubbles output: no data to plot")
-        return 0
-    
-    sectors = df['sector'].unique()
-    colors = plt.cm.tab10(np.linspace(0, 1, len(sectors)))
-    sector_colors = {s: c for s, c in zip(sectors, colors)}
-    
-    fig, ax = plt.subplots(figsize=(12, 8))
-    
-    # Scale bubble sizes (adjust multiplier for visual clarity)
-    size_scale = 0.05
-    sizes = df['ktCO2tot_ccs'] * size_scale
-    
+    sectors = sorted(df['sector'].unique())
+    colors = plt.cm.tab10(np.linspace(0, 1, max(1, len(sectors))))
+    sector_colors = {sector: color for sector, color in zip(sectors, colors)}
+
+    fig, ax = plt.subplots(figsize=(11, 7))
     for sector in sectors:
-        mask = df['sector'] == sector
+        sector_df = df[df['sector'] == sector]
         ax.scatter(
-            df.loc[mask, 'investment_year'],
-            df.loc[mask, 'NPV_total'] / 1000,  # Convert to M€
-            s=sizes[mask],
+            sector_df['investment_year'],
+            sector_df['NPV_total'] / 1000,  # [M€]
+            s=55,
             c=[sector_colors[sector]],
-            alpha=0.7,
+            alpha=0.8,
             edgecolors='black',
             linewidths=0.5,
-            label=sector
+            label=sector,
         )
-    
+
     ax.axhline(0, color='grey', linestyle='--', linewidth=1, alpha=0.7)
+    ax.set_title('Plant NPV by Investment Year (excl. Drax)', fontsize=16)
     ax.set_xlabel('Investment Year', fontsize=14)
-    ax.set_ylabel('NPV Total [M€]', fontsize=14)
-    ax.set_title('Total NPV of CCS Investment by Plant', fontsize=18)
+    ax.set_ylabel('NPV total [M€]', fontsize=14)
     ax.tick_params(labelsize=12)
-    ax.legend(title='Sector', fontsize=11, title_fontsize=12, loc='best')
     ax.grid(True, linestyle='--', alpha=0.4)
-    
+    ax.legend(title='Sector', fontsize=11, title_fontsize=12, loc='best')
+
     plt.tight_layout()
     if savefig:
-        plt.savefig('results/npv_total_bubbles.png', dpi=450, bbox_inches='tight')
-    
+        plt.savefig('results/plants_npv_scatter.png', dpi=450, bbox_inches='tight')
+    plt.show()
+
     if debug:
-        print(f"plot_npv_total_bubbles output: n_plotted={len(df)}")
-    
+        print(f"plot_plants_npv_scatter output: n_plotted={len(df)}")
     return len(df)
 
 def plot_macc(macc, pounds_to_EUR=1.15, savefig=False, debug=False):
@@ -1473,84 +1302,6 @@ def plot_macc(macc, pounds_to_EUR=1.15, savefig=False, debug=False):
         print("plot_macc output:", macc_plot[['cumulative_kt', 'MAC']].tail(1))
 
     return len(macc_plot)
-
-def plot_carbon_trajectories(years, supply, emitted, mandate, stored_g, stored_b, stored_daccs, savefig=False, debug=False):
-    """
-    Plot carbon supply, emissions, mandate, and storage trajectories over time.
-    """
-    if debug:
-        print(f"plot_carbon_trajectories inputs: years={len(years)}, supply={len(supply)}, emitted={len(emitted)}")
-    
-    # Convert lists to arrays and scale to MtCO2
-    supply_arr = np.array(supply) / 1000
-    emitted_arr = np.array(emitted) / 1000
-    mandate_arr = np.array(mandate) / 1000
-    stored_g_arr = np.array(stored_g) / 1000
-    stored_removal_arr = (np.array(stored_b) + np.array(stored_daccs)) / 1000
-    
-    fig, ax = plt.subplots(figsize=(12, 7))
-    
-    # Plot supply, emitted, and mandate
-    ax.plot(years, supply_arr, linewidth=2.5, label='Supply CO₂ (fossil fuels)', color='tab:blue', linestyle='-')
-    ax.plot(years, emitted_arr, linewidth=2.5, label='Gross emitted CO₂ (fossil fuels)', color='tab:red', linestyle='-')
-    ax.plot(years, mandate_arr, linewidth=2.5, label='CTBO mandate', color='tab:purple', linestyle='--')
-    
-    # Plot stored fossil and stored removals
-    ax.plot(years, stored_g_arr, linewidth=2.5, label='Stored geological CO₂ (fossil fuels, limestone, plastic)', color='tab:orange', linestyle='-')
-    ax.plot(years, stored_removal_arr, linewidth=2.5, label='Stored removals (BECCS+DACCS)', color='tab:green', linestyle='-')
-    
-    ax.set_xlabel("Year", fontsize=14)
-    ax.set_ylabel("MtCO₂", fontsize=14)
-    ax.set_title("Carbon Trajectories under CTBO", fontsize=18)
-    ax.grid(True, linestyle='--', alpha=0.4)
-    ax.tick_params(labelsize=12)
-    ax.legend(fontsize=12, loc='best')
-    
-    plt.tight_layout()
-    if savefig:
-        plt.savefig('results/carbon_trajectories.png', dpi=450, bbox_inches='tight')
-    
-    if debug:
-        print(f"plot_carbon_trajectories output: plotted {len(years)} years")
-    
-    return len(years)
-
-def plot_cost_trajectories(years, marginal_cost, ets_price, csu_price, csu_embedded, savefig=False, debug=False):
-    """
-    Plot cost and price trajectories: marginal cost, ETS price, CSU price, and embedded CSU cost.
-    """
-    if debug:
-        print(f"plot_cost_trajectories inputs: years={len(years)}, marginal_cost={len(marginal_cost)}")
-    
-    # Convert lists to arrays
-    marginal_arr = np.array(marginal_cost)
-    ets_arr = np.array(ets_price)
-    csu_arr = np.array(csu_price)
-    csu_emb_arr = np.array(csu_embedded)
-    
-    fig, ax = plt.subplots(figsize=(12, 7))
-    
-    # Plot all four cost/price lines
-    ax.plot(years, marginal_arr, linewidth=2.5, label='Marginal Cost', color='tab:blue', linestyle='-')
-    ax.plot(years, ets_arr, linewidth=2.5, label='ETS Price', color='tab:red', linestyle='-')
-    ax.plot(years, csu_arr, linewidth=2.5, label='CSU Price', color='tab:orange', linestyle='--')
-    ax.plot(years, csu_emb_arr, linewidth=2.5, label='Embedded CSU Cost', color='tab:green', linestyle=':')
-    
-    ax.set_xlabel("Year", fontsize=14)
-    ax.set_ylabel("€/tCO₂", fontsize=14)
-    ax.set_title("Cost and Price Trajectories under CTBO", fontsize=18)
-    ax.grid(True, linestyle='--', alpha=0.4)
-    ax.tick_params(labelsize=12)
-    ax.legend(fontsize=12, loc='best')
-    
-    plt.tight_layout()
-    if savefig:
-        plt.savefig('results/cost_trajectories.png', dpi=450, bbox_inches='tight')
-    
-    if debug:
-        print(f"plot_cost_trajectories output: plotted {len(years)} years")
-    
-    return len(years)
 
 if __name__ == "__main__":
     plants_clean = pd.read_csv('results/plants_clean.csv')
