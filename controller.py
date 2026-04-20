@@ -55,6 +55,7 @@ if __name__ == "__main__":
         RealParameter("CAPEX_bioboiler", 0.80, 1.20),  # [M€/MW]
         # Financial uncertainties
         RealParameter("fixate_CAPEX", 0.02, 0.05),  # [-] fixed OPEX fraction
+        RealParameter("CAPEX_m", 0.75, 0.95),  # [-] CAPEX scale exponent
         RealParameter("discount_rate_ccs", 0.06, 0.12),
         IntegerParameter("lifetime_ccs", 20, 30),  # [years]
         RealParameter("CEPCI_2025", 880, 980),
@@ -113,6 +114,7 @@ if __name__ == "__main__":
         ArrayOutcome("plants_NPV_OPEX"),
         ArrayOutcome("plants_NPV_REVENUE"),
         ArrayOutcome("plants_NPV_total"),
+        ArrayOutcome("plants_MAC"),
     ]
 
     # Constants: fixed parameters for all runs

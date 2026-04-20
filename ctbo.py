@@ -270,12 +270,12 @@ def capture_condition(stack, x, liquefy=False):
         ktCO2_dict['ktCO2tot_ccs'] = ktCO2_dict['ktCO2f_ccs'] + ktCO2_dict['ktCO2cem_ccs'] + ktCO2_dict['ktCO2pl_ccs'] + ktCO2_dict['ktCO2b_ccs']
         return ktCO2_dict, FLH, mCO2, stack['xCO2'], OPEXE, Qgas_boiler, Qbio_boiler 
 
-def approximate_CAPEX(mCO2, xCO2, fixate_CAPEX, CEPCI_2025, CEPCI_base=798.7, NETL=5.509, debug=False):
+def approximate_CAPEX(mCO2, xCO2, fixate_CAPEX, CEPCI_2025, CAPEX_m=0.8391, CEPCI_base=798.7, NETL=5.509, debug=False):
     """Estimate CAPEX for CO2 capture using Kim & Leonard (2025) correlation."""
     if debug:
-        print(f"approximate_CAPEX inputs: mCO2={mCO2}, xCO2={xCO2}")
+        print(f"approximate_CAPEX inputs: mCO2={mCO2}, xCO2={xCO2}, CAPEX_m={CAPEX_m}")
     
-    a, b, c, n, m = 2.1673, 0.8092, -0.00332, 0.5291, 0.8391
+    a, b, c, n = 2.1673, 0.8092, -0.00332, 0.5291 # Note that factor m is replaced by CAPEX_m (a model uncertainty)
     
     nCO2 = mCO2 * 1000 / 44 # [kmolCO2/h]
     n_fluegas = nCO2 / xCO2
@@ -286,11 +286,11 @@ def approximate_CAPEX(mCO2, xCO2, fixate_CAPEX, CEPCI_2025, CEPCI_base=798.7, NE
     
     CAPEX = 0
     for i in range(n_largest_absorbers):
-        TEC = a + (b * (xCO2)**n + c) * (1613)**m
+        TEC = a + (b * (xCO2)**n + c) * (1613)**CAPEX_m
         CAPEX += TEC
     
     if remaining_V_fluegas > 0:
-        TEC = a + (b * (xCO2)**n + c) * (remaining_V_fluegas)**m
+        TEC = a + (b * (xCO2)**n + c) * (remaining_V_fluegas)**CAPEX_m
         CAPEX += TEC
 
     OPEX_fixed = CAPEX * fixate_CAPEX
@@ -428,11 +428,11 @@ def extend_plant_npv_data(npv_data_all, lifetime_ccs, debug=False):
         )
     return npv_extended
 
-def calculate_plant_npv(npv_data_all, lifetime_ccs, debug=False):
+def calculate_plant_npv(npv_data_all, lifetime_ccs, construction_years=3, debug=False):
     """
     Calculate plant-level NPV using plant-specific investment horizons.
     Rules:
-    - CAPEX split evenly across investment year + next 2 years
+    - CAPEX split evenly across construction years from investment year
     - OPEX starts after construction years
     - Revenues = full cash inflow from y and E after construction years
     - All discounted with per-row discount_factor
@@ -440,7 +440,7 @@ def calculate_plant_npv(npv_data_all, lifetime_ccs, debug=False):
     if debug:
         print(
             "calculate_plant_npv inputs:",
-            f"rows={len(npv_data_all)}, lifetime_ccs={lifetime_ccs}",
+            f"rows={len(npv_data_all)}, lifetime_ccs={lifetime_ccs}, construction_years={construction_years}",
         )
 
     records = []
@@ -478,15 +478,16 @@ def calculate_plant_npv(npv_data_all, lifetime_ccs, debug=False):
             continue
 
         capex_total = float(period['CAPEX'].dropna().iloc[0]) if period['CAPEX'].notna().any() else 0.0
-        capex_annual = capex_total / 3.0
+        capex_annual = capex_total / float(construction_years)
 
         year_values = period['year'].to_numpy()
         discount = period['discount_factor'].to_numpy(dtype=float)
         opex_values = period['OPEX'].to_numpy(dtype=float)
         revenue_values = (period['cash_inflow_y'] + period['cash_inflow_E']).to_numpy(dtype=float)
 
-        in_construction = year_values <= (investment_year + 2)
-        in_operation = year_values >= (investment_year + 3)
+        construction_end_year = investment_year + int(construction_years) - 1
+        in_construction = year_values <= construction_end_year
+        in_operation = year_values >= (construction_end_year + 1)
 
         capex_stream = np.where(in_construction, capex_annual, 0.0)
         opex_stream = np.where(in_operation, opex_values, 0.0)
@@ -584,6 +585,7 @@ def simulate_ctbo(
     CEPCI_2023 = 898.7,
     CEPCI_2025 = 930,
     NETL_2025 = 5.509,
+    CAPEX_m = 0.8391,
     discount_rate_ccs = 0.07,
     lifetime_ccs = 25,
     pounds_to_EUR = 1.15,
@@ -682,7 +684,16 @@ def simulate_ctbo(
 
         # Calculate CAPEX (of amine plant and Qboilers)
         tCO2_total = mCO2_total * FLH * capture_rate # [tCO2/y captured]
-        CAPEX, OPEX_fixed = approximate_CAPEX(mCO2_total, xCO2, fixate_CAPEX, CEPCI_2025, CEPCI_base=CEPCI_2023, NETL=NETL_2025, debug=False) # [M€], [M€/yr]
+        CAPEX, OPEX_fixed = approximate_CAPEX(
+            mCO2_total,
+            xCO2,
+            fixate_CAPEX,
+            CEPCI_2025,
+            CAPEX_m=CAPEX_m,
+            CEPCI_base=CEPCI_2023,
+            NETL=NETL_2025,
+            debug=False
+        ) # [M€], [M€/yr]
         OPEX_fixed = (OPEX_fixed * 10**6) / tCO2_total 
         OPEX += OPEX_fixed
         CAPEX_boilers, CAPEX_liquefaction = auxiliary_CAPEX(Qgas_boiler, Qbio_boiler, x, liquefy=LIQUEFY) # [M€], [€/tCO2]
@@ -1037,7 +1048,17 @@ def simulate_ctbo(
         1 / (1 + discount_rate_ccs) ** years_since_investment,
         np.nan,
     )
-    npv_plants = calculate_plant_npv(NPV_data_all, lifetime_ccs, debug=False)
+    npv_plants = calculate_plant_npv(
+        NPV_data_all,
+        lifetime_ccs,
+        construction_years=CONSTRUCTION_YEARS,
+        debug=False
+    )
+    mac_by_stack = MACC.set_index('stack')['MAC'].to_dict()
+    for outlier_name in outliers:
+        if outlier_name in cost_initial_outliers:
+            mac_by_stack[outlier_name] = cost_initial_outliers[outlier_name]
+    npv_plants['MAC'] = npv_plants['stack'].map(mac_by_stack)
     if single_run:
         NPV_data_all.to_csv('results/plants_costbenefit_extended.csv', index=False)
         npv_plants.to_csv('results/plants_npv.csv', index=False)
@@ -1097,6 +1118,7 @@ def simulate_ctbo(
     results['plants_NPV_OPEX'] = npv_plants['NPV_OPEX'].tolist()
     results['plants_NPV_REVENUE'] = npv_plants['NPV_REVENUE'].tolist()
     results['plants_NPV_total'] = npv_plants['NPV_total'].tolist()
+    results['plants_MAC'] = npv_plants['MAC'].tolist()
 
     if single_run:
         plot_results_groups(years, results, savefig=True)
