@@ -331,6 +331,7 @@ def compare_plant_NPV(results_dir='results', ets_scenarios=None, savefig=True, d
         panel['investment_year'] = median_inv
         panel['MAC'] = median_mac
         panel = panel.dropna(subset=['NPV_total', 'investment_year'])
+        panel = panel[panel['sector'].str.lower() != 'drax']
 
         for sector in sorted(panel['sector'].dropna().unique()):
             sector_df = panel[panel['sector'] == sector]

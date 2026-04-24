@@ -782,7 +782,10 @@ def simulate_ctbo(
         ) * pounds_to_EUR,
         cost_DACCS
     )
-    ctbo_trajectory = ((years - START_YEAR) * CTBO_QUADRATIC)**2 / 100
+    # Quadratic CTBO fraction in [0,1] scale; hold constant after DIFFUSE_END_YEAR (default 2050 → 1.0 with default params).
+    ctbo_raw = ((years - START_YEAR) * CTBO_QUADRATIC) ** 2 / 100
+    ctbo_at_cap = ((DIFFUSE_END_YEAR - START_YEAR) * CTBO_QUADRATIC) ** 2 / 100
+    ctbo_trajectory = np.where(years <= DIFFUSE_END_YEAR, ctbo_raw, ctbo_at_cap)
 
     # Initialize results arrays for carbon (f=fuels, cem=cement, pl=plastic, g=f+cem+pl, b=biomass)
     _supply_ktCO2f = []
@@ -1112,8 +1115,13 @@ def simulate_ctbo(
     # Plant-level NPV results (plant-specific lifetime horizons)
     results['plants_stack'] = npv_plants['stack'].tolist()
     results['plants_sector'] = npv_plants['sector'].tolist()
-    results['plants_investment_year'] = npv_plants['investment_year'].tolist()
-    results['plants_npv_end_year'] = npv_plants['npv_end_year'].tolist()
+    # Keep year arrays float so EMA can store NaN consistently across experiments.
+    results['plants_investment_year'] = pd.to_numeric(
+        npv_plants['investment_year'], errors='coerce'
+    ).astype(float).tolist()
+    results['plants_npv_end_year'] = pd.to_numeric(
+        npv_plants['npv_end_year'], errors='coerce'
+    ).astype(float).tolist()
     results['plants_NPV_CAPEX'] = npv_plants['NPV_CAPEX'].tolist()
     results['plants_NPV_OPEX'] = npv_plants['NPV_OPEX'].tolist()
     results['plants_NPV_REVENUE'] = npv_plants['NPV_REVENUE'].tolist()

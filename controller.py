@@ -11,8 +11,14 @@ from ema_workbench import (
     Constant,
     Samplers,
     ema_logging,
-    perform_experiments
+    perform_experiments,
 )
+
+try:
+    from ema_workbench import Sample as PolicySample  # EMA 3.x
+except ImportError:
+    from ema_workbench import Policy as PolicySample  # EMA 2.x
+
 
 if __name__ == "__main__":
     ema_logging.log_to_stderr(ema_logging.INFO)
@@ -26,6 +32,7 @@ if __name__ == "__main__":
     # Uncertainties: external factors we cannot control
     model.uncertainties = [
         # Scenario uncertainties
+        RealParameter("DIFFUSE_END_FRACTION", 0.05, 0.50),
         CategoricalParameter("DACCS_SCENARIO", ['£322', '£391']),
         # Sector-specific uncertainties
         RealParameter("fraction_limestone", 0.55, 0.65),  # [-] cementite fraction
@@ -62,10 +69,9 @@ if __name__ == "__main__":
         RealParameter("NETL_2025", 5.0, 6.0),
     ]
 
-    # Levers: policy choices we can control
+    # Levers: policy choices set by each explicit policy below (must stay in sync with Policy/Sample kwargs).
     model.levers = [
         CategoricalParameter("ETS_SCENARIO", ['CTBO-only', 'ETS-eq', '£100-Mix', '£200-Mix', '£300-Mix']),
-        RealParameter("DIFFUSE_END_FRACTION", 0.05, 0.50),
     ]
 
     # Outcomes: metrics to track (aligned with simulate_ctbo return keys)
@@ -134,15 +140,21 @@ if __name__ == "__main__":
     ]
 
     # Run experiments
+    # Explicit policies: kwargs must match lever names (a dict as 2nd positional arg is wrong — it becomes unique_id).
+    policies = [
+        PolicySample("CTBO-only", ETS_SCENARIO="CTBO-only"),
+        PolicySample("ETS-eq", ETS_SCENARIO="ETS-eq"),
+        PolicySample("£100-Mix", ETS_SCENARIO="£100-Mix"),
+        PolicySample("£200-Mix", ETS_SCENARIO="£200-Mix"),
+        PolicySample("£300-Mix", ETS_SCENARIO="£300-Mix"),
+    ]
     n_scenarios = 5
-    n_policies = 40
     
     results = perform_experiments(
-        model, 
-        n_scenarios, 
-        n_policies, 
-        uncertainty_sampling=Samplers.LHS, 
-        lever_sampling=Samplers.LHS
+        model,
+        scenarios=n_scenarios,
+        policies=policies,
+        uncertainty_sampling=Samplers.LHS,
     )
     experiments, outcomes = results
 
@@ -154,7 +166,7 @@ if __name__ == "__main__":
     scalar_df = pd.DataFrame(scalar_outcomes)
     combined_df = pd.concat([experiments, scalar_df], axis=1)
     combined_df.to_csv("results/experiments.csv", index=False)
-    
+
     # Save array outcomes as .npy files
     for name, arr in array_outcomes.items():
         np.save(f"results/outcomes_{name}.npy", arr)
@@ -169,20 +181,6 @@ if __name__ == "__main__":
         'sector': test_result['plants_sector']
     })
     plant_ref.to_csv("results/plant_reference.csv", index=False)
+
+    print("Wrote experiments/outcomes. Run `py regret.py` for regret tables and boxplots.")
     
-    print(f"\nCompleted {len(experiments)} experiments")
-    print(f"Experiments + scalar outcomes saved to: results/experiments.csv")
-    print(f"Array outcomes saved to: results/outcomes_*.npy")
-    print(f"Plant reference saved to: results/plant_reference.csv")
-
-    print("\n===> I DON'T THINK THIS MODEL CAN REPRESENT A FULL-ECONOMY ETS SCENARIO <===")
-    print("Even though I promised to. This is because I can't make reasonable assumptions on how DACCS, BECCS etc is deployed to abate diffuse emissions")
-    print("The distincion between POINT and DIFFUSE allows for a rising CTBO fraction to determine the PACE of storage deployment")
-    print("However, I am not modelling a DECLINING CAP for ETS and diffuse emitters, which otherwise would determine the PACE of storage deployment")
-    print("Maybe: the model is for GEOLOGICAL NZ, while other models are for economy-wide ATMOSPHERIC NZ?")
-    print("Short explanation: the model is not set up to deal with (fully abate) diffuse emissions under a rising ETS price")
-    print("So any assumptions I make on how DACCS, BECCS etc. is deployed under the ETS-only scenario did not feel credible")
-    print("The model is however set up to deal with (fully abate) diffuse emissions under a rising CTBO fraction")
-    print("A possible workaround: just run a £500-Mix scenario, where DACCS constrains the price? NO! This is not representative of the cap-and-trade marginal logic, which has lower costs early on!")
-
-
