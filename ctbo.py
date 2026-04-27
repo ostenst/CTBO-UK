@@ -524,7 +524,7 @@ def simulate_ctbo(
     DISCOUNT_RATE = 0.035,
     CTBO_QUADRATIC = 0.4,
     ETS_START = 45, # [£/tCO2]
-    ETS_SCENARIO = 'CTBO-only', # ['CTBO-only', 'ETS-eq', '£100-Mix', '£200-Mix', '£300-Mix']),
+    ETS_SCENARIO = 'ETS-eq', # ['CTBO-only', 'ETS-eq', '£100-Mix', '£200-Mix', '£300-Mix']),
     DACCS_SCENARIO = '£322', # [£/tCO2] 322, 391, 7th Carbon Budget
     
     START_YEAR = 2025,
@@ -592,6 +592,9 @@ def simulate_ctbo(
 
     transport_uncertainty = 0.15, # [-] 
     cstorage = 25, # [€/tCO2] CATF (2025)
+    results_dir = 'results_baseline',
+    figures_dir = 'results_figures',
+    save_aux_results = False,
 
     # Levers
 
@@ -741,9 +744,10 @@ def simulate_ctbo(
     MACC, cost_initial_outliers = subsidize_outliers(MACC, outliers)
     MACC = MACC.sort_values(by='MAC', ascending=True)
   
+    if single_run or save_aux_results:
+        MACC.to_csv(f'{results_dir}/macc.csv', index=False)
     if single_run:
-        MACC.to_csv('results/macc.csv', index=False)
-        plot_macc(MACC, pounds_to_EUR=pounds_to_EUR, savefig=True)
+        plot_macc(MACC, pounds_to_EUR=pounds_to_EUR, figures_dir=figures_dir, savefig=True)
 
     # ------------------- SIMULATE THE CTBO/ETS policies ---------------------
     # Calculate diffuse carbon trajectories by subtracting point-source carbon from total supply
@@ -766,8 +770,7 @@ def simulate_ctbo(
         ETS_START = 0
         ETS_END = 0
     elif ETS_SCENARIO == 'ETS-eq': # NOTE: Must calculate ETS price organically!
-        ETS_START = 999
-        ETS_END = 999
+        ETS_END = 999999
     elif ETS_SCENARIO == '£100-Mix':
         ETS_END = 100
     elif ETS_SCENARIO == '£200-Mix':
@@ -889,10 +892,11 @@ def simulate_ctbo(
                 E = 0
                 y = cost_marginal
             elif ETS_SCENARIO == 'ETS-eq':
-                E = cost_marginal
+                E = max(ETS_START*pounds_to_EUR, cost_marginal)
                 y = 0
             else:
-                E = ets_price
+                # In mixed policies, ETS covers stored-CO2 support up to marginal cost.
+                E = min(ets_price, max(cost_marginal, ETS_START*pounds_to_EUR)) # In early years, pick ETS_START, in late years, pick marginal cost
                 y = max(0, cost_marginal - E) # Never negative!
 
             pointsource_emissions = MACC['ktCO2f'].where(~MACC['invested'], 0).sum() + MACC['ktCO2f_res'].where(MACC['invested'], 0).sum()
@@ -902,9 +906,12 @@ def simulate_ctbo(
             MACC['ktCO2cem'].where(~MACC['invested'], 0).sum() + MACC['ktCO2cem_res'].where(MACC['invested'], 0).sum() +
             MACC['ktCO2pl'].where(~MACC['invested'], 0).sum() + MACC['ktCO2pl_res'].where(MACC['invested'], 0).sum() )
 
+            # Costs of what CO2 has been abated
             costs_suppliers = y * (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) # [k€/y] 
             costs_emitters = E * (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs) # [k€/y] 
-            costs_tax = E * emitted_ktCO2_ETS # [k€/y]
+
+            # Costs of what CO2 has NOT been abated yet
+            costs_tax = E * (emitted_ktCO2_ETS - (stored_ktCO2b + stored_ktCO2daccs)) # [k€/y]
 
             # Subtract outlier contributions
             for outlier_name in outliers:
@@ -915,6 +922,12 @@ def simulate_ctbo(
                     costs_tax -= E * (plant['ktCO2f_res'] + plant['ktCO2cem_res'] + plant['ktCO2pl_res'])
                 else:
                     costs_tax -= E * (plant['ktCO2f'] + plant['ktCO2cem'] + plant['ktCO2pl'])
+            costs_suppliers = max(0, costs_suppliers) #  Ensures no negative costs_suppliers after outlier subtraction
+            costs_emitters = max(0, costs_emitters) #  Ensures no negative costs_emitters after outlier subtraction
+            costs_tax = max(0, costs_tax) #  Ensures no negative costs_tax after outlier subtraction
+            if emitted_ktCO2_ETS <= (stored_ktCO2b + stored_ktCO2daccs):
+                if costs_tax != 0:
+                    raise ValueError(f"Costs tax is not zero: {costs_tax} k€/y")
 
             costs_consumers = costs_suppliers + costs_emitters + costs_tax # [k€/y]
             cost_fuels = (costs_suppliers + costs_emitters + costs_tax) / supply_ktCO2f # [€/tCO2] NOTE: No price ceiling implemented beyond 2050!
@@ -1062,9 +1075,9 @@ def simulate_ctbo(
         if outlier_name in cost_initial_outliers:
             mac_by_stack[outlier_name] = cost_initial_outliers[outlier_name]
     npv_plants['MAC'] = npv_plants['stack'].map(mac_by_stack)
-    if single_run:
-        NPV_data_all.to_csv('results/plants_costbenefit_extended.csv', index=False)
-        npv_plants.to_csv('results/plants_npv.csv', index=False)
+    if single_run or save_aux_results:
+        NPV_data_all.to_csv(f'{results_dir}/plants_costbenefit_extended.csv', index=False)
+        npv_plants.to_csv(f'{results_dir}/plants_npv.csv', index=False)
 
     results = {}
     results['ctbo_trajectory'] = ctbo_trajectory
@@ -1129,12 +1142,12 @@ def simulate_ctbo(
     results['plants_MAC'] = npv_plants['MAC'].tolist()
 
     if single_run:
-        plot_results_groups(years, results, savefig=True)
-        plot_plants_npv_scatter(npv_plants, savefig=True)
+        plot_results_groups(years, results, figures_dir=figures_dir, savefig=True)
+        plot_plants_npv_scatter(npv_plants, figures_dir=figures_dir, savefig=True)
 
     return results
 
-def plot_results_groups(years, results, savefig=False, debug=False):
+def plot_results_groups(years, results, figures_dir='results_figures', savefig=False, debug=False):
     """
     Plot four time-series figures, one for each results group.
     NPVs are annotated in Group 3 instead of plotted as lines.
@@ -1160,7 +1173,7 @@ def plot_results_groups(years, results, savefig=False, debug=False):
     ax.legend(fontsize=11)
     plt.tight_layout()
     if savefig:
-        plt.savefig('results/group1_timeseries.png', dpi=450, bbox_inches='tight')
+        plt.savefig(f'{figures_dir}/group1_timeseries.png', dpi=450, bbox_inches='tight')
 
     # Group 2: Prices and marginal costs
     fig, ax = plt.subplots(figsize=(12, 7))
@@ -1176,7 +1189,7 @@ def plot_results_groups(years, results, savefig=False, debug=False):
     ax.legend(fontsize=11)
     plt.tight_layout()
     if savefig:
-        plt.savefig('results/group2_timeseries.png', dpi=450, bbox_inches='tight')
+        plt.savefig(f'{figures_dir}/group2_timeseries.png', dpi=450, bbox_inches='tight')
 
     # Group 3: Annual policy costs/profits + NPV annotation
     fig, ax = plt.subplots(figsize=(12, 7))
@@ -1213,7 +1226,7 @@ def plot_results_groups(years, results, savefig=False, debug=False):
     ax.legend(fontsize=10, ncol=2)
     plt.tight_layout()
     if savefig:
-        plt.savefig('results/group3_timeseries.png', dpi=450, bbox_inches='tight')
+        plt.savefig(f'{figures_dir}/group3_timeseries.png', dpi=450, bbox_inches='tight')
 
     # Group 4: Fuel price impacts
     fig, ax = plt.subplots(figsize=(12, 7))
@@ -1229,11 +1242,11 @@ def plot_results_groups(years, results, savefig=False, debug=False):
     ax.legend(fontsize=11)
     plt.tight_layout()
     if savefig:
-        plt.savefig('results/group4_timeseries.png', dpi=450, bbox_inches='tight')
+        plt.savefig(f'{figures_dir}/group4_timeseries.png', dpi=450, bbox_inches='tight')
 
     plt.show()
 
-def plot_plants_npv_scatter(npv_plants, savefig=False, debug=False):
+def plot_plants_npv_scatter(npv_plants, figures_dir='results_figures', savefig=False, debug=False):
     """
     Scatter plot of plant NPVs with x=investment year and y=NPV_total.
     Plants in the drax sector are excluded.
@@ -1278,14 +1291,14 @@ def plot_plants_npv_scatter(npv_plants, savefig=False, debug=False):
 
     plt.tight_layout()
     if savefig:
-        plt.savefig('results/plants_npv_scatter.png', dpi=450, bbox_inches='tight')
+        plt.savefig(f'{figures_dir}/plants_npv_scatter.png', dpi=450, bbox_inches='tight')
     plt.show()
 
     if debug:
         print(f"plot_plants_npv_scatter output: n_plotted={len(df)}")
     return len(df)
 
-def plot_macc(macc, pounds_to_EUR=1.15, savefig=False, debug=False):
+def plot_macc(macc, pounds_to_EUR=1.15, figures_dir='results_figures', savefig=False, debug=False):
     """
     Plot the MACC curve with cumulative ktCO2tot_ccs on the x axis and MAC on the y axis.
     """
@@ -1326,7 +1339,7 @@ def plot_macc(macc, pounds_to_EUR=1.15, savefig=False, debug=False):
 
     plt.tight_layout()
     if savefig:
-        plt.savefig('results/macc_curve.png', dpi=450, bbox_inches='tight')
+        plt.savefig(f'{figures_dir}/macc_curve.png', dpi=450, bbox_inches='tight')
 
     if debug:
         print("plot_macc output:", macc_plot[['cumulative_kt', 'MAC']].tail(1))
@@ -1334,9 +1347,9 @@ def plot_macc(macc, pounds_to_EUR=1.15, savefig=False, debug=False):
     return len(macc_plot)
 
 if __name__ == "__main__":
-    plants_clean = pd.read_csv('results/plants_clean.csv')
+    plants_clean = pd.read_csv('results_baseline/plants_clean.csv')
     transport_hubs = pd.read_csv('data/transport_hubs.csv')
-    results = simulate_ctbo(plants_clean, transport_hubs, single_run=True)
+    results = simulate_ctbo(plants_clean, transport_hubs, single_run=True, results_dir='results_baseline', figures_dir='results_figures')
 
     # results['plants_investment_year'] = [str(year) for year in results['plants_investment_year']] #Convert from np.float to string
     # print(f"\nThe stacks that have invested are (alphabetically ordered): {results['plants_stack']}")

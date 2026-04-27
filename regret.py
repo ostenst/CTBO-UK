@@ -3,6 +3,23 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
+def _select_results_dir(debug=False):
+    if debug:
+        print("_select_results_dir input: awaiting user selection")
+    while True:
+        choice = input("Use PHASEOUT scenario? Enter 'y' (PHASEOUT=True) or 'n' (PHASEOUT=False): ").strip().lower()
+        if choice in ("y", "yes"):
+            results_dir = "results_phaseout"
+            break
+        if choice in ("n", "no"):
+            results_dir = "results_baseline"
+            break
+        print("Please enter 'y' or 'n'.")
+    if debug:
+        print(f"_select_results_dir output: results_dir={results_dir}")
+    return results_dir
+
+
 def calculate_regret(
     experiments_df,
     outcomes,
@@ -140,7 +157,7 @@ def calculate_regret(
     return scalar_regret_by_scenario, scalar_regret_summary, timeseries_regret, timeseries_summary
 
 
-def plot_regret_timeseries(timeseries_summary, metric, results_dir="results", pounds_to_EUR=1.15, debug=False):
+def plot_regret_timeseries(timeseries_summary, metric, figures_dir="results_figures", pounds_to_EUR=1.15, debug=False):
     df = timeseries_summary[metric].copy()
     if df.empty:
         return
@@ -149,10 +166,12 @@ def plot_regret_timeseries(timeseries_summary, metric, results_dir="results", po
     fig, ax = plt.subplots(figsize=(11, 7))
     policies = sorted(df["policy"].unique())
     magma = plt.cm.magma
-    colors = magma(np.linspace(0.12, 0.88, max(1, len(policies))))
+    colors = magma(np.linspace(0.05, 0.95, max(1, len(policies))))
     y_units = {
         "gas_increase_abs": "pence/kWh",
         "petrol_increase_abs": "cent/L",
+        "costs_consumers": "BGBP/y",
+        "costs_tax": "BGBP/y",
     }
     for policy, color in zip(policies, colors):
         sub = df[df["policy"] == policy].sort_values("year")
@@ -166,6 +185,12 @@ def plot_regret_timeseries(timeseries_summary, metric, results_dir="results", po
             p05 = p05 * scale
             p50 = p50 * scale
             p95 = p95 * scale
+        elif metric in ("costs_consumers", "costs_tax"):
+            # Match illustrate.py: kEUR/y -> BGBP/y.
+            scale = 1e-6 / pounds_to_EUR
+            p05 = p05 * scale
+            p50 = p50 * scale
+            p95 = p95 * scale
         ax.plot(x, p50, linewidth=2.3, color=color, label=policy)
         ax.fill_between(x, p05, p95, color=color, alpha=0.22)
 
@@ -176,7 +201,7 @@ def plot_regret_timeseries(timeseries_summary, metric, results_dir="results", po
     ax.grid(True, linestyle="--", alpha=0.4)
     ax.legend(fontsize=11)
     plt.tight_layout()
-    out = f"{results_dir}/regret_timeseries_{metric}.png"
+    out = f"{figures_dir}/regret_timeseries_{metric}.png"
     plt.savefig(out, dpi=300, bbox_inches="tight")
     plt.close(fig)
     if debug:
@@ -186,7 +211,7 @@ def plot_regret_timeseries(timeseries_summary, metric, results_dir="results", po
 def plot_scalar_regret_boxplot(
     scalar_regret_by_scenario,
     metric="NPV_costs_tax",
-    results_dir="results",
+    figures_dir="results_figures",
     debug=False,
 ):
     if debug:
@@ -205,7 +230,7 @@ def plot_scalar_regret_boxplot(
     labels = [c.replace(prefix, "") for c in cols]
     data = [pd.to_numeric(scalar_regret_by_scenario[c], errors="coerce").dropna().to_numpy() for c in cols]
     magma = plt.cm.magma
-    colors = magma(np.linspace(0.12, 0.88, max(1, len(data))))
+    colors = magma(np.linspace(0.05, 0.95, max(1, len(data))))
 
     fig, ax = plt.subplots(figsize=(10, 6))
     bp = ax.boxplot(data, labels=labels, showfliers=True, patch_artist=True)
@@ -223,7 +248,7 @@ def plot_scalar_regret_boxplot(
     ax.tick_params(axis="y", labelsize=12)
     ax.grid(True, axis="y", linestyle="--", alpha=0.4)
     plt.tight_layout()
-    out = f"{results_dir}/regret_boxplot_{metric}.png"
+    out = f"{figures_dir}/regret_boxplot_{metric}.png"
     plt.savefig(out, dpi=300, bbox_inches="tight")
     plt.close(fig)
     if debug:
@@ -231,13 +256,16 @@ def plot_scalar_regret_boxplot(
 
 
 if __name__ == "__main__":
-    results_dir = "results"
+    results_dir = _select_results_dir(debug=False)
+    figures_dir = "results_figures"
     debug = False
 
     experiments = pd.read_csv(f"{results_dir}/experiments.csv")
     outcomes = {
         "gas_increase_abs": np.load(f"{results_dir}/outcomes_gas_increase_abs.npy"),
         "petrol_increase_abs": np.load(f"{results_dir}/outcomes_petrol_increase_abs.npy"),
+        "costs_consumers": np.load(f"{results_dir}/outcomes_costs_consumers.npy"),
+        "costs_tax": np.load(f"{results_dir}/outcomes_costs_tax.npy"),
     }
     uncertainty_cols = [
         "DIFFUSE_END_FRACTION", "DACCS_SCENARIO", "fraction_limestone", "fraction_fossil_waste",
@@ -258,6 +286,8 @@ if __name__ == "__main__":
         timeseries_metrics=[
             {"name": "gas_increase_abs", "outcome_key": "gas_increase_abs", "sense": "min"},
             {"name": "petrol_increase_abs", "outcome_key": "petrol_increase_abs", "sense": "min"},
+            {"name": "costs_consumers", "outcome_key": "costs_consumers", "sense": "min"},
+            {"name": "costs_tax", "outcome_key": "costs_tax", "sense": "min"},
         ],
         start_year=2025,
         debug=debug,
@@ -267,15 +297,21 @@ if __name__ == "__main__":
     scalar_regret_summary.to_csv(f"{results_dir}/regret_summary.csv", index=False)
     timeseries_regret["gas_increase_abs"].to_csv(f"{results_dir}/regret_gas_by_scenario_year.csv", index=False)
     timeseries_regret["petrol_increase_abs"].to_csv(f"{results_dir}/regret_petrol_by_scenario_year.csv", index=False)
+    timeseries_regret["costs_consumers"].to_csv(f"{results_dir}/regret_costs_consumers_by_scenario_year.csv", index=False)
+    timeseries_regret["costs_tax"].to_csv(f"{results_dir}/regret_costs_tax_by_scenario_year.csv", index=False)
     timeseries_summary["gas_increase_abs"].to_csv(f"{results_dir}/regret_gas_timeseries_summary.csv", index=False)
     timeseries_summary["petrol_increase_abs"].to_csv(f"{results_dir}/regret_petrol_timeseries_summary.csv", index=False)
+    timeseries_summary["costs_consumers"].to_csv(f"{results_dir}/regret_costs_consumers_timeseries_summary.csv", index=False)
+    timeseries_summary["costs_tax"].to_csv(f"{results_dir}/regret_costs_tax_timeseries_summary.csv", index=False)
 
-    plot_regret_timeseries(timeseries_summary, "gas_increase_abs", results_dir=results_dir, debug=debug)
-    plot_regret_timeseries(timeseries_summary, "petrol_increase_abs", results_dir=results_dir, debug=debug)
+    plot_regret_timeseries(timeseries_summary, "gas_increase_abs", figures_dir=figures_dir, debug=debug)
+    plot_regret_timeseries(timeseries_summary, "petrol_increase_abs", figures_dir=figures_dir, debug=debug)
+    plot_regret_timeseries(timeseries_summary, "costs_consumers", figures_dir=figures_dir, debug=debug)
+    plot_regret_timeseries(timeseries_summary, "costs_tax", figures_dir=figures_dir, debug=debug)
     plot_scalar_regret_boxplot(
         scalar_regret_by_scenario,
         metric="NPV_costs_tax",
-        results_dir=results_dir,
+        figures_dir=figures_dir,
         debug=debug,
     )
     print("Wrote scalar regret tables, fuel-regret time-series plots, and NPV-tax regret boxplot.")

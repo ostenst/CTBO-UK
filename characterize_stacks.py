@@ -230,7 +230,9 @@ total_ktCO2 = stacks_clean['ktCO2'].sum()
 print("Total CO2 emissions from all cleaned stacks: ", total_ktCO2," ... Below are stacks with emissions above 800 ktCO2:")
 print(stacks_clean[stacks_clean['ktCO2'] > 800])
 print(stacks_clean[stacks_clean['km_hub'] > 200])
-stacks_clean.to_csv('results/plants_clean.csv', index=False)
+results_dir = 'results_baseline'
+figures_dir = 'results_figures'
+stacks_clean.to_csv(f'{results_dir}/plants_clean.csv', index=False)
 
 # Plot a map of the plants. Each plant (stack) is a bubble on the map, colored by its CO2 concentration.
 def create_all_plants_map(europe, plants_gdf, bubble_scaling=1.0, remaining_gdf=None, hubs_gdf=None, debug=False):
@@ -444,7 +446,7 @@ fig, ax = create_all_plants_map(
     debug=True
 )
 
-output_file = 'results/map_concentrations.png'
+output_file = f'{figures_dir}/map_concentrations.png'
 plt.savefig(output_file, dpi=400, bbox_inches='tight')
 
 # Create sector map
@@ -456,7 +458,7 @@ fig2, ax2 = create_sector_map(
     hubs_gdf=hubs_gdf,
     debug=True
 )
-output_file2 = 'results/map_sectors.png'
+output_file2 = f'{figures_dir}/map_sectors.png'
 plt.savefig(output_file2, dpi=400, bbox_inches='tight')
 
 plt.show()

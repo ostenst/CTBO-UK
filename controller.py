@@ -22,9 +22,12 @@ except ImportError:
 
 if __name__ == "__main__":
     ema_logging.log_to_stderr(ema_logging.INFO)
+    PHASEOUT = True
+    results_dir = "results_phaseout" if PHASEOUT else "results_baseline"
+    figures_dir = "results_figures"
     
     # Load data once
-    plants_clean = pd.read_csv('results/plants_clean.csv')
+    plants_clean = pd.read_csv("results_baseline/plants_clean.csv")
     transport_hubs = pd.read_csv('data/transport_hubs.csv')
 
     model = Model("UKCTBO", function=simulate_ctbo)
@@ -62,7 +65,7 @@ if __name__ == "__main__":
         RealParameter("CAPEX_bioboiler", 0.80, 1.20),  # [M€/MW]
         # Financial uncertainties
         RealParameter("fixate_CAPEX", 0.02, 0.05),  # [-] fixed OPEX fraction
-        RealParameter("CAPEX_m", 0.75, 0.95),  # [-] CAPEX scale exponent
+        RealParameter("CAPEX_m", 0.80, 0.90),  # [-] CAPEX scale exponent
         RealParameter("discount_rate_ccs", 0.06, 0.12),
         IntegerParameter("lifetime_ccs", 20, 30),  # [years]
         RealParameter("CEPCI_2025", 880, 980),
@@ -128,7 +131,7 @@ if __name__ == "__main__":
         Constant("plants_clean", plants_clean),
         Constant("transport_hubs", transport_hubs),
         Constant("single_run", False),
-        Constant("PHASEOUT", False),
+        Constant("PHASEOUT", PHASEOUT),
         Constant("CTBO_QUADRATIC", 0.4),
         Constant("DISCOUNT_RATE", 0.035), # Can try 3.5% (social) or 9% (private)
         Constant("ETS_START", 45),
@@ -148,7 +151,7 @@ if __name__ == "__main__":
         PolicySample("£200-Mix", ETS_SCENARIO="£200-Mix"),
         PolicySample("£300-Mix", ETS_SCENARIO="£300-Mix"),
     ]
-    n_scenarios = 5
+    n_scenarios = 20
     
     results = perform_experiments(
         model,
@@ -165,22 +168,25 @@ if __name__ == "__main__":
     # Save experiments + scalar outcomes as CSV
     scalar_df = pd.DataFrame(scalar_outcomes)
     combined_df = pd.concat([experiments, scalar_df], axis=1)
-    combined_df.to_csv("results/experiments.csv", index=False)
+    combined_df.to_csv(f"{results_dir}/experiments.csv", index=False)
 
     # Save array outcomes as .npy files
     for name, arr in array_outcomes.items():
-        np.save(f"results/outcomes_{name}.npy", arr)
+        np.save(f"{results_dir}/outcomes_{name}.npy", arr)
     
     # Save plant names reference (alphabetically ordered, same for all runs)
     # Use same constants as model to ensure consistency if PHASEOUT=True
     constants_dict = {c.name: c.value for c in model.constants if c.name not in ['plants_clean', 'transport_hubs']}
+    constants_dict["results_dir"] = results_dir
+    constants_dict["figures_dir"] = figures_dir
+    constants_dict["save_aux_results"] = True
     test_result = simulate_ctbo(plants_clean, transport_hubs, **constants_dict)
     plant_ref = pd.DataFrame({
         'plant_index': range(len(test_result['plants_stack'])),
         'stack': test_result['plants_stack'],
         'sector': test_result['plants_sector']
     })
-    plant_ref.to_csv("results/plant_reference.csv", index=False)
+    plant_ref.to_csv(f"{results_dir}/plant_reference.csv", index=False)
 
     print("Wrote experiments/outcomes. Run `py regret.py` for regret tables and boxplots.")
     
