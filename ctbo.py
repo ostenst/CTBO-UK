@@ -896,7 +896,8 @@ def simulate_ctbo(
                 y = 0
             else:
                 # In mixed policies, ETS covers stored-CO2 support up to marginal cost.
-                E = min(ets_price, max(cost_marginal, ETS_START*pounds_to_EUR)) # In early years, pick ETS_START, in late years, pick marginal cost
+                # E = min(ets_price, max(cost_marginal, ETS_START*pounds_to_EUR)) # In early years, pick ETS_START, in late years, pick marginal cost
+                E = ets_price
                 y = max(0, cost_marginal - E) # Never negative!
 
             pointsource_emissions = MACC['ktCO2f'].where(~MACC['invested'], 0).sum() + MACC['ktCO2f_res'].where(MACC['invested'], 0).sum()

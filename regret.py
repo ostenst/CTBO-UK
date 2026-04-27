@@ -255,6 +255,57 @@ def plot_scalar_regret_boxplot(
         print(f"plot_scalar_regret_boxplot output: {out}")
 
 
+def debug_timeseries_metric_year(experiments, outcomes, timeseries_regret, metric, year=2050, start_year=2025, debug=False):
+    if debug:
+        print(f"debug_timeseries_metric_year input: metric={metric}, year={year}")
+    if metric not in outcomes:
+        raise KeyError(f"Metric {metric!r} not found in outcomes.")
+    if metric not in timeseries_regret:
+        raise KeyError(f"Metric {metric!r} not found in timeseries_regret.")
+
+    arr = np.asarray(outcomes[metric], dtype=float)
+    year_idx = int(year - start_year)
+    if year_idx < 0 or year_idx >= arr.shape[1]:
+        raise ValueError(f"Year {year} outside outcome range [{start_year}, {start_year + arr.shape[1] - 1}]")
+
+    work = experiments.copy()
+    work["_policy_name"] = work["policy"].astype(str)
+    uncertainty_cols = [c for c in experiments.columns if c not in {"policy", "model", "scenario", "ETS_SCENARIO"} and not c.startswith("NPV_")]
+    work["_scenario_id"], _ = pd.factorize(work[uncertainty_cols].apply(tuple, axis=1))
+
+    raw_df = pd.DataFrame(
+        {
+            "policy": work["_policy_name"].to_numpy(),
+            "_scenario_id": work["_scenario_id"].to_numpy(),
+            "value": arr[:, year_idx],
+        }
+    )
+    reg_col = f"year_{int(year)}"
+    regret_df = timeseries_regret[metric][["policy", "_scenario_id", reg_col]].rename(columns={reg_col: "regret"})
+
+    raw_med = raw_df.groupby("policy")["value"].median().sort_values()
+    reg_med = regret_df.groupby("policy")["regret"].median().sort_values()
+
+    best_by_scenario = raw_df.loc[raw_df.groupby("_scenario_id")["value"].idxmin(), "policy"]
+    best_share = (best_by_scenario.value_counts(normalize=True) * 100).sort_values(ascending=False)
+    reg_stats = regret_df.groupby("policy")["regret"].agg(
+        p05=lambda s: float(np.percentile(s.dropna().to_numpy(), 5)) if len(s.dropna()) else float("nan"),
+        p50=lambda s: float(np.percentile(s.dropna().to_numpy(), 50)) if len(s.dropna()) else float("nan"),
+        p95=lambda s: float(np.percentile(s.dropna().to_numpy(), 95)) if len(s.dropna()) else float("nan"),
+        share_positive=lambda s: float((s > 0).mean() * 100),
+    ).sort_index()
+
+    print(f"\nDiagnostics for metric={metric}, year={year}")
+    print("\nMedian raw value by policy:")
+    print(raw_med.to_string())
+    print("\nMedian regret by policy:")
+    print(reg_med.to_string())
+    print("\nBest-policy share by scenario [%]:")
+    print(best_share.to_string())
+    print("\nRegret distribution by policy at selected year:")
+    print(reg_stats.to_string())
+
+
 if __name__ == "__main__":
     results_dir = _select_results_dir(debug=False)
     figures_dir = "results_figures"
@@ -308,6 +359,15 @@ if __name__ == "__main__":
     plot_regret_timeseries(timeseries_summary, "petrol_increase_abs", figures_dir=figures_dir, debug=debug)
     plot_regret_timeseries(timeseries_summary, "costs_consumers", figures_dir=figures_dir, debug=debug)
     plot_regret_timeseries(timeseries_summary, "costs_tax", figures_dir=figures_dir, debug=debug)
+    debug_timeseries_metric_year(
+        experiments=experiments,
+        outcomes=outcomes,
+        timeseries_regret=timeseries_regret,
+        metric="costs_consumers",
+        year=2050,
+        start_year=2025,
+        debug=debug,
+    )
     plot_scalar_regret_boxplot(
         scalar_regret_by_scenario,
         metric="NPV_costs_tax",
