@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib import colors
 
 
 ETS_SCENARIOS_DEFAULT = ['CTBO-only', '£100-Mix', '£200-Mix', '£300-Mix', 'ETS-eq']
@@ -208,7 +209,7 @@ def compare_carbon_prices(results_dir='results_baseline', figures_dir='results_f
         ax.set_xlabel('Year', fontsize=14)
         _set_sparse_year_ticks(ax, years, debug=debug)
 
-    axes[0].set_ylabel('Price [GBP/tCO2]', fontsize=14)
+    axes[0].set_ylabel('Price [£/tCO2]', fontsize=14)
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc='upper right', fontsize=11)
     fig.tight_layout()
@@ -235,7 +236,7 @@ def compare_policy_costs(results_dir='results_baseline', figures_dir='results_fi
     if n == 1:
         axes = [axes]
 
-    scale = 1e-6 / pounds_to_EUR  # kEUR -> BGBP
+    scale = 1e-6 / pounds_to_EUR  # kEUR -> B£
     magma = plt.cm.magma
     for ax, scenario in zip(axes, ets_scenarios):
         mask = experiments['ETS_SCENARIO'] == scenario
@@ -255,10 +256,10 @@ def compare_policy_costs(results_dir='results_baseline', figures_dir='results_fi
         ax.plot(years, med * scale, lw=2.3, color=magma(0.85), label='Consumers')
         ax.fill_between(years, p5 * scale, p95 * scale, color=magma(0.85), alpha=0.2)
         npv_text = (
-            f"NPV suppliers: {experiments.loc[mask, 'NPV_costs_suppliers'].median() * scale:.3f} BGBP\n"
-            f"NPV emitters: {experiments.loc[mask, 'NPV_costs_emitters'].median() * scale:.3f} BGBP\n"
-            f"NPV tax: {experiments.loc[mask, 'NPV_costs_tax'].median() * scale:.3f} BGBP\n"
-            f"NPV consumers: {experiments.loc[mask, 'NPV_costs_consumers'].median() * scale:.3f} BGBP"
+            f"NPV suppliers: {experiments.loc[mask, 'NPV_costs_suppliers'].median() * scale:.3f} B£\n"
+            f"NPV emitters: {experiments.loc[mask, 'NPV_costs_emitters'].median() * scale:.3f} B£\n"
+            f"NPV tax: {experiments.loc[mask, 'NPV_costs_tax'].median() * scale:.3f} B£\n"
+            f"NPV consumers: {experiments.loc[mask, 'NPV_costs_consumers'].median() * scale:.3f} B£"
         )
         ax.text(
             0.02, 0.98, npv_text, transform=ax.transAxes, va='top', ha='left', fontsize=10,
@@ -270,7 +271,7 @@ def compare_policy_costs(results_dir='results_baseline', figures_dir='results_fi
         ax.set_xlabel('Year', fontsize=14)
         _set_sparse_year_ticks(ax, years, debug=debug)
 
-    axes[0].set_ylabel('Annual policy costs [BGBP/y]', fontsize=14)
+    axes[0].set_ylabel('Annual policy costs [B£/y]', fontsize=14)
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc='upper right', fontsize=11)
     fig.tight_layout()
@@ -321,10 +322,10 @@ def compare_fuel_inc(
         ax.legend(fontsize=11, loc='best')
         y1_min, y1_max = ax.get_ylim()
         ax2 = ax.twinx()
-        ax2.set_ylim(y1_min * household_consumption / 100, y1_max * household_consumption / 100)  # pence -> GBP/year
+        ax2.set_ylim(y1_min * household_consumption / 100, y1_max * household_consumption / 100)  # pence -> £/year
         ax2.tick_params(labelsize=11)
         if ax is axes[-1]:
-            ax2.set_ylabel('Household bill increase [GBP/year]\n- assuming 11,200 kWh/year', fontsize=12)
+            ax2.set_ylabel('Household bill increase [£/year]\n- assuming 11,200 kWh/year', fontsize=12)
 
     axes[0].set_ylabel('Gas price increase [pence/kWh]', fontsize=14)
     fig.tight_layout()
@@ -378,7 +379,7 @@ def compare_plant_NPV(results_dir='results_baseline', figures_dir='results_figur
             sizes = np.clip(sector_df['ktCO2tot_ccs'].to_numpy(dtype=float), 1.0, None) * 0.25
             ax.scatter(
                 sector_df['investment_year'].to_numpy(dtype=float),
-                sector_df['NPV_total'].to_numpy(dtype=float) / 1000.0 / pounds_to_EUR,  # [MGBP]
+                sector_df['NPV_total'].to_numpy(dtype=float) / 1000.0 / pounds_to_EUR,  # [M£]
                 s=sizes,
                 c=[sector_colors.get(sector, 'grey')],
                 alpha=0.75,
@@ -393,7 +394,7 @@ def compare_plant_NPV(results_dir='results_baseline', figures_dir='results_figur
         ax.tick_params(labelsize=12)
         ax.set_xlabel('Investment year', fontsize=14)
 
-    axes[0].set_ylabel('Plant NPV total [MGBP]', fontsize=14)
+    axes[0].set_ylabel('Plant NPV total [M£]', fontsize=14)
     handles, labels = axes[0].get_legend_handles_labels()
     if handles:
         dedup = dict(zip(labels, handles))
@@ -456,7 +457,7 @@ def plot_mac_by_sector(results_dir='results_baseline', figures_dir='results_figu
         patch.set_alpha(0.75)
 
     ax.set_title('Plant MAC Distribution by Sector', fontsize=16)
-    ax.set_ylabel('MAC [GBP/tCO2]', fontsize=14)
+    ax.set_ylabel('MAC [£/tCO2]', fontsize=14)
     ax.set_xlabel('Sector', fontsize=14)
     ax.grid(True, linestyle='--', alpha=0.35, axis='y')
     ax.tick_params(labelsize=12)
@@ -487,7 +488,7 @@ def plot_macc_curves(results_dir='results_baseline', figures_dir='results_figure
 
     for i in range(n_experiments):
         stack_i = np.asarray(stacks[i], dtype=object)
-        mac_i = np.asarray(mac[i], dtype=float) / pounds_to_EUR  # [GBP/tCO2]
+        mac_i = np.asarray(mac[i], dtype=float) / pounds_to_EUR  # [£/tCO2]
         co2_i = np.array([cap_by_stack.get(s, np.nan) for s in stack_i], dtype=float) / 1000.0  # [MtCO2]
 
         valid = np.isfinite(mac_i) & np.isfinite(co2_i) & (co2_i > 0)
@@ -497,7 +498,7 @@ def plot_macc_curves(results_dir='results_baseline', figures_dir='results_figure
 
         co2_valid = co2_i[valid]
         mac_valid = mac_i[valid]
-        summed_costs[i] = np.sum(co2_valid * mac_valid)
+        summed_costs[i] = np.sum(co2_valid * mac_valid) /1000
 
         order = np.argsort(mac_valid)
         co2_sorted = co2_valid[order]
@@ -511,23 +512,44 @@ def plot_macc_curves(results_dir='results_baseline', figures_dir='results_figure
     idx_max = valid_idx[np.argmax(summed_costs[valid_idx])]
 
     fig, ax = plt.subplots(figsize=(10, 6))
-    colors = plt.cm.magma(np.linspace(0, 1, max(2, n_experiments)))
+    magma = plt.cm.magma
+    cost_min = float(np.nanmin(summed_costs[valid_idx]))
+    cost_max = float(np.nanmax(summed_costs[valid_idx]))
+    norm = colors.Normalize(vmin=cost_min, vmax=cost_max if cost_max > cost_min else cost_min + 1.0)
+
+    # Draw non-extreme curves first.
     plotted = 0
     for i, data in enumerate(scenario_data):
         if data is None:
             continue
+        if i == idx_min or i == idx_max:
+            continue
         cum_co2, mac_sorted = data
         plotted += 1
-        if i == idx_min or i == idx_max:
-            ax.step(cum_co2, mac_sorted, where='pre', color=colors[i], alpha=1.0, linewidth=2.5)
-        else:
-            ax.step(cum_co2, mac_sorted, where='pre', color=colors[i], alpha=0.1, linewidth=1.0)
+        curve_color = magma(norm(summed_costs[i]))
+        ax.step(cum_co2, mac_sorted, where='pre', color=curve_color, alpha=0.45, linewidth=1.1)
 
-    ax.set_xlabel('Cumulative CCS/BECCS capacity [MtCO2]', fontsize=14)
-    ax.set_ylabel('Abatement cost of CCS/BECCS [GBP/tCO2]', fontsize=14)
+    # Draw min/max last so they overlay all other curves.
+    for i in [idx_min, idx_max]:
+        data = scenario_data[i]
+        if data is None:
+            continue
+        cum_co2, mac_sorted = data
+        plotted += 1
+        ax.step(cum_co2, mac_sorted, where='pre', color='black', alpha=1.0, linewidth=2.8)
+        # Overlay colored line on top of the black highlight.
+        ax.step(cum_co2, mac_sorted, where='pre', color=magma(norm(summed_costs[i])), alpha=1.0, linewidth=2.0)
+
+    ax.set_xlabel('Cumulative CCS/BECCS capacity [MtCO2 p.a.]', fontsize=14)
+    ax.set_ylabel('Abatement cost of CCS/BECCS [£/tCO2]', fontsize=14)
     ax.tick_params(labelsize=12)
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.axhline(0, color='gray', linestyle='-', linewidth=0.6)
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=magma)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, pad=0.02)
+    cbar.set_label('Summed cost [B£ p.a.]', fontsize=12)
+    cbar.ax.tick_params(labelsize=11)
     plt.tight_layout()
 
     if savefig:

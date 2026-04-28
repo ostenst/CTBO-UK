@@ -330,7 +330,7 @@ def create_sector_map(europe, plants_gdf, bubble_scaling=1.0, remaining_gdf=None
             label='Other emitters'
         )
 
-    # Create sector colors using magma
+    # Create sector colors using the same convention as NPV bubble plots
     sectors = plants_gdf['sector'].unique()
     sector_labels_dict = {
         'ccgt': 'Gas power',
@@ -340,8 +340,19 @@ def create_sector_map(europe, plants_gdf, bubble_scaling=1.0, remaining_gdf=None
         'steel': 'Steel',
         'waste': 'Waste',
     }
-    magma_colors = plt.cm.magma(np.linspace(0.1, 0.9, len(sectors)))
-    sector_colors = {s: c for s, c in zip(sorted(sectors), magma_colors)}
+    magma = plt.cm.magma
+    base_colors = {
+        'cement': magma(0.10),
+        'ccgt': magma(0.30),
+        'drax': magma(0.50),
+        'steel': magma(0.70),
+        'refinery': magma(0.90),
+        'waste': '#62a7a6',
+    }
+    fallback_colors = plt.cm.tab10(np.linspace(0, 1, max(1, len(sectors))))
+    sector_colors = {}
+    for idx, sector in enumerate(sorted(sectors)):
+        sector_colors[sector] = base_colors.get(sector, fallback_colors[idx % len(fallback_colors)])
     
     if debug:
         print(f"  Sectors: {sorted(sectors)}")
