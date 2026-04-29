@@ -255,7 +255,16 @@ def plot_scalar_regret_boxplot(
         print(f"plot_scalar_regret_boxplot output: {out}")
 
 
-def debug_timeseries_metric_year(experiments, outcomes, timeseries_regret, metric, year=2050, start_year=2025, debug=False):
+def debug_timeseries_metric_year(
+    experiments,
+    outcomes,
+    timeseries_regret,
+    metric,
+    year=2050,
+    start_year=2025,
+    sense="min",
+    debug=False,
+):
     if debug:
         print(f"debug_timeseries_metric_year input: metric={metric}, year={year}")
     if metric not in outcomes:
@@ -286,7 +295,13 @@ def debug_timeseries_metric_year(experiments, outcomes, timeseries_regret, metri
     raw_med = raw_df.groupby("policy")["value"].median().sort_values()
     reg_med = regret_df.groupby("policy")["regret"].median().sort_values()
 
-    best_by_scenario = raw_df.loc[raw_df.groupby("_scenario_id")["value"].idxmin(), "policy"]
+    if sense == "min":
+        best_idx = raw_df.groupby("_scenario_id")["value"].idxmin()
+    elif sense == "max":
+        best_idx = raw_df.groupby("_scenario_id")["value"].idxmax()
+    else:
+        raise ValueError(f"sense must be 'min' or 'max', got {sense!r}")
+    best_by_scenario = raw_df.loc[best_idx, "policy"]
     best_share = (best_by_scenario.value_counts(normalize=True) * 100).sort_values(ascending=False)
     reg_stats = regret_df.groupby("policy")["regret"].agg(
         p05=lambda s: float(np.percentile(s.dropna().to_numpy(), 5)) if len(s.dropna()) else float("nan"),
@@ -337,8 +352,8 @@ if __name__ == "__main__":
         timeseries_metrics=[
             {"name": "gas_increase_abs", "outcome_key": "gas_increase_abs", "sense": "min"},
             {"name": "petrol_increase_abs", "outcome_key": "petrol_increase_abs", "sense": "min"},
-            {"name": "costs_consumers", "outcome_key": "costs_consumers", "sense": "min"},
-            {"name": "costs_tax", "outcome_key": "costs_tax", "sense": "min"},
+            {"name": "costs_consumers", "outcome_key": "costs_consumers", "sense": "max"},
+            {"name": "costs_tax", "outcome_key": "costs_tax", "sense": "max"},
         ],
         start_year=2025,
         debug=debug,
@@ -366,6 +381,7 @@ if __name__ == "__main__":
         metric="costs_consumers",
         year=2050,
         start_year=2025,
+        sense="min",
         debug=debug,
     )
     plot_scalar_regret_boxplot(

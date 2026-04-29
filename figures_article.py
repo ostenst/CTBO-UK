@@ -380,7 +380,14 @@ def figure_5_prices(
     return fig
 
 
-def _timeseries_regret_summary(experiments, outcome_arr, uncertainty_cols, start_year=2025, debug=False):
+def _timeseries_regret_summary(
+    experiments,
+    outcome_arr,
+    uncertainty_cols,
+    start_year=2025,
+    sense="min",
+    debug=False,
+):
     if debug:
         print(
             "_timeseries_regret_summary input:",
@@ -396,8 +403,14 @@ def _timeseries_regret_summary(experiments, outcome_arr, uncertainty_cols, start
         idx = grp.index.to_numpy()
         policies = grp["_policy_name"].to_numpy()
         vals = outcome_arr[idx, :]  # [n_policies, n_years]
-        best = np.nanmin(vals, axis=0, keepdims=True)
-        reg = vals - best
+        if sense == "min":
+            best = np.nanmin(vals, axis=0, keepdims=True)
+            reg = vals - best
+        elif sense == "max":
+            best = np.nanmax(vals, axis=0, keepdims=True)
+            reg = best - vals
+        else:
+            raise ValueError(f"sense must be 'min' or 'max', got {sense!r}")
         for i, pol in enumerate(policies):
             row = {"policy": pol}
             row.update({f"year_{int(y)}": float(reg[i, j]) for j, y in enumerate(years)})
@@ -424,7 +437,13 @@ def _timeseries_regret_summary(experiments, outcome_arr, uncertainty_cols, start
     return out
 
 
-def _scalar_regret_by_policy(experiments, uncertainty_cols, scalar_col="NPV_costs_consumers", debug=False):
+def _scalar_regret_by_policy(
+    experiments,
+    uncertainty_cols,
+    scalar_col="NPV_costs_consumers",
+    sense="min",
+    debug=False,
+):
     if debug:
         print(f"_scalar_regret_by_policy input: rows={len(experiments)}, scalar_col={scalar_col}")
     work = experiments.copy()
@@ -439,8 +458,14 @@ def _scalar_regret_by_policy(experiments, uncertainty_cols, scalar_col="NPV_cost
         aggfunc="first",
         observed=True,
     )
-    best = pivot.min(axis=1)
-    regret_wide = pivot.sub(best, axis=0)
+    if sense == "min":
+        best = pivot.min(axis=1)
+        regret_wide = pivot.sub(best, axis=0)
+    elif sense == "max":
+        best = pivot.max(axis=1)
+        regret_wide = pivot.rsub(best, axis=0)
+    else:
+        raise ValueError(f"sense must be 'min' or 'max', got {sense!r}")
     if debug:
         print(f"_scalar_regret_by_policy output: shape={regret_wide.shape}")
     return regret_wide
@@ -470,14 +495,24 @@ def figure_6_policyregret(
 
     experiments_baseline = pd.read_csv("results_baseline/experiments.csv")
     experiments_phaseout = pd.read_csv("results_phaseout/experiments.csv")
-    costs_baseline = np.load("results_baseline/outcomes_costs_consumers.npy")
-    costs_phaseout = np.load("results_phaseout/outcomes_costs_consumers.npy")
+    tax_baseline = np.load("results_baseline/outcomes_costs_tax.npy")
+    tax_phaseout = np.load("results_phaseout/outcomes_costs_tax.npy")
 
     summary_baseline = _timeseries_regret_summary(
-        experiments_baseline, costs_baseline, uncertainty_cols, start_year=start_year, debug=debug
+        experiments_baseline,
+        tax_baseline,
+        uncertainty_cols,
+        start_year=start_year,
+        sense="max",
+        debug=debug,
     )
     summary_phaseout = _timeseries_regret_summary(
-        experiments_phaseout, costs_phaseout, uncertainty_cols, start_year=start_year, debug=debug
+        experiments_phaseout,
+        tax_phaseout,
+        uncertainty_cols,
+        start_year=start_year,
+        sense="max",
+        debug=debug,
     )
 
     fig, axes = plt.subplots(2, 2, figsize=(10, 10), sharex="row", sharey="row")
@@ -524,13 +559,15 @@ def figure_6_policyregret(
     scalar_baseline = _scalar_regret_by_policy(
         experiments_baseline,
         uncertainty_cols,
-        scalar_col="NPV_costs_consumers",
+        scalar_col="NPV_costs_tax",
+        sense="max",
         debug=debug,
     )
     scalar_phaseout = _scalar_regret_by_policy(
         experiments_phaseout,
         uncertainty_cols,
-        scalar_col="NPV_costs_consumers",
+        scalar_col="NPV_costs_tax",
+        sense="max",
         debug=debug,
     )
 

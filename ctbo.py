@@ -1326,7 +1326,7 @@ def plot_macc(macc, pounds_to_EUR=1.15, figures_dir='results_figures', savefig=F
     # Convert MAC to £/tCO₂
     macc_nonzero['MAC'] = macc_nonzero['MAC'] / pounds_to_EUR
 
-    fig, ax = plt.subplots(figsize=(7, 4.3))
+    fig, ax = plt.subplots(figsize=(9, 4.5))
     ax.step(macc_nonzero['cumulative_kt']/1000, macc_nonzero['MAC'], where='pre', color='black', linewidth=2.5)
     ax.set_xlabel("Cumulative CCS/BECCS capacity [MtCO₂ p.a.]", fontsize=14)
     ax.set_ylabel("Abatement cost of CCS/BECCS [£/tCO₂] ", fontsize=14)

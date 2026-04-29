@@ -38,10 +38,10 @@ def plot_stylistic_supply_stored(color='gray', debug=False):
     ax2.tick_params(labelsize=12, colors=color)
     
     plt.tight_layout()
-    plt.savefig('results/stylistic_supply_stored.png', dpi=450, bbox_inches='tight')
+    plt.savefig('results_figures/stylistic_supply_stored.png', dpi=450, bbox_inches='tight')
     
     if debug:
-        print("Plot saved to results/stylistic_supply_stored.png")
+        print("Plot saved to results_figures/stylistic_supply_stored.png")
     
     return fig
 
@@ -84,10 +84,10 @@ def plot_stylistic_supply_vs_stored(color='gray', debug=False):
     ax2.tick_params(labelsize=12, colors=color)
     
     plt.tight_layout()
-    plt.savefig('results/stylistic_supply_vs_stored.png', dpi=450, bbox_inches='tight')
+    plt.savefig('results_figures/stylistic_supply_vs_stored.png', dpi=450, bbox_inches='tight')
     
     if debug:
-        print("Plot saved to results/stylistic_supply_vs_stored.png")
+        print("Plot saved to results_figures/stylistic_supply_vs_stored.png")
     
     return fig
 
@@ -114,7 +114,7 @@ def plot_stylistic_decreasing_supply_stored(color='gray', debug=False):
     # Left y-axis: CO2 supply (stackplot)
     ax1.stackplot(years, supply, colors=['gray'], alpha=0.45, labels=['CO₂ supply'])
     # ax1.set_xlabel('Year', fontsize=14)
-    ax1.set_ylabel('Carbon supply [MtCO₂/yr]\n'+ r'$\mathbf{all}$' +' emitters', fontsize=14)
+    ax1.set_ylabel('Carbon supply [MtCO₂ p.a.]', fontsize=14)
     ax1.set_xlim(2025, 2050)
     ax1.set_ylim(0, 300)
     ax1.set_yticks([0, 100, 200, 300])
@@ -124,16 +124,16 @@ def plot_stylistic_decreasing_supply_stored(color='gray', debug=False):
     # Right y-axis: CO2 stored (stackplot)
     ax2 = ax1.twinx()
     ax2.stackplot(years, stored, colors=[color], alpha=0.7, labels=['CO₂ stored'])
-    ax2.set_ylabel('Carbon storage [MtCO₂/yr]', fontsize=14, color=color)
+    ax2.set_ylabel('Carbon storage [MtCO₂ p.a.]', fontsize=14, color=color)
     ax2.set_ylim(0, 300)
     ax2.set_yticks([0, 100, 200, 300])
     ax2.tick_params(labelsize=12, colors=color)
     
     plt.tight_layout()
-    plt.savefig('results/stylistic_decreasing_supply_stored.png', dpi=450, bbox_inches='tight')
+    plt.savefig('results_figures/stylistic_decreasing_supply_stored.png', dpi=450, bbox_inches='tight')
     
     if debug:
-        print("Plot saved to results/stylistic_decreasing_supply_stored.png")
+        print("Plot saved to results_figures/stylistic_decreasing_supply_stored.png")
     
     return fig
 
