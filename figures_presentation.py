@@ -93,6 +93,8 @@ def figure_policy_focus_presentation(
     color_suppliers_y = magma(0.85)
     color_tax = "#62a7a6"
     scale_bgbp = 1e-6 / pounds_to_EUR
+    use = years <= 2050
+    years_plot = years[use]
 
     for r, case in enumerate(cases):
         mask = case["experiments"]["policy"] == policy
@@ -100,45 +102,77 @@ def figure_policy_focus_presentation(
             continue
 
         ax = axes[r, 0]
-        med, p05, p95 = fa._panel_stats(case["marginal"][mask], debug=debug)
-        ax.plot(years, med, lw=2.3, color=color_marginal, label="Marginal CO2 storage cost")
-        ax.fill_between(years, p05, p95, color=color_marginal, alpha=0.2)
-        med, p05, p95 = fa._panel_stats(case["ets"][mask], debug=debug)
-        ax.plot(years, med, lw=2.3, color=color_emitters_ets, label="ETS price")
-        ax.fill_between(years, p05, p95, color=color_emitters_ets, alpha=0.2)
-        med, p05, p95 = fa._panel_stats(case["csu"][mask], debug=debug)
-        ax.plot(years, med, lw=2.3, color=color_suppliers_y, label="CSU price")
-        ax.fill_between(years, p05, p95, color=color_suppliers_y, alpha=0.2)
-        med, p05, p95 = fa._panel_stats(case["fuel_cost"][mask], debug=debug)
-        ax.plot(years, med, lw=2.3, color=color_consumers_fuel, label="Consumer fuel cost")
-        ax.fill_between(years, p05, p95, color=color_consumers_fuel, alpha=0.2)
+        med, p05, p95 = fa._panel_stats(case["marginal"][mask][:, use], debug=debug)
+        ax.plot(years_plot, med, lw=2.3, color=color_marginal, label="Marginal CO2 storage cost")
+        ax.fill_between(years_plot, p05, p95, color=color_marginal, alpha=0.2)
+        med, p05, p95 = fa._panel_stats(case["ets"][mask][:, use], debug=debug)
+        ax.plot(years_plot, med, lw=2.3, color=color_emitters_ets, label="ETS price")
+        ax.fill_between(years_plot, p05, p95, color=color_emitters_ets, alpha=0.2)
+        med, p05, p95 = fa._panel_stats(case["csu"][mask][:, use], debug=debug)
+        ax.plot(years_plot, med, lw=2.3, color=color_suppliers_y, label="CSU price")
+        ax.fill_between(years_plot, p05, p95, color=color_suppliers_y, alpha=0.2)
+        med, p05, p95 = fa._panel_stats(case["fuel_cost"][mask][:, use], debug=debug)
+        ax.plot(years_plot, med, lw=2.3, color=color_consumers_fuel, label="Consumer fuel cost")
+        ax.fill_between(years_plot, p05, p95, color=color_consumers_fuel, alpha=0.2)
         ax.set_ylabel("Carbon price [£/tCO2]", fontsize=13)
 
         ax = axes[r, 1]
-        med, p05, p95 = fa._panel_stats(case["suppliers"][mask], debug=debug)
-        ax.plot(years, med * scale_bgbp, lw=2.3, color=color_suppliers_y, label="Fuel supplier cost")
-        ax.fill_between(years, p05 * scale_bgbp, p95 * scale_bgbp, color=color_suppliers_y, alpha=0.2)
-        med, p05, p95 = fa._panel_stats(case["emitters"][mask], debug=debug)
-        ax.plot(years, med * scale_bgbp, lw=2.3, color=color_emitters_ets, label="Emitter cost")
-        ax.fill_between(years, p05 * scale_bgbp, p95 * scale_bgbp, color=color_emitters_ets, alpha=0.2)
-        med, p05, p95 = fa._panel_stats(case["tax"][mask], debug=debug)
-        ax.plot(years, med * scale_bgbp, lw=2.3, color=color_tax, label="Emissions tax")
-        ax.fill_between(years, p05 * scale_bgbp, p95 * scale_bgbp, color=color_tax, alpha=0.2)
-        med, p05, p95 = fa._panel_stats(case["consumers"][mask], debug=debug)
-        ax.plot(years, med * scale_bgbp, lw=2.3, color=color_consumers_fuel, label="Consumer costs")
-        ax.fill_between(years, p05 * scale_bgbp, p95 * scale_bgbp, color=color_consumers_fuel, alpha=0.2)
+        med, p05, p95 = fa._panel_stats(case["suppliers"][mask][:, use], debug=debug)
+        ax.plot(years_plot, med * scale_bgbp, lw=2.3, color=color_suppliers_y, label="Fuel supplier cost")
+        ax.fill_between(years_plot, p05 * scale_bgbp, p95 * scale_bgbp, color=color_suppliers_y, alpha=0.2)
+        med, p05, p95 = fa._panel_stats(case["emitters"][mask][:, use], debug=debug)
+        ax.plot(years_plot, med * scale_bgbp, lw=2.3, color=color_emitters_ets, label="Emitter cost")
+        ax.fill_between(years_plot, p05 * scale_bgbp, p95 * scale_bgbp, color=color_emitters_ets, alpha=0.2)
+        med, p05, p95 = fa._panel_stats(case["tax"][mask][:, use], debug=debug)
+        ax.plot(years_plot, med * scale_bgbp, lw=2.3, color=color_tax, label="Emissions tax")
+        ax.fill_between(years_plot, p05 * scale_bgbp, p95 * scale_bgbp, color=color_tax, alpha=0.2)
+        med, p05, p95 = fa._panel_stats(case["consumers"][mask][:, use], debug=debug)
+        ax.plot(years_plot, med * scale_bgbp, lw=2.3, color=color_consumers_fuel, label="Consumer costs")
+        ax.fill_between(years_plot, p05 * scale_bgbp, p95 * scale_bgbp, color=color_consumers_fuel, alpha=0.2)
+        npv_vals = pd.to_numeric(
+            case["experiments"].loc[mask, "NPV_costs_consumers"],
+            errors="coerce",
+        ).dropna().to_numpy(dtype=float)
+        tax_vals = pd.to_numeric(
+            case["experiments"].loc[mask, "NPV_costs_tax"],
+            errors="coerce",
+        ).dropna().to_numpy(dtype=float)
+        if npv_vals.size:
+            npv_p05 = np.percentile(npv_vals, 5) * scale_bgbp
+            npv_p95 = np.percentile(npv_vals, 95) * scale_bgbp
+            npv_text = (
+                "NPV consumer costs [B£]\n"
+                f"p05-p95: {npv_p05:.2f} to {npv_p95:.2f}"
+            )
+            if tax_vals.size:
+                tax_p05 = np.percentile(tax_vals, 5) * scale_bgbp
+                tax_p95 = np.percentile(tax_vals, 95) * scale_bgbp
+                npv_text += (
+                    "\nNPV emissions tax [B£]\n"
+                    f"p05-p95: {tax_p05:.2f} to {tax_p95:.2f}"
+                )
+            ax.text(
+                0.04,
+                0.66,
+                npv_text,
+                transform=ax.transAxes,
+                va="center",
+                ha="left",
+                fontsize=9,
+                bbox=dict(facecolor="white", alpha=0.85, edgecolor="gray"),
+            )
         ax.set_ylabel("Annual policy costs [B£ p.a.]", fontsize=13)
 
         ax = axes[r, 2]
-        med, p05, p95 = fa._panel_stats(case["gas_inc"][mask], debug=debug)
-        ax.plot(years, med, lw=2.3, color=magma(0.70), label="Gas price increase")
-        ax.fill_between(years, p05, p95, color=magma(0.70), alpha=0.24)
+        med, p05, p95 = fa._panel_stats(case["gas_inc"][mask][:, use], debug=debug)
+        ax.plot(years_plot, med, lw=2.3, color=magma(0.70), label="Gas price increase")
+        ax.fill_between(years_plot, p05, p95, color=magma(0.70), alpha=0.24)
         ax.set_ylabel("Gas price increase [p/kWh]", fontsize=13)
 
         ax = axes[r, 3]
-        med, p05, p95 = fa._panel_stats(case["petrol_inc"][mask], debug=debug)
-        ax.plot(years, med, lw=2.3, color=magma(0.75), label="Petrol price increase")
-        ax.fill_between(years, p05, p95, color=magma(0.75), alpha=0.24)
+        med, p05, p95 = fa._panel_stats(case["petrol_inc"][mask][:, use], debug=debug)
+        ax.plot(years_plot, med, lw=2.3, color=magma(0.75), label="Petrol price increase")
+        ax.fill_between(years_plot, p05, p95, color=magma(0.75), alpha=0.24)
         ax.set_ylabel("Petrol price increase [p/L]", fontsize=13)
 
     titles = ["Carbon prices", "Annual policy costs", "Gas prices", "Petrol prices"]
@@ -151,7 +185,8 @@ def figure_policy_focus_presentation(
             ax.grid(True, linestyle="--", alpha=0.35)
             ax.tick_params(labelsize=11)
             ax.set_xlabel("Year", fontsize=13)
-            fa._set_sparse_year_ticks(ax, years, debug=debug)
+            ax.set_xlim(int(years_plot.min()), int(years_plot.max()))
+            fa._set_sparse_year_ticks(ax, years_plot, debug=debug)
 
     for c in range(4):
         axes[0, c].tick_params(labelbottom=False)
@@ -177,7 +212,7 @@ def figure_policy_focus_presentation(
     return fig
 
 
-def main(debug=False, policy="£200-Mix"):
+def main(debug=False, policy="ETS-eq"):
     if debug:
         print("main input:", f"debug={debug}, policy={policy}")
 
