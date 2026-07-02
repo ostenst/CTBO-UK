@@ -447,6 +447,11 @@ def calculate_plant_npv(npv_data_all, lifetime_ccs, construction_years=3, debug=
     for stack, plant_df in npv_data_all.groupby('stack', sort=False):
         plant_df = plant_df.sort_values('year').copy()
         sector = plant_df['sector'].iloc[0] if 'sector' in plant_df and len(plant_df) > 0 else None
+        ktCO2tot_ccs = (
+            float(plant_df['ktCO2tot_ccs'].dropna().iloc[0])
+            if 'ktCO2tot_ccs' in plant_df.columns and plant_df['ktCO2tot_ccs'].notna().any()
+            else 0.0
+        )
         investment_year_series = plant_df['investment_year'].dropna()
         if investment_year_series.empty:
             records.append({
@@ -454,6 +459,7 @@ def calculate_plant_npv(npv_data_all, lifetime_ccs, construction_years=3, debug=
                 'sector': sector,
                 'investment_year': np.nan,
                 'npv_end_year': np.nan,
+                'ktCO2tot_ccs': ktCO2tot_ccs,
                 'NPV_CAPEX': 0.0,
                 'NPV_OPEX': 0.0,
                 'NPV_REVENUE': 0.0,
@@ -470,6 +476,7 @@ def calculate_plant_npv(npv_data_all, lifetime_ccs, construction_years=3, debug=
                 'sector': sector,
                 'investment_year': investment_year,
                 'npv_end_year': npv_end_year,
+                'ktCO2tot_ccs': ktCO2tot_ccs,
                 'NPV_CAPEX': 0.0,
                 'NPV_OPEX': 0.0,
                 'NPV_REVENUE': 0.0,
@@ -503,6 +510,7 @@ def calculate_plant_npv(npv_data_all, lifetime_ccs, construction_years=3, debug=
             'sector': sector,
             'investment_year': investment_year,
             'npv_end_year': npv_end_year,
+            'ktCO2tot_ccs': ktCO2tot_ccs,
             'NPV_CAPEX': npv_capex,
             'NPV_OPEX': npv_opex,
             'NPV_REVENUE': npv_revenue,
@@ -524,7 +532,8 @@ def simulate_ctbo(
     DISCOUNT_RATE = 0.035,
     CTBO_QUADRATIC = 0.4,
     ETS_START = 45, # [£/tCO2]
-    ETS_SCENARIO = 'ETS-eq', # ['CTBO-only', 'ETS-eq', '£100-Mix', '£200-Mix', '£300-Mix']),
+    ETS_SCENARIO = 'CTBO-only', # ['CTBO-only', 'ETS-eq', '£100-Mix', '£200-Mix', '£300-Mix']),
+    CfD_ANALYSIS = True,
     DACCS_SCENARIO = '£322', # [£/tCO2] 322, 391, 7th Carbon Budget
     
     START_YEAR = 2025,
@@ -559,6 +568,7 @@ def simulate_ctbo(
     drax_efficiency_loss = 0.24, # [-] Donnison et al. (2020)
 
     # Uncertainties
+    CfD_inefficiency = 0.05, # [-] % extra cost incurred relative to MAC if relying on CfDs
     capture_rate = 0.95,
     qreb = 3.5, # [GJ/tCO2]
     pcapture = 0.05, # [MJ/kgCO2] Kumar et al. (2023)
@@ -599,6 +609,8 @@ def simulate_ctbo(
     # Levers
 
 ):
+    CfD_inefficiency = float(CfD_inefficiency)
+
     # Store assumptions
     x = {
         'capture_rate': capture_rate,
@@ -817,6 +829,10 @@ def simulate_ctbo(
     _petrol_increase_abs = [] # cent/L
     _diesel_increase_abs = [] # cent/L
     _kerosene_increase_abs = [] # cent/L
+
+    _cost_CfD = [] 
+    _cost_CfD_CTBO = []
+    _CTBO_CfD_ratio = []
     _plants_costbenefit = []
 
     # Simulate the CTBO
@@ -939,6 +955,7 @@ def simulate_ctbo(
         profit_E_tot = 0 # [k€/y] area C
         cost_E_tot = 0 # [k€/y] area D
         tax_E_tot = 0 # [k€/y] area E
+        cost_CfD_tot = 0 # [k€/y] 
 
         for idx, plant in MACC.iterrows():
             
@@ -975,6 +992,9 @@ def simulate_ctbo(
                 cost_E_tot += cost_E
                 tax_E_tot += tax_E
 
+                if CfD_ANALYSIS and ETS_SCENARIO == 'CTBO-only':
+                    cost_CfD_tot += cost_y * (1 + CfD_inefficiency)
+
             _plants_costbenefit.append({
                 'year': year,
                 'stack': plant['stack'],
@@ -999,10 +1019,15 @@ def simulate_ctbo(
             cost_y_tot += y * stored_ktCO2daccs # [k€/y]
             cost_E_tot += E * stored_ktCO2daccs # [k€/y]
 
+            if CfD_ANALYSIS and ETS_SCENARIO == 'CTBO-only':
+                cost_CfD_tot += y * stored_ktCO2daccs * (1 + CfD_inefficiency)
+
         # if single_run:
-        #     print("These two methods of calculating policy costs should yield zero")
+        #     print("\nThese two methods of calculating policy costs should yield zero")
         #     print(costs_emitters - (cost_E_tot + profit_E_tot))
-        #     print(costs_suppliers - (cost_y_tot + profit_y_tot))
+        #     print(costs_suppliers - (cost_y_tot + profit_y_tot)) # NOTE
+        #     print("Note that tax_E_tot is not subtracting BECCS/DACCS costs and should NOT be used as the main model output!")
+        #     print(costs_tax)
         #     print(costs_tax - tax_E_tot)
 
         # Calculate the fuel price increase and store results
@@ -1036,6 +1061,15 @@ def simulate_ctbo(
         _petrol_increase_abs.append(petrol_increase_abs)
         _diesel_increase_abs.append(diesel_increase_abs)
         _kerosene_increase_abs.append(kerosene_increase_abs)
+
+        _cost_CfD.append(cost_CfD_tot)
+        _cost_CfD_CTBO.append(cost_y_tot + profit_y_tot)
+        if CfD_ANALYSIS and ETS_SCENARIO == 'CTBO-only':
+            cfd_denom = cost_CfD_tot - (1 + CfD_inefficiency) * y * stored_ktCO2daccs
+            cfd_ratio = (cost_y_tot + profit_y_tot) / cfd_denom if cfd_denom > 0 else np.nan
+        else:
+            cfd_ratio = np.nan
+        _CTBO_CfD_ratio.append(cfd_ratio)
     
     # ========== NPV CALCULATIONS ==========
     # Discount factors for annual values (relative to START_YEAR), truncated to 2050
@@ -1109,6 +1143,9 @@ def simulate_ctbo(
     results['profit_E_policy'] = _profit_E_policy
     results['cost_E_policy'] = _cost_E_policy
     results['tax_E_policy'] = _tax_E_policy
+    results['cost_CfD'] = _cost_CfD
+    results['cost_CfD_CTBO'] = _cost_CfD_CTBO
+    results['CTBO_CfD_ratio'] = _CTBO_CfD_ratio
     
     results['NPV_costs_suppliers'] = NPV_costs_suppliers
     results['NPV_costs_emitters'] = NPV_costs_emitters
@@ -1141,6 +1178,7 @@ def simulate_ctbo(
     results['plants_NPV_REVENUE'] = npv_plants['NPV_REVENUE'].tolist()
     results['plants_NPV_total'] = npv_plants['NPV_total'].tolist()
     results['plants_MAC'] = npv_plants['MAC'].tolist()
+    results['plants_ktCO2tot_ccs'] = npv_plants['ktCO2tot_ccs'].tolist()
 
     if single_run:
         plot_results_groups(years, results, figures_dir=figures_dir, savefig=True)
@@ -1150,7 +1188,7 @@ def simulate_ctbo(
 
 def plot_results_groups(years, results, figures_dir='results_figures', savefig=False, debug=False):
     """
-    Plot four time-series figures, one for each results group.
+    Plot time-series figures for each results group, plus a CTBO CfD ratio figure.
     NPVs are annotated in Group 3 instead of plotted as lines.
     """
     if debug:
@@ -1199,6 +1237,8 @@ def plot_results_groups(years, results, figures_dir='results_figures', savefig=F
     ax.plot(years, np.array(results['costs_emitters']) * scale_billion, lw=2, label='Costs emitters [B€/y]')
     ax.plot(years, np.array(results['costs_tax']) * scale_billion, lw=2, label='Costs tax [B€/y]')
     ax.plot(years, np.array(results['costs_consumers']) * scale_billion, lw=2, label='Costs consumers [B€/y]')
+    ax.plot(years, np.array(results['cost_CfD']) * scale_billion, lw=2, label='Costs CfD [B€/y]')
+    ax.plot(years, np.array(results['cost_CfD_CTBO']) * scale_billion, lw=2, label='Costs CfD CTBO [B€/y]')
     # ax.plot(years, results['profit_y_policy'], lw=2, label='Profit y policy [k€/y]')
     # ax.plot(years, results['cost_y_policy'], lw=2, label='Cost y policy [k€/y]')
     # ax.plot(years, results['profit_E_policy'], lw=2, label='Profit E policy [k€/y]')
@@ -1228,6 +1268,19 @@ def plot_results_groups(years, results, figures_dir='results_figures', savefig=F
     plt.tight_layout()
     if savefig:
         plt.savefig(f'{figures_dir}/group3_timeseries.png', dpi=450, bbox_inches='tight')
+
+    # CfD analysis: profit_y / cost_CfD ratio (CTBO-only; NaN otherwise)
+    fig, ax = plt.subplots(figsize=(12, 7))
+    ax.plot(years, results['CTBO_CfD_ratio'], lw=2, label='profit_y / cost_CfD [-]')
+    ax.set_title('CTBO CfD ratio: profit_y / cost_CfD', fontsize=16)
+    ax.set_xlabel('Year', fontsize=14)
+    ax.set_ylabel('Ratio [-]', fontsize=14)
+    ax.tick_params(labelsize=12)
+    ax.grid(True, linestyle='--', alpha=0.4)
+    ax.legend(fontsize=11)
+    plt.tight_layout()
+    if savefig:
+        plt.savefig(f'{figures_dir}/ctbo_cfd_ratio_timeseries.png', dpi=450, bbox_inches='tight')
 
     # Group 4: Fuel price impacts
     fig, ax = plt.subplots(figsize=(12, 7))

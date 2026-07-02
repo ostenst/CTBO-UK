@@ -5,6 +5,8 @@ from matplotlib import colors
 
 
 ETS_SCENARIOS_DEFAULT = ['CTBO-only', '£100-Mix', '£200-Mix', '£300-Mix', 'ETS-eq']
+CFD_INEFFICIENCY_LEVELS = [0.10, 0.20, 0.30, 0.40]
+CFD_INEFFICIENCY_DEFAULT = 0.10
 
 
 def _scenario_title(ets_scenario, debug=False):
@@ -106,6 +108,168 @@ def _select_results_dir(debug=False):
     if debug:
         print(f"_select_results_dir output: results_dir={results_dir}")
     return results_dir
+
+
+def _match_cfd_inefficiency(experiments, value, debug=False):
+    matched = np.isclose(experiments['CfD_inefficiency'].astype(float), float(value), rtol=0, atol=1e-9)
+    if debug:
+        print(f"_match_cfd_inefficiency output: value={value}, n={matched.sum()}")
+    return matched
+
+
+def _ctbo_cfd_ratio_limits(years, stats_list, debug=False):
+    y_mins, y_maxs = [], []
+    for _, p5, p95 in stats_list:
+        if p5 is None:
+            continue
+        y_mins.append(np.nanmin(p5))
+        y_maxs.append(np.nanmax(p95))
+    if not y_mins:
+        ylim = (0.0, 1.0)
+    else:
+        y_lo, y_hi = min(y_mins), max(y_maxs)
+        pad = 0.05 * (y_hi - y_lo if y_hi > y_lo else max(abs(y_hi), 1.0))
+        ylim = (y_lo - pad, y_hi + pad)
+    xlim = (int(np.nanmin(years)), int(np.nanmax(years)))
+    if debug:
+        print(f"_ctbo_cfd_ratio_limits output: xlim={xlim}, ylim={ylim}")
+    return xlim, ylim
+
+
+def _apply_ctbo_cfd_ratio_axes(ax, years, ylim, show_xlabel=True, show_ylabel=True, debug=False):
+    y_lo = min(ylim[0], 1.0)
+    y_hi = max(ylim[1], 1.0)
+    ax.set_ylim(y_lo, y_hi)
+    ax.axhline(1, color='black', linestyle='-', linewidth=1.2, zorder=1)
+    ax.grid(True, linestyle='--', alpha=0.35)
+    ax.tick_params(labelsize=12)
+    _set_sparse_year_ticks(ax, years, debug=debug)
+    if show_xlabel:
+        ax.set_xlabel('Year', fontsize=14)
+    if show_ylabel:
+        ax.set_ylabel('CTBO / CfD cost ratio [-]', fontsize=14)
+    if debug:
+        print(f"_apply_ctbo_cfd_ratio_axes output: ylim=({y_lo}, {y_hi})")
+
+
+def _plot_ctbo_cfd_ratio_panel(ax, years, med, p5, p95, color, title='', ylim=None, show_xlabel=True, show_ylabel=True, debug=False):
+    if med is None:
+        ax.set_title(f'{title} (no data)' if title else 'No data', fontsize=14)
+        if ylim is not None:
+            _apply_ctbo_cfd_ratio_axes(ax, years, ylim, show_xlabel=show_xlabel, show_ylabel=show_ylabel, debug=debug)
+        else:
+            _set_sparse_year_ticks(ax, years, debug=debug)
+            ax.axhline(1, color='black', linestyle='-', linewidth=1.2, zorder=1)
+            ax.grid(True, linestyle='--', alpha=0.35)
+        return
+
+    ax.plot(years, med, lw=2.4, color=color, label='Median', zorder=3)
+    ax.fill_between(years, p5, p95, color=color, alpha=0.24, zorder=2)
+    ax.set_title(title, fontsize=14)
+    if ylim is None:
+        _, ylim = _ctbo_cfd_ratio_limits(years, [(med, p5, p95)], debug=debug)
+    _apply_ctbo_cfd_ratio_axes(ax, years, ylim, show_xlabel=show_xlabel, show_ylabel=show_ylabel, debug=debug)
+    if debug:
+        print(f"_plot_ctbo_cfd_ratio_panel output: title={title}")
+
+
+def compare_ctbo_cfd_ratio(
+    results_dir='results_baseline',
+    figures_dir='results_figures',
+    start_year=2025,
+    cfd_inefficiency_levels=None,
+    cfd_inefficiency_default=None,
+    savefig=True,
+    debug=False,
+):
+    """
+    Plot CTBO_CfD_ratio uncertainty bands for CTBO-only experiments.
+
+    Saves two figures:
+    1) single panel for the default CfD inefficiency (10%)
+    2) four panels, one per CfD inefficiency level
+    """
+    if cfd_inefficiency_levels is None:
+        cfd_inefficiency_levels = CFD_INEFFICIENCY_LEVELS
+    if cfd_inefficiency_default is None:
+        cfd_inefficiency_default = CFD_INEFFICIENCY_DEFAULT
+    if debug:
+        print(
+            "compare_ctbo_cfd_ratio inputs:",
+            f"results_dir={results_dir}, cfd_inefficiency_levels={cfd_inefficiency_levels},",
+            f"cfd_inefficiency_default={cfd_inefficiency_default}",
+        )
+
+    experiments = _load_experiments(results_dir, debug=debug)
+    years = _get_years(results_dir, start_year=start_year, key='CTBO_CfD_ratio', debug=debug)
+    ratio = _load_array(results_dir, 'CTBO_CfD_ratio', debug=debug)
+    ctbo_mask = experiments['ETS_SCENARIO'] == 'CTBO-only'
+
+    stats_by_eta = {}
+    for eta in cfd_inefficiency_levels:
+        mask = ctbo_mask & _match_cfd_inefficiency(experiments, eta, debug=debug)
+        stats_by_eta[eta] = _panel_stats(ratio, mask)
+
+    if all(stats_by_eta[eta][0] is None for eta in cfd_inefficiency_levels):
+        raise ValueError("No CTBO-only CTBO_CfD_ratio data found to plot.")
+
+    magma = plt.cm.magma
+    cmap_vals = np.linspace(0.15, 0.90, len(cfd_inefficiency_levels))
+
+    # Figure 1: default CfD inefficiency only
+    fig1, ax1 = plt.subplots(figsize=(10, 6))
+    eta_default = cfd_inefficiency_default
+    pct_default = int(round(eta_default * 100))
+    med, p5, p95 = stats_by_eta[eta_default]
+    _plot_ctbo_cfd_ratio_panel(
+        ax1, years, med, p5, p95, magma(cmap_vals[0]),
+        title=f'CTBO / CfD cost ratio (CfD inefficiency = {pct_default}%)',
+        debug=debug,
+    )
+    fig1.tight_layout()
+    if savefig:
+        fig1.savefig(f'{figures_dir}/ctbo_cfd_ratio_eta{pct_default:03d}.png', dpi=450, bbox_inches='tight')
+
+    # Figure 2: one panel per inefficiency level (shared y-axis across panels)
+    n = len(cfd_inefficiency_levels)
+    ncols = 2
+    nrows = int(np.ceil(n / ncols))
+    panel_stats = [stats_by_eta[eta] for eta in cfd_inefficiency_levels if stats_by_eta[eta][0] is not None]
+    _, shared_ylim = _ctbo_cfd_ratio_limits(years, panel_stats, debug=debug)
+    fig2, axes = plt.subplots(nrows, ncols, figsize=(5.8 * ncols, 4.8 * nrows), sharex=True, sharey=True)
+    axes = np.atleast_1d(axes).ravel()
+
+    for idx, (eta, cmap_t) in enumerate(zip(cfd_inefficiency_levels, cmap_vals)):
+        ax = axes[idx]
+        med, p5, p95 = stats_by_eta[eta]
+        pct = int(round(eta * 100))
+        row = idx // ncols
+        show_xlabel = row == nrows - 1 or idx + ncols >= n
+        show_ylabel = idx % ncols == 0
+        _plot_ctbo_cfd_ratio_panel(
+            ax, years, med, p5, p95, magma(cmap_t),
+            title=f'{pct}% inefficiency',
+            ylim=shared_ylim,
+            show_xlabel=show_xlabel,
+            show_ylabel=show_ylabel,
+            debug=debug,
+        )
+
+    for ax in axes[n:]:
+        ax.set_visible(False)
+
+    fig2.suptitle('CTBO / CfD cost ratio by CfD inefficiency', fontsize=16, y=1.02)
+    fig2.tight_layout()
+    if savefig:
+        fig2.savefig(f'{figures_dir}/ctbo_cfd_ratio_by_inefficiency.png', dpi=450, bbox_inches='tight')
+
+    if debug:
+        print(
+            "compare_ctbo_cfd_ratio output:",
+            f"{figures_dir}/ctbo_cfd_ratio_eta{pct_default:03d}.png,",
+            f"{figures_dir}/ctbo_cfd_ratio_by_inefficiency.png",
+        )
+    return fig1, fig2
 
 
 def compare_carbon_trajectories(results_dir='results_baseline', figures_dir='results_figures', ets_scenarios=None, start_year=2025, savefig=True, debug=False):
@@ -573,4 +737,5 @@ if __name__ == "__main__":
     compare_plant_NPV(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     plot_mac_by_sector(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     plot_macc_curves(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    compare_ctbo_cfd_ratio(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     plt.show()
