@@ -1352,15 +1352,18 @@ def plot_plants_npv_scatter(npv_plants, figures_dir='results_figures', savefig=F
         print(f"plot_plants_npv_scatter output: n_plotted={len(df)}")
     return len(df)
 
-def plot_macc(macc, pounds_to_EUR=1.15, figures_dir='results_figures', savefig=False, debug=False):
+def plot_macc(macc, pounds_to_EUR=1.15, macc_shift=0.20, figures_dir='results_figures', savefig=False, debug=False):
     """
     Plot the MACC curve with cumulative ktCO2tot_ccs on the x axis and MAC on the y axis.
+
+    Saves two figures with identical axis ranges:
+    1) base MACC curve
+    2) base curve plus a second curve shifted upward by macc_shift, with the gap filled
     """
-    magma = plt.cm.magma
     if debug:
         print(
             "plot_macc inputs:",
-            f"rows={len(macc)}, columns={list(macc.columns)}",
+            f"rows={len(macc)}, columns={list(macc.columns)}, macc_shift={macc_shift}",
         )
 
     macc_plot = macc[['stack', 'ktCO2tot_ccs', 'MAC']].dropna(subset=['ktCO2tot_ccs', 'MAC']).copy()
@@ -1372,31 +1375,47 @@ def plot_macc(macc, pounds_to_EUR=1.15, figures_dir='results_figures', savefig=F
     # Sort by MAC and compute cumulative (including MAC=0 plants)
     macc_plot = macc_plot.sort_values(by='MAC')
     macc_plot['cumulative_kt'] = macc_plot['ktCO2tot_ccs'].cumsum()
-    
+
     # Filter to only plot plants with MAC != 0 (but cumulative already includes MAC=0 capacity)
-    macc_nonzero = macc_plot[macc_plot['MAC'] != 0]
+    macc_nonzero = macc_plot[macc_plot['MAC'] != 0].copy()
+    x = macc_nonzero['cumulative_kt'].to_numpy(dtype=float) / 1000.0
+    y_base = macc_nonzero['MAC'].to_numpy(dtype=float) / pounds_to_EUR
+    y_shifted = y_base * (1.0 + macc_shift)
 
-    # Convert MAC to £/tCO₂
-    macc_nonzero['MAC'] = macc_nonzero['MAC'] / pounds_to_EUR
+    x_pad = 0.02 * max(float(np.max(x)), 1e-9)
+    y_pad = 0.05 * max(float(np.max(y_shifted)), 1e-9)
+    xlim = (0.0, float(np.max(x)) + x_pad)
+    ylim = (0.0, float(np.max(y_shifted)) + y_pad)
 
-    fig, ax = plt.subplots(figsize=(9, 4.5))
-    ax.step(macc_nonzero['cumulative_kt']/1000, macc_nonzero['MAC'], where='pre', color='black', linewidth=2.5)
-    ax.set_xlabel("Cumulative CCS/BECCS capacity [MtCO₂ p.a.]", fontsize=14)
-    ax.set_ylabel("Abatement cost of CCS/BECCS [£/tCO₂] ", fontsize=14)
-    # ax.set_title("Marginal Abatement Cost Curve", fontsize=18)
-    ax.grid(True, linestyle='--', alpha=0.4)
-    ax.tick_params(labelsize=12)
-    # Get the ylims
-    ylims = ax.get_ylim()
-    # Set xlims
-    ax.set_ylim(0, ylims[1])
+    def _style_macc_axes(ax):
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+        ax.set_xlabel("Cumulative CCS/BECCS capacity [MtCO₂ p.a.]", fontsize=14)
+        ax.set_ylabel("Abatement cost of CCS/BECCS [£/tCO₂] ", fontsize=14)
+        ax.grid(True, linestyle='--', alpha=0.4)
+        ax.tick_params(labelsize=12)
 
-    plt.tight_layout()
+    # Figure 1: base MACC curve
+    fig1, ax1 = plt.subplots(figsize=(9, 4.5))
+    ax1.step(x, y_base, where='pre', color='black', linewidth=2.5)
+    _style_macc_axes(ax1)
+    fig1.tight_layout()
     if savefig:
-        plt.savefig(f'{figures_dir}/macc_curve.png', dpi=450, bbox_inches='tight')
+        fig1.savefig(f'{figures_dir}/macc_curve.png', dpi=450, bbox_inches='tight')
+
+    # Figure 2: base curve + shifted curve with filled gap
+    fig2, ax2 = plt.subplots(figsize=(9, 4.5))
+    ax2.fill_between(x, y_base, y_shifted, step='pre', color='black', alpha=0.35, zorder=1)
+    ax2.step(x, y_base, where='pre', color='black', linewidth=2.5, zorder=2)
+    ax2.step(x, y_shifted, where='pre', color='black', linewidth=2.5, zorder=2)
+    _style_macc_axes(ax2)
+    fig2.tight_layout()
+    if savefig:
+        fig2.savefig(f'{figures_dir}/macc_curve_shifted.png', dpi=450, bbox_inches='tight')
 
     if debug:
         print("plot_macc output:", macc_plot[['cumulative_kt', 'MAC']].tail(1))
+        print(f"plot_macc axis limits: xlim={xlim}, ylim={ylim}")
 
     return len(macc_plot)
 
