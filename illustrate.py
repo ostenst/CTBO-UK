@@ -5,6 +5,7 @@ from matplotlib import colors
 
 
 ETS_SCENARIOS_DEFAULT = ['CTBO-only', '£100-Mix', '£200-Mix', '£300-Mix', 'ETS-eq']
+CLIMATE_COST_SCENARIOS = ['CTBO-only', 'ETS-eq', '£100-Mix', '£200-Mix', '£300-Mix']
 CFD_INEFFICIENCY_LEVELS = [0.10, 0.20, 0.30, 0.40]
 CFD_INEFFICIENCY_DEFAULT = 0.10
 
@@ -728,6 +729,121 @@ def plot_macc_curves(results_dir='results_baseline', figures_dir='results_figure
     return fig
 
 
+def _mandate_range_str(values, debug=False):
+    vals = np.asarray(values, dtype=float)
+    vals = vals[np.isfinite(vals)]
+    if len(vals) == 0:
+        return ''
+    lo, hi = np.min(vals), np.max(vals)
+    if debug:
+        print(f"_mandate_range_str output: lo={lo}, hi={hi}, n={len(vals)}")
+    return f"{lo:.0f}-{hi:.0f}"
+
+
+def _carbon_price_bin_label(lo, hi, pounds_to_EUR=1.15):
+    return f"{lo / pounds_to_EUR:.0f}-{hi / pounds_to_EUR:.0f}"
+
+
+def _policy_filename_slug(ets_scenario):
+    return (
+        str(ets_scenario)
+        .replace('£', 'GBP')
+        .replace(' ', '_')
+    )
+
+
+def climate_cost_table(
+    results_dir='results_baseline',
+    phaseout=False,
+    ets_scenarios=None,
+    start_year=2025,
+    end_year=2050,
+    year_step=5,
+    n_bins=5,
+    pounds_to_EUR=1.15,
+    save_csv=True,
+    debug=False,
+):
+    """
+    Build climate cost tables mapping carbon-price bins (cost_fuels) to mandate_ktCO2 ranges.
+
+    One table is saved per ETS policy. Columns are years (every `year_step` years up to end_year).
+    Rows are equal-width carbon-price bins in £/tCO2. Cell values are mandate_ktCO2 min-max ranges [ktCO2].
+    """
+    if phaseout:
+        results_dir = 'results_phaseout'
+    if ets_scenarios is None:
+        ets_scenarios = CLIMATE_COST_SCENARIOS
+    if debug:
+        print(
+            "climate_cost_table inputs:",
+            f"results_dir={results_dir}, ets_scenarios={ets_scenarios},",
+            f"start_year={start_year}, end_year={end_year}, year_step={year_step}, n_bins={n_bins}",
+        )
+
+    experiments = _load_experiments(results_dir, debug=debug)
+    years = _get_years(results_dir, start_year=start_year, key='cost_fuels', debug=debug)
+    cost_fuels = _load_array(results_dir, 'cost_fuels', debug=debug)
+    mandate = _load_array(results_dir, 'mandate_ktCO2', debug=debug)
+
+    table_years = [int(y) for y in years if start_year <= y <= end_year and (y - start_year) % year_step == 0]
+    if not table_years:
+        raise ValueError(f"No table years found between {start_year} and {end_year} with step {year_step}.")
+
+    year_to_idx = {year: int(np.where(years == year)[0][0]) for year in table_years}
+    tables = {}
+    saved_paths = {}
+
+    for scenario in ets_scenarios:
+        mask = experiments['ETS_SCENARIO'] == scenario
+        if mask.sum() == 0:
+            if debug:
+                print(f"climate_cost_table: skipping {scenario} (no data)")
+            continue
+
+        scenario_cf = cost_fuels[mask][:, [year_to_idx[y] for y in table_years]]
+        cf_pool = scenario_cf[np.isfinite(scenario_cf)]
+        if len(cf_pool) == 0:
+            if debug:
+                print(f"climate_cost_table: skipping {scenario} (no finite cost_fuels)")
+            continue
+
+        edges = np.linspace(np.min(cf_pool), np.max(cf_pool), n_bins + 1)
+        row_labels = [
+            _carbon_price_bin_label(edges[i], edges[i + 1], pounds_to_EUR=pounds_to_EUR)
+            for i in range(n_bins)
+        ]
+        table = pd.DataFrame(index=row_labels, columns=table_years, dtype=object)
+
+        for year in table_years:
+            year_idx = year_to_idx[year]
+            cf_year = cost_fuels[mask, year_idx]
+            mand_year = mandate[mask, year_idx]
+            for bin_idx in range(n_bins):
+                lo, hi = edges[bin_idx], edges[bin_idx + 1]
+                if bin_idx < n_bins - 1:
+                    in_bin = (cf_year >= lo) & (cf_year < hi)
+                else:
+                    in_bin = (cf_year >= lo) & (cf_year <= hi)
+                table.loc[row_labels[bin_idx], year] = _mandate_range_str(mand_year[in_bin], debug=debug)
+
+        table.index.name = 'carbon_price_gbp_per_tCO2'
+        tables[scenario] = table
+
+        if save_csv:
+            slug = _policy_filename_slug(scenario)
+            out_path = f'{results_dir}/climate_cost_table_{slug}.csv'
+            table.to_csv(out_path)
+            saved_paths[scenario] = out_path
+            if debug:
+                print(f"climate_cost_table saved: {out_path}")
+
+    if debug:
+        print(f"climate_cost_table output: n_tables={len(tables)}, years={table_years}")
+
+    return tables, saved_paths
+
+
 if __name__ == "__main__":
     selected_results_dir = _select_results_dir(debug=True)
     compare_carbon_trajectories(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
@@ -738,4 +854,5 @@ if __name__ == "__main__":
     plot_mac_by_sector(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     plot_macc_curves(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     compare_ctbo_cfd_ratio(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    climate_cost_table(results_dir=selected_results_dir, phaseout=selected_results_dir == 'results_phaseout', debug=True)
     plt.show()
