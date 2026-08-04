@@ -389,12 +389,6 @@ def extend_plant_npv_data(npv_data_all, lifetime_ccs, debug=False):
     The horizon is [investment_year, investment_year + lifetime_ccs - 1].
     For years beyond the simulation window, reuse the plant's last available annual values.
     """
-    if debug:
-        print(
-            "extend_plant_npv_data inputs:",
-            f"rows={len(npv_data_all)}, lifetime_ccs={lifetime_ccs}",
-        )
-
     extended_rows = []
     for stack, plant_df in npv_data_all.groupby('stack', sort=False):
         plant_df = plant_df.sort_values('year').copy()
@@ -420,12 +414,6 @@ def extend_plant_npv_data(npv_data_all, lifetime_ccs, debug=False):
 
     npv_extended = pd.concat(extended_rows, ignore_index=True)
     npv_extended = npv_extended.sort_values(['stack', 'year']).reset_index(drop=True)
-
-    if debug:
-        print(
-            "extend_plant_npv_data output:",
-            f"rows={len(npv_extended)}, max_year={int(npv_extended['year'].max())}",
-        )
     return npv_extended
 
 def calculate_plant_npv(npv_data_all, lifetime_ccs, construction_years=3, debug=False):
@@ -435,6 +423,7 @@ def calculate_plant_npv(npv_data_all, lifetime_ccs, construction_years=3, debug=
     - CAPEX split evenly across construction years from investment year
     - OPEX starts after construction years
     - Revenues = full cash inflow from y and E after construction years
+    - CAPEX/OPEX scaled by FID learning factor MAC_FID/MAC0 (full-MAC learning)
     - All discounted with per-row discount_factor
     """
     if debug:
@@ -485,11 +474,20 @@ def calculate_plant_npv(npv_data_all, lifetime_ccs, construction_years=3, debug=
             continue
 
         capex_total = float(period['CAPEX'].dropna().iloc[0]) if period['CAPEX'].notna().any() else 0.0
+        # Adjust CAPEX/OPEX similarly to full-MAC learning: f = MAC_FID/MAC0 (f=1 if MAC0==0, e.g. outliers)
+        mac0 = (
+            float(period['MAC0'].dropna().iloc[0])
+            if 'MAC0' in period.columns and period['MAC0'].notna().any()
+            else 0.0
+        )
+        mac_fid = float(period['MAC'].dropna().iloc[0]) if period['MAC'].notna().any() else 0.0
+        learn_f = (mac_fid / mac0) if mac0 > 0 else 1.0
+        capex_total *= learn_f
         capex_annual = capex_total / float(construction_years)
 
         year_values = period['year'].to_numpy()
         discount = period['discount_factor'].to_numpy(dtype=float)
-        opex_values = period['OPEX'].to_numpy(dtype=float)
+        opex_values = period['OPEX'].to_numpy(dtype=float) * learn_f
         revenue_values = (period['cash_inflow_y'] + period['cash_inflow_E']).to_numpy(dtype=float)
 
         construction_end_year = investment_year + int(construction_years) - 1
@@ -528,13 +526,15 @@ def simulate_ctbo(
     transport_hubs,
     single_run = False,
 
-    PHASEOUT = False,
+    PHASEOUT = True,
     DISCOUNT_RATE = 0.035,
     CTBO_QUADRATIC = 0.4,
     ETS_START = 45, # [£/tCO2]
-    ETS_SCENARIO = 'CTBO-only', # ['CTBO-only', 'ETS-eq', '£100-Mix', '£200-Mix', '£300-Mix']),
-    CfD_ANALYSIS = True,
-    DACCS_SCENARIO = '£322', # [£/tCO2] 322, 391, 7th Carbon Budget
+    PRICE_POLICY = 'CAP-100£', # ['CTBO', 'ETS', 'CAP-50£', 'CAP-100£', 'CAP-200£']),
+    CfD_ANALYSIS = False,
+    DACCS_SCENARIO = '£391', # [£/tCO2] 322, 391, 7th Carbon Budget
+    LEARNING = True,  # if False, forces LR=0
+    LR = '6%',  # full-MAC learning rate; categorical ['0%', '3%', '6%']
     
     START_YEAR = 2025,
     END_YEAR = 2055,
@@ -610,6 +610,8 @@ def simulate_ctbo(
 
 ):
     CfD_inefficiency = float(CfD_inefficiency)
+    lr = 0.0 if not LEARNING else float(str(LR).strip().rstrip('%')) / 100.0
+    b_learn = 0.0 if lr <= 0 else -np.log(1.0 - lr) / np.log(2.0)
 
     # Store assumptions
     x = {
@@ -755,6 +757,29 @@ def simulate_ctbo(
         }
     MACC, cost_initial_outliers = subsidize_outliers(MACC, outliers)
     MACC = MACC.sort_values(by='MAC', ascending=True)
+    # Full-MAC learning: MAC(Q)=MAC0*a^(-b), a=Q/Q0, 1-2^(-b)=LR. Outliers seed Q0 (MAC0=0 after subsidy).
+    MACC['MAC0'] = MACC['MAC']
+    Q0 = float(MACC.loc[MACC['stack'].isin(outliers), 'ktCO2tot_ccs'].sum())
+    Q = Q0
+
+    # TEMPORARY: illustrate learning factor a^(-b) vs deployed capacity Q
+    # a^(-b) is the full-MAC multiplier at cumulative capacity Q (a=Q/Q0): MAC(Q)=MAC0*a^(-b).
+    # It falls only as deployed capacity grows (not with calendar time); at Q=Q0 the factor is 1.
+    if single_run:
+        Q_plot = np.linspace(Q0, 80_000, 400)
+        a_plot = Q_plot / Q0
+        fig_lr, ax_lr = plt.subplots(figsize=(8, 4.5))
+        for LR_plot, color, lw in [(0.00, 'gray', 1.5), (0.03, plt.cm.magma(0.55), 2), (0.06, 'black', 2)]:
+            b_plot = 0.0 if LR_plot == 0 else -np.log(1 - LR_plot) / np.log(2)
+            ax_lr.plot(Q_plot, a_plot ** (-b_plot), color=color, lw=lw, label=f'LR={LR_plot:.0%} (b={b_plot:.3f})')
+        ax_lr.axvline(Q0, color='gray', ls='--', lw=1.5, label=f'Q0 (outliers) = {Q0:.0f} ktCO₂/y')
+        ax_lr.set_xlabel('Deployed capacity Q [ktCO₂/y]', fontsize=14)
+        ax_lr.set_ylabel(r'$a^{-b}$  (MAC multiplier)', fontsize=14)
+        ax_lr.set_title('Full-MAC learning factor vs deployed capacity', fontsize=16)
+        ax_lr.tick_params(labelsize=12)
+        ax_lr.grid(True, linestyle='--', alpha=0.4)
+        ax_lr.legend(fontsize=11)
+        fig_lr.tight_layout()
   
     if single_run or save_aux_results:
         MACC.to_csv(f'{results_dir}/macc.csv', index=False)
@@ -773,30 +798,26 @@ def simulate_ctbo(
     )
     diffuse_trajectory = diffuse_ktCO2f * diffuse_fraction
 
-    # Calculate ETS (capped by DACCS costs) and CTBO policy trajectories
+    # Calculate ETS cap (organic price rise, hard stop at CAP) and CTBO trajectories
     if DACCS_SCENARIO == '£322':
-        cost_DACCS = 322 * pounds_to_EUR
+        cost_DACCS0 = 322 * pounds_to_EUR
     elif DACCS_SCENARIO == '£391':
-        cost_DACCS = 391 * pounds_to_EUR
-    if ETS_SCENARIO == 'CTBO-only':
+        cost_DACCS0 = 391 * pounds_to_EUR
+    cost_DACCS = cost_DACCS0  # learns with same a^(-b) as plant MACs (see year loop)
+    if PRICE_POLICY == 'CTBO':
         ETS_START = 0
-        ETS_END = 0
-    elif ETS_SCENARIO == 'ETS-eq': # NOTE: Must calculate ETS price organically!
-        ETS_END = 999999
-    elif ETS_SCENARIO == '£100-Mix':
-        ETS_END = 100
-    elif ETS_SCENARIO == '£200-Mix':
-        ETS_END = 200 
-    elif ETS_SCENARIO == '£300-Mix':
-        ETS_END = 300 
-    ets_trajectory = np.minimum(
-        np.where(
-            years <= DIFFUSE_END_YEAR,
-            ETS_START + (years - START_YEAR) * ((ETS_END - ETS_START) / (DIFFUSE_END_YEAR - START_YEAR)),
-            ETS_END
-        ) * pounds_to_EUR,
-        cost_DACCS
-    )
+        ETS_CAP = 0  # [£/tCO2]
+    elif PRICE_POLICY == 'ETS':  # organic; only limited by DACCS via cost_marginal
+        ETS_CAP = np.inf
+    elif PRICE_POLICY == 'CAP-50£':
+        ETS_CAP = 50
+    elif PRICE_POLICY == 'CAP-100£':
+        ETS_CAP = 100
+    elif PRICE_POLICY == 'CAP-200£':
+        ETS_CAP = 200
+    # Ceiling used for organic ETS: policy CAP in €, never above (learned) DACCS
+    ets_cap_eur = cost_DACCS if not np.isfinite(ETS_CAP) else min(ETS_CAP * pounds_to_EUR, cost_DACCS)
+    ets_ceiling_eur = np.full(len(years), ets_cap_eur, dtype=float)
     # Quadratic CTBO fraction in [0,1] scale; hold constant after DIFFUSE_END_YEAR (default 2050 → 1.0 with default params).
     ctbo_raw = ((years - START_YEAR) * CTBO_QUADRATIC) ** 2 / 100
     ctbo_at_cap = ((DIFFUSE_END_YEAR - START_YEAR) * CTBO_QUADRATIC) ** 2 / 100
@@ -845,13 +866,20 @@ def simulate_ctbo(
 
         diffuse_supply = diffuse_trajectory[i]
         ctbo_fraction = ctbo_trajectory[i]
-        if year_DACCS_marginal is None:
-            ets_price = ets_trajectory[i] 
-        else:
-            ets_price = ets_trajectory[year_DACCS_marginal - min(years)] # Stabilize ETS prices if DACCS is marginal
+        # Same experience factor for unbuilt plants and DACCS price cap (spillover from Q, not a separate DACCS curve)
+        learn_factor = (Q / Q0) ** (-b_learn) if b_learn > 0 else 1.0
+        if b_learn > 0:
+            unbuilt = ~MACC['invested']
+            MACC.loc[unbuilt, 'MAC'] = MACC.loc[unbuilt, 'MAC0'] * learn_factor
+            MACC = MACC.sort_values(by='MAC', ascending=True)
+        cost_DACCS = cost_DACCS0 * learn_factor
+        ets_cap_eur = cost_DACCS if not np.isfinite(ETS_CAP) else min(ETS_CAP * pounds_to_EUR, cost_DACCS)
+        ets_ceiling_eur[i] = ets_cap_eur
+        # Organic ETS price from prior cost_marginal; floor at ETS_START, stop at CAP
+        ets_price = min(ets_cap_eur, max(ETS_START * pounds_to_EUR, cost_marginal))
 
-        # Plants invest voluntarily if the forced ETS price > MAC (do not account for fossil fuel inc. since CBAM=100%!)
-        if ETS_SCENARIO == '£100-Mix' or ETS_SCENARIO == '£200-Mix' or ETS_SCENARIO == '£300-Mix':
+        # Plants invest voluntarily if the organic (capped) ETS price > MAC (do not account for fossil fuel inc. since CBAM=100%!)
+        if PRICE_POLICY in ('CAP-50£', 'CAP-100£', 'CAP-200£'):
             for idx, plant in MACC.iterrows():
                 if not plant['invested']:
                     if plant['MAC'] < ets_price:
@@ -889,8 +917,14 @@ def simulate_ctbo(
                     stored_ktCO2b += plant['ktCO2b_ccs']
                     stored_missing = ctbo_mandate - (stored_ktCO2f + stored_ktCO2cem + stored_ktCO2pl + stored_ktCO2b + stored_ktCO2daccs)
                 j += 1
+
+            # Deployed Q for learning: outlier capacity is already in Q0 (do not double-count)
+            Q = Q0 + float(
+                MACC.loc[MACC['invested'] & ~MACC['stack'].isin(outliers), 'ktCO2tot_ccs'].sum()
+            )
             
             # Calculate costs
+            # FID-frozen invested MACs → cost_marginal / E / y are sticky w.r.t. learning
             plants_invested = MACC[MACC['invested']]
             if len(plants_invested) > 0:
                 plant_marginal = plants_invested.loc[plants_invested['MAC'].idxmax()]
@@ -904,17 +938,16 @@ def simulate_ctbo(
                     year_DACCS_marginal = year
 
             # Determine policy costs from recalculated emissions
-            if ETS_SCENARIO == 'CTBO-only':
+            if PRICE_POLICY == 'CTBO':
                 E = 0
-                y = cost_marginal
-            elif ETS_SCENARIO == 'ETS-eq':
+                y = max(ETS_START*pounds_to_EUR, cost_marginal) # assume an initial price to harmonize with ETS case
+            elif PRICE_POLICY == 'ETS':
                 E = max(ETS_START*pounds_to_EUR, cost_marginal)
                 y = 0
             else:
-                # In mixed policies, ETS covers stored-CO2 support up to marginal cost.
-                # E = min(ets_price, max(cost_marginal, ETS_START*pounds_to_EUR)) # In early years, pick ETS_START, in late years, pick marginal cost
-                E = ets_price
-                y = max(0, cost_marginal - E) # Never negative!
+                # CAP: organic ETS like ETS case, but stop increasing at the policy CAP
+                E = min(ets_cap_eur, max(ETS_START * pounds_to_EUR, cost_marginal))
+                y = max(0, cost_marginal - E) # CTBO tops up above the CAP
 
             pointsource_emissions = MACC['ktCO2f'].where(~MACC['invested'], 0).sum() + MACC['ktCO2f_res'].where(MACC['invested'], 0).sum()
             emitted_ktCO2f = pointsource_emissions + diffuse_supply
@@ -992,7 +1025,7 @@ def simulate_ctbo(
                 cost_E_tot += cost_E
                 tax_E_tot += tax_E
 
-                if CfD_ANALYSIS and ETS_SCENARIO == 'CTBO-only':
+                if CfD_ANALYSIS and PRICE_POLICY == 'CTBO':
                     cost_CfD_tot += cost_y * (1 + CfD_inefficiency)
 
             _plants_costbenefit.append({
@@ -1005,6 +1038,7 @@ def simulate_ctbo(
                 'CSU_price': y,
                 'ETS_price': E,
                 'MAC': S,
+                'MAC0': plant['MAC0'],
                 'CAPEX': plant['CAPEX'] * 10**3, # [k€]
                 'OPEX': plant['OPEX'] * plant['ktCO2tot_ccs'], # [k€/y] 
                 'cash_inflow_y': cash_inflow_y, # [k€/y] full cash inflow from y-policy
@@ -1019,7 +1053,7 @@ def simulate_ctbo(
             cost_y_tot += y * stored_ktCO2daccs # [k€/y]
             cost_E_tot += E * stored_ktCO2daccs # [k€/y]
 
-            if CfD_ANALYSIS and ETS_SCENARIO == 'CTBO-only':
+            if CfD_ANALYSIS and PRICE_POLICY == 'CTBO':
                 cost_CfD_tot += y * stored_ktCO2daccs * (1 + CfD_inefficiency)
 
         # if single_run:
@@ -1064,7 +1098,7 @@ def simulate_ctbo(
 
         _cost_CfD.append(cost_CfD_tot)
         _cost_CfD_CTBO.append(cost_y_tot + profit_y_tot)
-        if CfD_ANALYSIS and ETS_SCENARIO == 'CTBO-only':
+        if CfD_ANALYSIS and PRICE_POLICY == 'CTBO':
             cfd_denom = cost_CfD_tot - (1 + CfD_inefficiency) * y * stored_ktCO2daccs
             cfd_ratio = (cost_y_tot + profit_y_tot) / cfd_denom if cfd_denom > 0 else np.nan
         else:
@@ -1116,7 +1150,7 @@ def simulate_ctbo(
 
     results = {}
     results['ctbo_trajectory'] = ctbo_trajectory
-    results['ETS_trajectory'] = ets_trajectory
+    results['ETS_ceiling_eur'] = ets_ceiling_eur
 
     # Results group 1
     results['supply_ktCO2f'] = _supply_ktCO2f
@@ -1186,7 +1220,7 @@ def simulate_ctbo(
 
     return results
 
-def plot_results_groups(years, results, figures_dir='results_figures', savefig=False, debug=False):
+def plot_results_groups(years, results, figures_dir='results_figures', savefig=False, debug=False, CfD_ANALYSIS=False):
     """
     Plot time-series figures for each results group, plus a CTBO CfD ratio figure.
     NPVs are annotated in Group 3 instead of plotted as lines.
@@ -1269,18 +1303,19 @@ def plot_results_groups(years, results, figures_dir='results_figures', savefig=F
     if savefig:
         plt.savefig(f'{figures_dir}/group3_timeseries.png', dpi=450, bbox_inches='tight')
 
-    # CfD analysis: profit_y / cost_CfD ratio (CTBO-only; NaN otherwise)
-    fig, ax = plt.subplots(figsize=(12, 7))
-    ax.plot(years, results['CTBO_CfD_ratio'], lw=2, label='profit_y / cost_CfD [-]')
-    ax.set_title('CTBO CfD ratio: profit_y / cost_CfD', fontsize=16)
-    ax.set_xlabel('Year', fontsize=14)
-    ax.set_ylabel('Ratio [-]', fontsize=14)
-    ax.tick_params(labelsize=12)
-    ax.grid(True, linestyle='--', alpha=0.4)
-    ax.legend(fontsize=11)
-    plt.tight_layout()
-    if savefig:
-        plt.savefig(f'{figures_dir}/ctbo_cfd_ratio_timeseries.png', dpi=450, bbox_inches='tight')
+    # CfD analysis: profit_y / cost_CfD ratio (CTBO; NaN otherwise)
+    if CfD_ANALYSIS:
+        fig, ax = plt.subplots(figsize=(12, 7))
+        ax.plot(years, results['CTBO_CfD_ratio'], lw=2, label='profit_y / cost_CfD [-]')
+        ax.set_title('CTBO CfD ratio: profit_y / cost_CfD', fontsize=16)
+        ax.set_xlabel('Year', fontsize=14)
+        ax.set_ylabel('Ratio [-]', fontsize=14)
+        ax.tick_params(labelsize=12)
+        ax.grid(True, linestyle='--', alpha=0.4)
+        ax.legend(fontsize=11)
+        plt.tight_layout()
+        if savefig:
+            plt.savefig(f'{figures_dir}/ctbo_cfd_ratio_timeseries.png', dpi=450, bbox_inches='tight')
 
     # Group 4: Fuel price impacts
     fig, ax = plt.subplots(figsize=(12, 7))
@@ -1298,7 +1333,6 @@ def plot_results_groups(years, results, figures_dir='results_figures', savefig=F
     if savefig:
         plt.savefig(f'{figures_dir}/group4_timeseries.png', dpi=450, bbox_inches='tight')
 
-    plt.show()
 
 def plot_plants_npv_scatter(npv_plants, figures_dir='results_figures', savefig=False, debug=False):
     """
@@ -1346,13 +1380,12 @@ def plot_plants_npv_scatter(npv_plants, figures_dir='results_figures', savefig=F
     plt.tight_layout()
     if savefig:
         plt.savefig(f'{figures_dir}/plants_npv_scatter.png', dpi=450, bbox_inches='tight')
-    plt.show()
 
     if debug:
         print(f"plot_plants_npv_scatter output: n_plotted={len(df)}")
     return len(df)
 
-def plot_macc(macc, pounds_to_EUR=1.15, macc_shift=0.20, figures_dir='results_figures', savefig=False, debug=False):
+def plot_macc(macc, pounds_to_EUR=1.15, macc_shift=0.20, figures_dir='results_figures', savefig=False, debug=False, CfD_ANALYSIS=False):
     """
     Plot the MACC curve with cumulative ktCO2tot_ccs on the x axis and MAC on the y axis.
 
@@ -1404,14 +1437,15 @@ def plot_macc(macc, pounds_to_EUR=1.15, macc_shift=0.20, figures_dir='results_fi
         fig1.savefig(f'{figures_dir}/macc_curve.png', dpi=450, bbox_inches='tight')
 
     # Figure 2: base curve + shifted curve with filled gap
-    fig2, ax2 = plt.subplots(figsize=(9, 4.5))
-    ax2.fill_between(x, y_base, y_shifted, step='pre', color='black', alpha=0.35, zorder=1)
-    ax2.step(x, y_base, where='pre', color='black', linewidth=2.5, zorder=2)
-    ax2.step(x, y_shifted, where='pre', color='black', linewidth=2.5, zorder=2)
-    _style_macc_axes(ax2)
-    fig2.tight_layout()
-    if savefig:
-        fig2.savefig(f'{figures_dir}/macc_curve_shifted.png', dpi=450, bbox_inches='tight')
+    if CfD_ANALYSIS:
+        fig2, ax2 = plt.subplots(figsize=(9, 4.5))
+        ax2.fill_between(x, y_base, y_shifted, step='pre', color='black', alpha=0.35, zorder=1)
+        ax2.step(x, y_base, where='pre', color='black', linewidth=2.5, zorder=2)
+        ax2.step(x, y_shifted, where='pre', color='black', linewidth=2.5, zorder=2)
+        _style_macc_axes(ax2)
+        fig2.tight_layout()
+        if savefig:
+            fig2.savefig(f'{figures_dir}/macc_curve_shifted.png', dpi=450, bbox_inches='tight')
 
     if debug:
         print("plot_macc output:", macc_plot[['cumulative_kt', 'MAC']].tail(1))
@@ -1423,7 +1457,5 @@ if __name__ == "__main__":
     plants_clean = pd.read_csv('results_baseline/plants_clean.csv')
     transport_hubs = pd.read_csv('data/transport_hubs.csv')
     results = simulate_ctbo(plants_clean, transport_hubs, single_run=True, results_dir='results_baseline', figures_dir='results_figures')
-
-    # results['plants_investment_year'] = [str(year) for year in results['plants_investment_year']] #Convert from np.float to string
-    # print(f"\nThe stacks that have invested are (alphabetically ordered): {results['plants_stack']}")
-    # print(f"\nThe investment years are (alphabetically ordered): {results['plants_investment_year']}")
+    print("Wrote baseline MAC curve to results_baseline/macc.csv. Run 'controller.py' for multiple-scenario analysis.")
+    plt.show()

@@ -472,4 +472,5 @@ fig2, ax2 = create_sector_map(
 output_file2 = f'{figures_dir}/map_sectors.png'
 plt.savefig(output_file2, dpi=400, bbox_inches='tight')
 
+print("Wrote plants_clean.csv and map_concentrations.png. Run `model.py` for single-scenario analysis.")
 plt.show()

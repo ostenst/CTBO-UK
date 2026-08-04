@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from ctbo import simulate_ctbo
+from model import simulate_ctbo
 from ema_workbench import (
     Model,
     RealParameter,
@@ -22,7 +22,7 @@ except ImportError:
 
 if __name__ == "__main__":
     ema_logging.log_to_stderr(ema_logging.INFO)
-    PHASEOUT = False
+    PHASEOUT = True
     results_dir = "results_phaseout" if PHASEOUT else "results_baseline"
     figures_dir = "results_figures"
     
@@ -38,6 +38,7 @@ if __name__ == "__main__":
         RealParameter("DIFFUSE_END_FRACTION", 0.05, 0.50),
         CategoricalParameter("DACCS_SCENARIO", ['£322', '£391']),
         CategoricalParameter("CfD_inefficiency", [0.10, 0.20, 0.30, 0.40]),
+        CategoricalParameter("LR", ['0%', '3%', '6%']), # lower than 12% because initial costs are not FOAK!
         # Sector-specific uncertainties
         RealParameter("fraction_limestone", 0.55, 0.65),  # [-] cementite fraction
         RealParameter("fraction_fossil_waste", 0.40, 0.55),  # [-] fossil fraction in waste
@@ -75,7 +76,7 @@ if __name__ == "__main__":
 
     # Levers: policy choices set by each explicit policy below (must stay in sync with Policy/Sample kwargs).
     model.levers = [
-        CategoricalParameter("ETS_SCENARIO", ['CTBO-only', 'ETS-eq', '£100-Mix', '£200-Mix', '£300-Mix']),
+        CategoricalParameter("PRICE_POLICY", ['CTBO', 'ETS', 'CAP-50£', 'CAP-100£', 'CAP-200£']),
     ]
 
     # Outcomes: metrics to track (aligned with simulate_ctbo return keys)
@@ -145,19 +146,20 @@ if __name__ == "__main__":
         Constant("DIFFUSE_END_YEAR", 2050),
         Constant("pounds_to_EUR", 1.15),
         Constant("CONSTRUCTION_YEARS", 3),
-        Constant("CfD_ANALYSIS", True),
+        Constant("CfD_ANALYSIS", False),
+        Constant("LEARNING", True),
     ]
 
     # Run experiments
     # Explicit policies: kwargs must match lever names (a dict as 2nd positional arg is wrong — it becomes unique_id).
     policies = [
-        PolicySample("CTBO-only", ETS_SCENARIO="CTBO-only"),
-        PolicySample("ETS-eq", ETS_SCENARIO="ETS-eq"),
-        PolicySample("£100-Mix", ETS_SCENARIO="£100-Mix"),
-        PolicySample("£200-Mix", ETS_SCENARIO="£200-Mix"),
-        PolicySample("£300-Mix", ETS_SCENARIO="£300-Mix"),
+        PolicySample("CTBO", PRICE_POLICY="CTBO"),
+        PolicySample("ETS", PRICE_POLICY="ETS"),
+        PolicySample("CAP-50£", PRICE_POLICY="CAP-50£"),
+        PolicySample("CAP-100£", PRICE_POLICY="CAP-100£"),
+        PolicySample("CAP-200£", PRICE_POLICY="CAP-200£"),
     ]
-    n_scenarios = 100
+    n_scenarios = 20
     
     results = perform_experiments(
         model,
@@ -194,5 +196,5 @@ if __name__ == "__main__":
     })
     plant_ref.to_csv(f"{results_dir}/plant_reference.csv", index=False)
 
-    print("Wrote experiments/outcomes. Run `py regret.py` for regret tables and boxplots.")
+    print("Wrote experiments/outcomes. Run `illustrate.py` for plots.")
     
