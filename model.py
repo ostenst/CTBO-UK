@@ -531,10 +531,11 @@ def simulate_ctbo(
     CTBO_QUADRATIC = 0.4,
     ETS_START = 45, # [£/tCO2]
     PRICE_POLICY = 'CAP-100£', # ['CTBO', 'ETS', 'CAP-50£', 'CAP-100£', 'CAP-200£']),
-    CfD_ANALYSIS = False,
+    CfD_ANALYSIS = True,
     DACCS_SCENARIO = '£391', # [£/tCO2] 322, 391, 7th Carbon Budget
     LEARNING = True,  # if False, forces LR=0
-    LR = '6%',  # full-MAC learning rate; categorical ['0%', '3%', '6%']
+    LR = '5%',  # full-MAC learning rate; categorical ['0%', '5%', '10%']
+    TAXING = True,
     
     START_YEAR = 2025,
     END_YEAR = 2055,
@@ -568,7 +569,7 @@ def simulate_ctbo(
     drax_efficiency_loss = 0.24, # [-] Donnison et al. (2020)
 
     # Uncertainties
-    CfD_inefficiency = 0.05, # [-] % extra cost incurred relative to MAC if relying on CfDs
+    CfD_inefficiency = 0.0, # [-] % extra cost incurred relative to MAC if relying on CfDs
     capture_rate = 0.95,
     qreb = 3.5, # [GJ/tCO2]
     pcapture = 0.05, # [MJ/kgCO2] Kumar et al. (2023)
@@ -759,6 +760,7 @@ def simulate_ctbo(
     MACC = MACC.sort_values(by='MAC', ascending=True)
     # Full-MAC learning: MAC(Q)=MAC0*a^(-b), a=Q/Q0, 1-2^(-b)=LR. Outliers seed Q0 (MAC0=0 after subsidy).
     MACC['MAC0'] = MACC['MAC']
+    MACC['MAC_FID'] = np.nan  # set at investment = learned MAC at FID
     Q0 = float(MACC.loc[MACC['stack'].isin(outliers), 'ktCO2tot_ccs'].sum())
     Q = Q0
 
@@ -851,9 +853,8 @@ def simulate_ctbo(
     _diesel_increase_abs = [] # cent/L
     _kerosene_increase_abs = [] # cent/L
 
-    _cost_CfD = [] 
-    _cost_CfD_CTBO = []
-    _CTBO_CfD_ratio = []
+    _cost_CfD_government = [] 
+    _benefit_CfD_taxpayer = []
     _plants_costbenefit = []
 
     # Simulate the CTBO
@@ -885,6 +886,7 @@ def simulate_ctbo(
                     if plant['MAC'] < ets_price:
                         MACC.loc[idx, 'invested'] = True
                         MACC.loc[idx, 'year_invest'] = year
+                        MACC.loc[idx, 'MAC_FID'] = plant['MAC']
         
         # Base the CTBO mandate on coal, oil, and gas supply (ktCO2f)
         pointsource_supply = MACC['ktCO2f'].sum() + MACC['ktCO2f_inc'].where(MACC['invested'], 0).sum()
@@ -911,6 +913,7 @@ def simulate_ctbo(
                         break
                     MACC.loc[MACC.index[j], 'invested'] = True
                     MACC.loc[MACC.index[j], 'year_invest'] = year
+                    MACC.loc[MACC.index[j], 'MAC_FID'] = plant['MAC']
                     stored_ktCO2f += plant['ktCO2f_ccs']
                     stored_ktCO2cem += plant['ktCO2cem_ccs']
                     stored_ktCO2pl += plant['ktCO2pl_ccs']
@@ -979,6 +982,8 @@ def simulate_ctbo(
                 if costs_tax != 0:
                     raise ValueError(f"Costs tax is not zero: {costs_tax} k€/y")
 
+            if not TAXING:
+                costs_tax = 0
             costs_consumers = costs_suppliers + costs_emitters + costs_tax # [k€/y]
             cost_fuels = (costs_suppliers + costs_emitters + costs_tax) / supply_ktCO2f # [€/tCO2] NOTE: No price ceiling implemented beyond 2050!
             
@@ -988,7 +993,8 @@ def simulate_ctbo(
         profit_E_tot = 0 # [k€/y] area C
         cost_E_tot = 0 # [k€/y] area D
         tax_E_tot = 0 # [k€/y] area E
-        cost_CfD_tot = 0 # [k€/y] 
+        cost_CfD_government = 0 # [k€/y] 
+        benefit_CfD_taxpayer = 0 # [k€/y] 
 
         for idx, plant in MACC.iterrows():
             
@@ -1025,8 +1031,9 @@ def simulate_ctbo(
                 cost_E_tot += cost_E
                 tax_E_tot += tax_E
 
-                if CfD_ANALYSIS and PRICE_POLICY == 'CTBO':
-                    cost_CfD_tot += cost_y * (1 + CfD_inefficiency)
+                if CfD_ANALYSIS:
+                    cost_CfD_government += cost_y * (1 + CfD_inefficiency)
+                    benefit_CfD_taxpayer += profit_y 
 
             _plants_costbenefit.append({
                 'year': year,
@@ -1047,14 +1054,16 @@ def simulate_ctbo(
                 # 'relative_profit_E': profit_E, # [k€/y] old relative-profit-only definition
                 'ktCO2tot_ccs': plant['ktCO2tot_ccs'],
             })
+        if not TAXING:
+            tax_E_tot = 0
 
         # Add DACCS and calculate policy costs/profits
         if stored_ktCO2daccs > 0:
             cost_y_tot += y * stored_ktCO2daccs # [k€/y]
             cost_E_tot += E * stored_ktCO2daccs # [k€/y]
 
-            if CfD_ANALYSIS and PRICE_POLICY == 'CTBO':
-                cost_CfD_tot += y * stored_ktCO2daccs * (1 + CfD_inefficiency)
+            if CfD_ANALYSIS:
+                cost_CfD_government += y * stored_ktCO2daccs * (1 + CfD_inefficiency)
 
         # if single_run:
         #     print("\nThese two methods of calculating policy costs should yield zero")
@@ -1096,14 +1105,8 @@ def simulate_ctbo(
         _diesel_increase_abs.append(diesel_increase_abs)
         _kerosene_increase_abs.append(kerosene_increase_abs)
 
-        _cost_CfD.append(cost_CfD_tot)
-        _cost_CfD_CTBO.append(cost_y_tot + profit_y_tot)
-        if CfD_ANALYSIS and PRICE_POLICY == 'CTBO':
-            cfd_denom = cost_CfD_tot - (1 + CfD_inefficiency) * y * stored_ktCO2daccs
-            cfd_ratio = (cost_y_tot + profit_y_tot) / cfd_denom if cfd_denom > 0 else np.nan
-        else:
-            cfd_ratio = np.nan
-        _CTBO_CfD_ratio.append(cfd_ratio)
+        _cost_CfD_government.append(cost_CfD_government)
+        _benefit_CfD_taxpayer.append(benefit_CfD_taxpayer)
     
     # ========== NPV CALCULATIONS ==========
     # Discount factors for annual values (relative to START_YEAR), truncated to 2050
@@ -1139,11 +1142,17 @@ def simulate_ctbo(
         construction_years=CONSTRUCTION_YEARS,
         debug=False
     )
-    mac_by_stack = MACC.set_index('stack')['MAC'].to_dict()
+    # plants_MAC: learned MAC at FID (fallback: end-of-horizon learned MAC if never invested)
+    mac_fid = MACC['MAC_FID'].fillna(MACC['MAC'])
+    mac_by_stack = dict(zip(MACC['stack'], mac_fid))
+    # plants_MAC0: pre-learning MAC (restore true initial costs for subsidized outliers)
+    mac0_by_stack = dict(zip(MACC['stack'], MACC['MAC0']))
     for outlier_name in outliers:
         if outlier_name in cost_initial_outliers:
             mac_by_stack[outlier_name] = cost_initial_outliers[outlier_name]
+            mac0_by_stack[outlier_name] = cost_initial_outliers[outlier_name]
     npv_plants['MAC'] = npv_plants['stack'].map(mac_by_stack)
+    npv_plants['MAC0'] = npv_plants['stack'].map(mac0_by_stack)
     if single_run or save_aux_results:
         NPV_data_all.to_csv(f'{results_dir}/plants_costbenefit_extended.csv', index=False)
         npv_plants.to_csv(f'{results_dir}/plants_npv.csv', index=False)
@@ -1177,9 +1186,8 @@ def simulate_ctbo(
     results['profit_E_policy'] = _profit_E_policy
     results['cost_E_policy'] = _cost_E_policy
     results['tax_E_policy'] = _tax_E_policy
-    results['cost_CfD'] = _cost_CfD
-    results['cost_CfD_CTBO'] = _cost_CfD_CTBO
-    results['CTBO_CfD_ratio'] = _CTBO_CfD_ratio
+    results['cost_CfD_government'] = _cost_CfD_government
+    results['benefit_CfD_taxpayer'] = _benefit_CfD_taxpayer
     
     results['NPV_costs_suppliers'] = NPV_costs_suppliers
     results['NPV_costs_emitters'] = NPV_costs_emitters
@@ -1211,7 +1219,8 @@ def simulate_ctbo(
     results['plants_NPV_OPEX'] = npv_plants['NPV_OPEX'].tolist()
     results['plants_NPV_REVENUE'] = npv_plants['NPV_REVENUE'].tolist()
     results['plants_NPV_total'] = npv_plants['NPV_total'].tolist()
-    results['plants_MAC'] = npv_plants['MAC'].tolist()
+    results['plants_MAC'] = npv_plants['MAC'].tolist()       # learned at FID (or final if unbuilt)
+    results['plants_MAC0'] = npv_plants['MAC0'].tolist()     # pre-learning
     results['plants_ktCO2tot_ccs'] = npv_plants['ktCO2tot_ccs'].tolist()
 
     if single_run:
@@ -1246,7 +1255,7 @@ def plot_results_groups(years, results, figures_dir='results_figures', savefig=F
     ax.legend(fontsize=11)
     plt.tight_layout()
     if savefig:
-        plt.savefig(f'{figures_dir}/group1_timeseries.png', dpi=450, bbox_inches='tight')
+        plt.savefig(f'{figures_dir}/single_carbon_trajectories.png', dpi=450, bbox_inches='tight')
 
     # Group 2: Prices and marginal costs
     fig, ax = plt.subplots(figsize=(12, 7))
@@ -1262,7 +1271,7 @@ def plot_results_groups(years, results, figures_dir='results_figures', savefig=F
     ax.legend(fontsize=11)
     plt.tight_layout()
     if savefig:
-        plt.savefig(f'{figures_dir}/group2_timeseries.png', dpi=450, bbox_inches='tight')
+        plt.savefig(f'{figures_dir}/single_carbon_prices.png', dpi=450, bbox_inches='tight')
 
     # Group 3: Annual policy costs/profits + NPV annotation
     fig, ax = plt.subplots(figsize=(12, 7))
@@ -1271,8 +1280,14 @@ def plot_results_groups(years, results, figures_dir='results_figures', savefig=F
     ax.plot(years, np.array(results['costs_emitters']) * scale_billion, lw=2, label='Costs emitters [B€/y]')
     ax.plot(years, np.array(results['costs_tax']) * scale_billion, lw=2, label='Costs tax [B€/y]')
     ax.plot(years, np.array(results['costs_consumers']) * scale_billion, lw=2, label='Costs consumers [B€/y]')
-    ax.plot(years, np.array(results['cost_CfD']) * scale_billion, lw=2, label='Costs CfD [B€/y]')
-    ax.plot(years, np.array(results['cost_CfD_CTBO']) * scale_billion, lw=2, label='Costs CfD CTBO [B€/y]')
+    ax.plot(
+        years, np.array(results['cost_CfD_government']) * scale_billion,
+        lw=2, ls='--', label='CfD government cost [B€/y]',
+    )
+    ax.plot(
+        years, np.array(results['benefit_CfD_taxpayer']) * scale_billion,
+        lw=2, ls='--', label='CfD taxpayer benefit (rents avoided) [B€/y]',
+    )
     # ax.plot(years, results['profit_y_policy'], lw=2, label='Profit y policy [k€/y]')
     # ax.plot(years, results['cost_y_policy'], lw=2, label='Cost y policy [k€/y]')
     # ax.plot(years, results['profit_E_policy'], lw=2, label='Profit E policy [k€/y]')
@@ -1301,21 +1316,7 @@ def plot_results_groups(years, results, figures_dir='results_figures', savefig=F
     ax.legend(fontsize=10, ncol=2)
     plt.tight_layout()
     if savefig:
-        plt.savefig(f'{figures_dir}/group3_timeseries.png', dpi=450, bbox_inches='tight')
-
-    # CfD analysis: profit_y / cost_CfD ratio (CTBO; NaN otherwise)
-    if CfD_ANALYSIS:
-        fig, ax = plt.subplots(figsize=(12, 7))
-        ax.plot(years, results['CTBO_CfD_ratio'], lw=2, label='profit_y / cost_CfD [-]')
-        ax.set_title('CTBO CfD ratio: profit_y / cost_CfD', fontsize=16)
-        ax.set_xlabel('Year', fontsize=14)
-        ax.set_ylabel('Ratio [-]', fontsize=14)
-        ax.tick_params(labelsize=12)
-        ax.grid(True, linestyle='--', alpha=0.4)
-        ax.legend(fontsize=11)
-        plt.tight_layout()
-        if savefig:
-            plt.savefig(f'{figures_dir}/ctbo_cfd_ratio_timeseries.png', dpi=450, bbox_inches='tight')
+        plt.savefig(f'{figures_dir}/single_policy_costs.png', dpi=450, bbox_inches='tight')
 
     # Group 4: Fuel price impacts
     fig, ax = plt.subplots(figsize=(12, 7))
@@ -1331,7 +1332,7 @@ def plot_results_groups(years, results, figures_dir='results_figures', savefig=F
     ax.legend(fontsize=11)
     plt.tight_layout()
     if savefig:
-        plt.savefig(f'{figures_dir}/group4_timeseries.png', dpi=450, bbox_inches='tight')
+        plt.savefig(f'{figures_dir}/single_fuel_impacts.png', dpi=450, bbox_inches='tight')
 
 
 def plot_plants_npv_scatter(npv_plants, figures_dir='results_figures', savefig=False, debug=False):
@@ -1379,7 +1380,7 @@ def plot_plants_npv_scatter(npv_plants, figures_dir='results_figures', savefig=F
 
     plt.tight_layout()
     if savefig:
-        plt.savefig(f'{figures_dir}/plants_npv_scatter.png', dpi=450, bbox_inches='tight')
+        plt.savefig(f'{figures_dir}/single_plant_NPV.png', dpi=450, bbox_inches='tight')
 
     if debug:
         print(f"plot_plants_npv_scatter output: n_plotted={len(df)}")
@@ -1434,18 +1435,18 @@ def plot_macc(macc, pounds_to_EUR=1.15, macc_shift=0.20, figures_dir='results_fi
     _style_macc_axes(ax1)
     fig1.tight_layout()
     if savefig:
-        fig1.savefig(f'{figures_dir}/macc_curve.png', dpi=450, bbox_inches='tight')
+        fig1.savefig(f'{figures_dir}/single_macc.png', dpi=450, bbox_inches='tight')
 
-    # Figure 2: base curve + shifted curve with filled gap
-    if CfD_ANALYSIS:
-        fig2, ax2 = plt.subplots(figsize=(9, 4.5))
-        ax2.fill_between(x, y_base, y_shifted, step='pre', color='black', alpha=0.35, zorder=1)
-        ax2.step(x, y_base, where='pre', color='black', linewidth=2.5, zorder=2)
-        ax2.step(x, y_shifted, where='pre', color='black', linewidth=2.5, zorder=2)
-        _style_macc_axes(ax2)
-        fig2.tight_layout()
-        if savefig:
-            fig2.savefig(f'{figures_dir}/macc_curve_shifted.png', dpi=450, bbox_inches='tight')
+    # # Figure 2: base curve + shifted curve with filled gap
+    # if CfD_ANALYSIS:
+    #     fig2, ax2 = plt.subplots(figsize=(9, 4.5))
+    #     ax2.fill_between(x, y_base, y_shifted, step='pre', color='black', alpha=0.35, zorder=1)
+    #     ax2.step(x, y_base, where='pre', color='black', linewidth=2.5, zorder=2)
+    #     ax2.step(x, y_shifted, where='pre', color='black', linewidth=2.5, zorder=2)
+    #     _style_macc_axes(ax2)
+    #     fig2.tight_layout()
+    #     if savefig:
+    #         fig2.savefig(f'{figures_dir}/macc_curve_shifted.png', dpi=450, bbox_inches='tight')
 
     if debug:
         print("plot_macc output:", macc_plot[['cumulative_kt', 'MAC']].tail(1))

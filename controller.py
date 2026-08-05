@@ -37,8 +37,7 @@ if __name__ == "__main__":
         # Scenario uncertainties
         RealParameter("DIFFUSE_END_FRACTION", 0.05, 0.50),
         CategoricalParameter("DACCS_SCENARIO", ['£322', '£391']),
-        CategoricalParameter("CfD_inefficiency", [0.10, 0.20, 0.30, 0.40]),
-        CategoricalParameter("LR", ['0%', '3%', '6%']), # lower than 12% because initial costs are not FOAK!
+        CategoricalParameter("LR", ['0%', '5%', '10%']), # lower than 12% because initial costs are not FOAK!
         # Sector-specific uncertainties
         RealParameter("fraction_limestone", 0.55, 0.65),  # [-] cementite fraction
         RealParameter("fraction_fossil_waste", 0.40, 0.55),  # [-] fossil fraction in waste
@@ -112,9 +111,8 @@ if __name__ == "__main__":
         ArrayOutcome("profit_E_policy"),
         ArrayOutcome("cost_E_policy"),
         ArrayOutcome("tax_E_policy"),
-        ArrayOutcome("cost_CfD"),
-        ArrayOutcome("cost_CfD_CTBO"),
-        ArrayOutcome("CTBO_CfD_ratio"),
+        ArrayOutcome("cost_CfD_government"),
+        ArrayOutcome("benefit_CfD_taxpayer"),
         ArrayOutcome("gas_increase_abs"),
         ArrayOutcome("petrol_increase_abs"),
         ArrayOutcome("diesel_increase_abs"),
@@ -128,7 +126,8 @@ if __name__ == "__main__":
         ArrayOutcome("plants_NPV_OPEX"),
         ArrayOutcome("plants_NPV_REVENUE"),
         ArrayOutcome("plants_NPV_total"),
-        ArrayOutcome("plants_MAC"),
+        ArrayOutcome("plants_MAC"),   # learned MAC at FID (final learned if never invested)
+        ArrayOutcome("plants_MAC0"),  # pre-learning MAC
         ArrayOutcome("plants_ktCO2tot_ccs"),
     ]
 
@@ -146,7 +145,9 @@ if __name__ == "__main__":
         Constant("DIFFUSE_END_YEAR", 2050),
         Constant("pounds_to_EUR", 1.15),
         Constant("CONSTRUCTION_YEARS", 3),
-        Constant("CfD_ANALYSIS", False),
+        Constant("CfD_ANALYSIS", True),
+        Constant("CfD_inefficiency", 0.0), # [-] % extra cost incurred relative to MAC if relying on CfDs
+        Constant("TAXING", True),
         Constant("LEARNING", True),
     ]
 
@@ -159,7 +160,7 @@ if __name__ == "__main__":
         PolicySample("CAP-100£", PRICE_POLICY="CAP-100£"),
         PolicySample("CAP-200£", PRICE_POLICY="CAP-200£"),
     ]
-    n_scenarios = 20
+    n_scenarios = 10
     
     results = perform_experiments(
         model,
