@@ -40,9 +40,52 @@ def _panel_stats(arr, mask=None):
     return np.nanmedian(panel, axis=0), np.nanpercentile(panel, 5, axis=0), np.nanpercentile(panel, 95, axis=0)
 
 
-def _set_sparse_year_ticks(ax, years):
-    ticks = [2030, 2040, 2050]
-    ax.set_xlim(int(np.nanmin(years)), int(np.nanmax(years)))
+GREEN_CMAP = [
+    "#144842",
+    "#237067",
+    "#33978B",
+    "#41BCAE",
+    "#52E7D6",
+    "#D5FDF7",
+]
+RED_CMAP = [
+    "#F6CDCD",
+    "#EE9699",
+    "#E75263",
+    "#B73A49",
+    "#812632",
+    "#4B131A",
+]
+# Low cost (green) → mid (white) → high cost (red)
+COST_CMAP = colors.LinearSegmentedColormap.from_list(
+    'green_white_red', GREEN_CMAP + ['#FFFFFF'] + RED_CMAP
+)
+
+# Friends1: carbon trajectories ↔ plant NPV (matched axes width)
+FRIENDS1_FIGSIZE = (5.5, 5.5)
+FRIENDS1_RECT = [0.16, 0.12, 0.78, 0.80]  # left, bottom, width, height
+
+# Friends2: carbon prices ↔ macc curves (matched axes height)
+FRIENDS2_FIGHEIGHT = 6.5
+FRIENDS2_AX_BOTTOM = 0.10
+FRIENDS2_AX_HEIGHT = 0.78
+FRIENDS2_PRICES_FIGSIZE = (4.0, FRIENDS2_FIGHEIGHT)
+FRIENDS2_PRICES_RECT = [0.20, FRIENDS2_AX_BOTTOM, 0.72, FRIENDS2_AX_HEIGHT]
+FRIENDS2_MACC_FIGSIZE = (7.2, FRIENDS2_FIGHEIGHT)
+FRIENDS2_MACC_RECT = [0.12, FRIENDS2_AX_BOTTOM, 0.68, FRIENDS2_AX_HEIGHT]
+FRIENDS2_CBAR_RECT = [0.82, FRIENDS2_AX_BOTTOM, 0.03, FRIENDS2_AX_HEIGHT]
+
+
+def _friends_axes(figsize, rect):
+    """Fixed axes box so paired figures share panel width/height in inches."""
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_axes(rect)
+    return fig, ax
+
+
+def _set_sparse_year_ticks(ax, years, end_year=2050):
+    ticks = [y for y in (2030, 2040, 2050) if y <= end_year]
+    ax.set_xlim(int(np.nanmin(years)), end_year)
     ax.set_xticks(ticks)
     ax.set_xticklabels([str(y) for y in ticks])
 
@@ -55,7 +98,7 @@ def _get_sector_colors(sectors):
         'refinery': magma(0.85),
         'steel': magma(0.70),
         'drax': magma(0.50),
-        'waste': '#62a7a6',
+        'waste': '#41BCAE',
     }
     fallback = plt.cm.tab10(np.linspace(0, 1, max(1, len(sectors))))
     return {
@@ -64,22 +107,24 @@ def _get_sector_colors(sectors):
     }
 
 
-def plot_carbon_trajectories(results_dir='results_baseline', figures_dir='results_figures', start_year=2025, savefig=True, debug=False):
+def plot_carbon_trajectories(results_dir='results_baseline', figures_dir='results_figures', start_year=2025, end_year=2050, savefig=True, debug=False):
     """One panel: median carbon trajectories across all PRICE_POLICY experiments."""
-    years = _get_years(results_dir, start_year=start_year, key='supply_ktCO2f')
-    supply = _load_array(results_dir, 'supply_ktCO2f')
-    stored_total = _load_array(results_dir, 'mandate_ktCO2')
-    stored_b = _load_array(results_dir, 'stored_ktCO2b')
-    stored_d = _load_array(results_dir, 'stored_ktCO2daccs')
+    years_all = _get_years(results_dir, start_year=start_year, key='supply_ktCO2f')
+    keep = years_all <= end_year
+    years = years_all[keep]
+    supply = _load_array(results_dir, 'supply_ktCO2f')[:, keep]
+    stored_total = _load_array(results_dir, 'mandate_ktCO2')[:, keep]
+    stored_b = _load_array(results_dir, 'stored_ktCO2b')[:, keep]
+    stored_d = _load_array(results_dir, 'stored_ktCO2daccs')[:, keep]
     stored_cdr = stored_b + stored_d
     scale = 1000.0
     magma = plt.cm.magma
 
-    fig, ax = plt.subplots(figsize=(7.5, 5.5))
+    fig, ax = _friends_axes(FRIENDS1_FIGSIZE, FRIENDS1_RECT)
     for arr, color, label in [
-        (supply, magma(0.0), 'Supply'),
-        (stored_total, magma(0.45), 'Stored total'),
-        (stored_cdr, '#62a7a6', 'Stored CDR (BECCS + DACCS)'),
+        (supply, magma(0.0), 'Fossil fuel supply (coal, oil, gas)'),
+        (stored_total, magma(0.45), 'Storage capacity (CCS, BECCS, DACCS)'),
+        (stored_cdr, '#41BCAE', 'Storage capacity (BECCS, DACCS)'),
     ]:
         med, p5, p95 = _panel_stats(arr)
         ax.plot(years, med / scale, lw=2.3, color=color, label=label)
@@ -98,7 +143,7 @@ def plot_carbon_trajectories(results_dir='results_baseline', figures_dir='result
         ax.scatter(
             [med_year], [med_b / scale],
             s=70, color='#41BCAE', edgecolors='black', linewidths=1.2, zorder=5,
-            label='DACCS start (median)',
+            label='DACCS median deployment year',
         )
         if debug:
             print(f"plot_carbon_trajectories DACCS marker: year={med_year}, ktCO2b={med_b:.1f}")
@@ -107,18 +152,17 @@ def plot_carbon_trajectories(results_dir='results_baseline', figures_dir='result
     ax.set_xlabel('Year', fontsize=14)
     ax.grid(True, linestyle='--', alpha=0.35)
     ax.tick_params(labelsize=12)
-    _set_sparse_year_ticks(ax, years)
-    ax.legend(fontsize=11, loc='best')
-    fig.tight_layout()
+    _set_sparse_year_ticks(ax, years, end_year=end_year)
+    ax.legend(fontsize=10, loc='best')
     if savefig:
         out = f'{figures_dir}/multiple_carbon_trajectories.png'
-        fig.savefig(out, dpi=450, bbox_inches='tight')
+        fig.savefig(out, dpi=450)  # no tight crop: keep Friends1 panel width
         if debug:
             print(f"plot_carbon_trajectories: {out}")
     return fig
 
 
-def plot_plant_NPV(results_dir='results_baseline', figures_dir='results_figures', pounds_to_EUR=1.15, savefig=True, debug=False):
+def plot_plant_NPV(results_dir='results_baseline', figures_dir='results_figures', pounds_to_EUR=1.15, end_year=2050, savefig=True, debug=False):
     """One panel: median plant NPV vs investment year across all PRICE_POLICY experiments."""
     plant_ref = pd.read_csv(f'{results_dir}/plant_reference.csv')
     npv_total = _load_array(results_dir, 'plants_NPV_total')
@@ -134,14 +178,18 @@ def plot_plant_NPV(results_dir='results_baseline', figures_dir='results_figures'
     panel['MAC'] = np.nanmedian(np.abs(mac), axis=0)
     panel['ktCO2tot_ccs'] = panel['stack'].map(cap_by_stack)
     panel = panel.dropna(subset=['NPV_total', 'investment_year'])
+    panel = panel[panel['investment_year'] <= end_year]
 
-    fig, ax = plt.subplots(figsize=(7.5, 5.5))
+    fig, ax = _friends_axes(FRIENDS1_FIGSIZE, FRIENDS1_RECT)
+    y_vals = []
     for sector in sorted(panel['sector'].dropna().unique()):
         sector_df = panel[panel['sector'] == sector]
         sizes = np.clip(sector_df['ktCO2tot_ccs'].to_numpy(dtype=float), 1.0, None) * 0.25
+        y = sector_df['NPV_total'].to_numpy(dtype=float) / 1000.0 / pounds_to_EUR
+        y_vals.append(y)
         ax.scatter(
             sector_df['investment_year'].to_numpy(dtype=float),
-            sector_df['NPV_total'].to_numpy(dtype=float) / 1000.0 / pounds_to_EUR,
+            y,
             s=sizes,
             c=[sector_colors.get(sector, 'grey')],
             alpha=0.75,
@@ -151,14 +199,25 @@ def plot_plant_NPV(results_dir='results_baseline', figures_dir='results_figures'
         )
     ax.axhline(0, color='grey', linestyle='--', linewidth=1.0, alpha=0.7)
     ax.set_xlabel('Investment year', fontsize=14)
-    ax.set_ylabel('Plant NPV total [M£]', fontsize=14)
+    ax.set_ylabel('Plant NPV [M£]', fontsize=14)
+    y_all = np.concatenate(y_vals) if y_vals else np.array([1.0])
+    # Log if all positive; else symlog so negatives remain visible
+    if np.nanmin(y_all) > 0:
+        ax.set_yscale('log')
+        max_y = np.nanmax(y_all)
+        ax.set_ylim(70, max_y*1.3)
+    else:
+        ax.set_yscale('symlog', linthresh=max(1.0, float(np.nanpercentile(np.abs(y_all), 10))))
+
+    ax.set_xlim(int(np.nanmin(panel['investment_year'])), end_year)
+    ax.set_xticks([2030, 2040, 2050])
+    ax.set_xticklabels(['2030', '2040', '2050'])
     ax.grid(True, linestyle='--', alpha=0.35)
     ax.tick_params(labelsize=12)
     ax.legend(fontsize=11, title='Sector', title_fontsize=12, loc='best')
-    fig.tight_layout()
     if savefig:
         out = f'{figures_dir}/multiple_plant_NPV.png'
-        fig.savefig(out, dpi=450, bbox_inches='tight')
+        fig.savefig(out, dpi=450)  # no tight crop: keep Friends1 panel width
         if debug:
             print(f"plot_plant_NPV: {out}")
     return fig
@@ -169,6 +228,7 @@ def plot_carbon_prices(
     figures_dir='results_figures',
     PRICE_POLICY='CAP-100£',
     start_year=2025,
+    end_year=2050,
     pounds_to_EUR=1.15,
     savefig=True,
     debug=False,
@@ -179,16 +239,18 @@ def plot_carbon_prices(
     if mask.sum() == 0:
         raise ValueError(f"No experiments with PRICE_POLICY={PRICE_POLICY!r} in {results_dir}")
 
-    years = _get_years(results_dir, start_year=start_year, key='cost_marginal')
+    years_all = _get_years(results_dir, start_year=start_year, key='cost_marginal')
+    keep = years_all <= end_year
+    years = years_all[keep]
     magma = plt.cm.magma
     series = [
-        (_load_array(results_dir, 'cost_marginal') / pounds_to_EUR, magma(0.05), 'Marginal cost'),
-        (_load_array(results_dir, 'price_ETS') / pounds_to_EUR, magma(0.35), 'ETS price (E)'),
-        (_load_array(results_dir, 'price_CSU') / pounds_to_EUR, magma(0.65), 'CSU price (y)'),
-        (_load_array(results_dir, 'cost_fuels') / pounds_to_EUR, magma(0.9), 'Fuel cost'),
+        (_load_array(results_dir, 'cost_marginal')[:, keep] / pounds_to_EUR, magma(0.05), 'Marginal cost CCS/BECCS/DACCS'),
+        (_load_array(results_dir, 'price_ETS')[:, keep] / pounds_to_EUR, magma(0.30), 'ETS price'),
+        (_load_array(results_dir, 'price_CSU')[:, keep] / pounds_to_EUR, magma(0.625), 'CSU price'),
+        (_load_array(results_dir, 'cost_fuels')[:, keep] / pounds_to_EUR, '#41BCAE', 'Average embedded policy cost'),
     ]
 
-    fig, ax = plt.subplots(figsize=(7.5, 5.5))
+    fig, ax = _friends_axes(FRIENDS2_PRICES_FIGSIZE, FRIENDS2_PRICES_RECT)
     for arr, color, label in series:
         med, p5, p95 = _panel_stats(arr, mask)
         ax.plot(years, med, lw=2.3, color=color, label=label)
@@ -199,12 +261,11 @@ def plot_carbon_prices(
     ax.set_xlabel('Year', fontsize=14)
     ax.grid(True, linestyle='--', alpha=0.35)
     ax.tick_params(labelsize=12)
-    _set_sparse_year_ticks(ax, years)
-    ax.legend(fontsize=11, loc='best')
-    fig.tight_layout()
+    _set_sparse_year_ticks(ax, years, end_year=end_year)
+    ax.legend(fontsize=9, loc='best')
     if savefig:
         out = f'{figures_dir}/multiple_carbon_prices.png'
-        fig.savefig(out, dpi=450, bbox_inches='tight')
+        fig.savefig(out, dpi=450)  # no tight crop: keep Friends2 panel height
         if debug:
             print(f"plot_carbon_prices: {out} (n={mask.sum()})")
     return fig
@@ -234,12 +295,12 @@ def plot_cfd(
     policy_colors = {
         'CAP-50£': magma(0.25),
         'CAP-100£': magma(0.65),
-        'CAP-200£': magma(0.9),
+        'CAP-200£': colors.to_rgba('#41BCAE'),
     }
 
-    pol_gap = 0.55
+    pol_gap = 0.30
     year_gap = len(cap_policies) * pol_gap + 0.55
-    fig, ax = plt.subplots(figsize=(9.0, 5.5))
+    fig, ax = plt.subplots(figsize=(8.0, 5.5))
     box_data, positions, facecolors, edgecolors = [], [], [], []
     xtick_pos, xtick_labels = [], []
 
@@ -332,7 +393,7 @@ def plot_tax_and_gas(
     colors = {
         'CAP-50£': magma(0.25),
         'CAP-100£': magma(0.65),
-        'CAP-200£': magma(0.85),
+        'CAP-200£': '#41BCAE',
         'CTBO': 'black',
         'ETS': 'black',
     }
@@ -349,7 +410,7 @@ def plot_tax_and_gas(
     years_near = years_all[keep_near]
     years_long = years_all[keep_long]
 
-    fig, axes = plt.subplots(1, 3, figsize=(9.5, 6.5))
+    fig, axes = plt.subplots(1, 3, figsize=(10, 7))
     panels = [
         (axes[0], costs_tax_all[:, keep_near], years_near, tax_scale, 'Tax costs [B£/y]', [2030, 2035]),
         (axes[1], gas_pence[:, keep_near], years_near, 1.0, 'Gas price increase [p/kWh]', [2030, 2035]),
@@ -409,7 +470,7 @@ def plot_policy_costs(
         (consumers, magma(0.85), 'Consumers'),
     ]
 
-    fig, axes = plt.subplots(1, len(policies), figsize=(4.0 * len(policies), 6.4), sharex=True, sharey=True)
+    fig, axes = plt.subplots(1, len(policies), figsize=(3.333 * len(policies), 7), sharex=True, sharey=True)
     if len(policies) == 1:
         axes = [axes]
 
@@ -487,8 +548,7 @@ def plot_macc_curves(results_dir='results_baseline', figures_dir='results_figure
     idx_min = valid_idx[np.argmin(summed_costs[valid_idx])]
     idx_max = valid_idx[np.argmax(summed_costs[valid_idx])]
 
-    fig, ax = plt.subplots(figsize=(10, 6))
-    magma = plt.cm.magma
+    fig, ax = _friends_axes(FRIENDS2_MACC_FIGSIZE, FRIENDS2_MACC_RECT)
     cost_min = float(np.nanmin(summed_costs[valid_idx]))
     cost_max = float(np.nanmax(summed_costs[valid_idx]))
     norm = colors.Normalize(vmin=cost_min, vmax=cost_max if cost_max > cost_min else cost_min + 1.0)
@@ -499,7 +559,7 @@ def plot_macc_curves(results_dir='results_baseline', figures_dir='results_figure
             continue
         cum_co2, mac_sorted = data
         plotted += 1
-        ax.step(cum_co2, mac_sorted, where='pre', color=magma(norm(summed_costs[i])), alpha=0.45, linewidth=1.1)
+        ax.step(cum_co2, mac_sorted, where='pre', color=COST_CMAP(norm(summed_costs[i])), alpha=0.45, linewidth=1.1)
 
     for i in [idx_min, idx_max]:
         data = scenario_data[i]
@@ -508,22 +568,22 @@ def plot_macc_curves(results_dir='results_baseline', figures_dir='results_figure
         cum_co2, mac_sorted = data
         plotted += 1
         ax.step(cum_co2, mac_sorted, where='pre', color='black', alpha=1.0, linewidth=2.8)
-        ax.step(cum_co2, mac_sorted, where='pre', color=magma(norm(summed_costs[i])), alpha=1.0, linewidth=2.0)
+        ax.step(cum_co2, mac_sorted, where='pre', color=COST_CMAP(norm(summed_costs[i])), alpha=1.0, linewidth=2.0)
 
     ax.set_xlabel('Cumulative CCS/BECCS capacity [MtCO₂ p.a.]', fontsize=14)
     ax.set_ylabel('Abatement cost of CCS/BECCS [£/tCO₂]', fontsize=14)
     ax.tick_params(labelsize=12)
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.axhline(0, color='gray', linestyle='-', linewidth=0.6)
-    sm = plt.cm.ScalarMappable(norm=norm, cmap=magma)
+    cax = fig.add_axes(FRIENDS2_CBAR_RECT)
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=COST_CMAP)
     sm.set_array([])
-    cbar = fig.colorbar(sm, ax=ax, pad=0.02)
+    cbar = fig.colorbar(sm, cax=cax)
     cbar.set_label('Summed cost [B£ p.a.]', fontsize=12)
     cbar.ax.tick_params(labelsize=11)
-    fig.tight_layout()
     if savefig:
         out = f'{figures_dir}/multiple_macc_curves.png'
-        fig.savefig(out, dpi=450, bbox_inches='tight')
+        fig.savefig(out, dpi=450)  # no tight crop: keep Friends2 panel height
         if debug:
             print(f"plot_macc_curves: APPLY_LR={APPLY_LR}, key={mac_key}, plotted={plotted}/{n_experiments}, min={idx_min}, max={idx_max}, {out}")
     return fig

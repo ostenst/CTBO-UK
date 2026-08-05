@@ -22,7 +22,7 @@ except ImportError:
 
 if __name__ == "__main__":
     ema_logging.log_to_stderr(ema_logging.INFO)
-    PHASEOUT = True
+    PHASEOUT = False
     results_dir = "results_phaseout" if PHASEOUT else "results_baseline"
     figures_dir = "results_figures"
     
@@ -160,7 +160,7 @@ if __name__ == "__main__":
         PolicySample("CAP-100£", PRICE_POLICY="CAP-100£"),
         PolicySample("CAP-200£", PRICE_POLICY="CAP-200£"),
     ]
-    n_scenarios = 10
+    n_scenarios = 1000
     
     results = perform_experiments(
         model,
