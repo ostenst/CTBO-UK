@@ -153,7 +153,7 @@ def plot_carbon_trajectories(results_dir='results_baseline', figures_dir='result
     ax.grid(True, linestyle='--', alpha=0.35)
     ax.tick_params(labelsize=12)
     _set_sparse_year_ticks(ax, years, end_year=end_year)
-    ax.legend(fontsize=10, loc='best')
+    ax.legend(fontsize=11, loc='upper left')
     if savefig:
         out = f'{figures_dir}/multiple_carbon_trajectories.png'
         fig.savefig(out, dpi=450)  # no tight crop: keep Friends1 panel width
@@ -214,7 +214,9 @@ def plot_plant_NPV(results_dir='results_baseline', figures_dir='results_figures'
     ax.set_xticklabels(['2030', '2040', '2050'])
     ax.grid(True, linestyle='--', alpha=0.35)
     ax.tick_params(labelsize=12)
-    ax.legend(fontsize=11, title='Sector', title_fontsize=12, loc='best')
+    leg = ax.legend(fontsize=12, title='Sector', title_fontsize=12, loc='best')
+    for handle in leg.legend_handles:
+        handle.set_sizes([55])
     if savefig:
         out = f'{figures_dir}/multiple_plant_NPV.png'
         fig.savefig(out, dpi=450)  # no tight crop: keep Friends1 panel width
@@ -244,10 +246,10 @@ def plot_carbon_prices(
     years = years_all[keep]
     magma = plt.cm.magma
     series = [
-        (_load_array(results_dir, 'cost_marginal')[:, keep] / pounds_to_EUR, magma(0.05), 'Marginal cost CCS/BECCS/DACCS'),
+        (_load_array(results_dir, 'cost_marginal')[:, keep] / pounds_to_EUR, magma(0.05), 'Marginal cost \nCCS/BECCS/DACCS'),
         (_load_array(results_dir, 'price_ETS')[:, keep] / pounds_to_EUR, magma(0.30), 'ETS price'),
         (_load_array(results_dir, 'price_CSU')[:, keep] / pounds_to_EUR, magma(0.625), 'CSU price'),
-        (_load_array(results_dir, 'cost_fuels')[:, keep] / pounds_to_EUR, '#41BCAE', 'Average embedded policy cost'),
+        (_load_array(results_dir, 'cost_fuels')[:, keep] / pounds_to_EUR, '#41BCAE', 'Average embedded \npolicy cost (in fuels)'),
     ]
 
     fig, ax = _friends_axes(FRIENDS2_PRICES_FIGSIZE, FRIENDS2_PRICES_RECT)
@@ -262,7 +264,7 @@ def plot_carbon_prices(
     ax.grid(True, linestyle='--', alpha=0.35)
     ax.tick_params(labelsize=12)
     _set_sparse_year_ticks(ax, years, end_year=end_year)
-    ax.legend(fontsize=9, loc='best')
+    ax.legend(fontsize=12, loc='best')
     if savefig:
         out = f'{figures_dir}/multiple_carbon_prices.png'
         fig.savefig(out, dpi=450)  # no tight crop: keep Friends2 panel height
@@ -281,7 +283,7 @@ def plot_cfd(
     savefig=True,
     debug=False,
 ):
-    """Single-panel CfD boxplots: government cost vs taxpayer benefit at selected years."""
+    """Two stacked CfD boxplot panels: taxpayer savings (top), government cost (bottom)."""
     if cap_policies is None:
         cap_policies = ['CAP-50£', 'CAP-100£', 'CAP-200£']
     if plot_years is None:
@@ -292,73 +294,72 @@ def plot_cfd(
     benefit_cfd = _load_array(results_dir, 'benefit_CfD_taxpayer')
     scale = 1e-6 / pounds_to_EUR  # k€ -> B£
     magma = plt.cm.magma
+    box_alpha = 0.75
     policy_colors = {
         'CAP-50£': magma(0.25),
         'CAP-100£': magma(0.65),
         'CAP-200£': colors.to_rgba('#41BCAE'),
     }
 
-    pol_gap = 0.30
-    year_gap = len(cap_policies) * pol_gap + 0.55
-    fig, ax = plt.subplots(figsize=(8.0, 5.5))
-    box_data, positions, facecolors, edgecolors = [], [], [], []
-    xtick_pos, xtick_labels = [], []
+    pol_gap = 0.35
+    year_gap = len(cap_policies) * pol_gap + 0.40
+    fig, axes = plt.subplots(2, 1, figsize=(8.0, 7.0), sharex=True)
+    ax_tax, ax_gov = axes
 
-    for i_year, year in enumerate(plot_years):
-        year_idx = int(np.where(years == year)[0][0])
-        cluster = i_year * year_gap
-        for i_pol, policy in enumerate(cap_policies):
-            mask = experiments['PRICE_POLICY'] == policy
-            if mask.sum() == 0:
-                continue
-            color = policy_colors[policy]
-            x0 = cluster + i_pol * pol_gap
-            # Same x for cost (down) and benefit (up)
-            box_data.append(-cost_cfd[mask, year_idx] * scale)
-            positions.append(x0)
-            facecolors.append((*color[:3], 0.85))
-            edgecolors.append('black')
-            box_data.append(benefit_cfd[mask, year_idx] * scale)
-            positions.append(x0)
-            facecolors.append((*color[:3], 0.35))
-            edgecolors.append('black')
-            xtick_pos.append(x0)
-            xtick_labels.append(policy.replace('CAP-', ''))
+    def _collect_boxes(arr):
+        box_data, positions, facecolors = [], [], []
+        for i_year, year in enumerate(plot_years):
+            year_idx = int(np.where(years == year)[0][0])
+            cluster = i_year * year_gap
+            for i_pol, policy in enumerate(cap_policies):
+                mask = experiments['PRICE_POLICY'] == policy
+                if mask.sum() == 0:
+                    continue
+                color = policy_colors[policy]
+                x0 = cluster + i_pol * pol_gap
+                box_data.append(arr[mask, year_idx] * scale)
+                positions.append(x0)
+                facecolors.append((*color[:3], box_alpha))
+        return box_data, positions, facecolors
 
-    bp = ax.boxplot(
-        box_data, positions=positions, widths=0.28, patch_artist=True,
-        showfliers=False, medianprops=dict(color='black', linewidth=1.5),
-    )
-    for patch, fc, ec in zip(bp['boxes'], facecolors, edgecolors):
-        patch.set_facecolor(fc)
-        patch.set_edgecolor(ec)
-        patch.set_linewidth(1.0)
+    panels = [
+        (ax_tax, benefit_cfd, 'Taxpayer savings [B£/y]'),
+        (ax_gov, cost_cfd, 'Government cost [B£/y]'),
+    ]
+    for ax, arr, ylabel in panels:
+        box_data, positions, facecolors = _collect_boxes(arr)
+        bp = ax.boxplot(
+            box_data, positions=positions, widths=0.28, patch_artist=True,
+            showfliers=False, medianprops=dict(color='black', linewidth=1.5),
+        )
+        for patch, fc in zip(bp['boxes'], facecolors):
+            patch.set_facecolor(fc)
+            patch.set_edgecolor('black')
+            patch.set_linewidth(1.0)
+        ax.axhline(0, color='black', linewidth=1.0, zorder=1)
+        ax.set_ylabel(ylabel, fontsize=13)
+        ax.tick_params(labelsize=12)
+        ax.grid(True, axis='y', linestyle='--', alpha=0.35)
 
-    ax.axhline(0, color='black', linewidth=1.0, zorder=1)
-
-    # Year separators / labels under policy ticks
-    for i_year, year in enumerate(plot_years):
-        cluster = i_year * year_gap
-        mid = cluster + (len(cap_policies) - 1) * pol_gap / 2
-        ax.text(mid, -0.12, str(year), transform=ax.get_xaxis_transform(),
-                ha='center', va='top', fontsize=13, fontweight='bold')
+    # Year ticks only (CAP policies identified via color legend)
+    year_tick_pos = [
+        i_year * year_gap + (len(cap_policies) - 1) * pol_gap / 2
+        for i_year in range(len(plot_years))
+    ]
+    ax_gov.set_xticks(year_tick_pos)
+    ax_gov.set_xticklabels([str(y) for y in plot_years], fontsize=13)
 
     from matplotlib.patches import Patch
-    legend_handles = []
-    for p in cap_policies:
-        c = policy_colors[p]
-        legend_handles.append(Patch(facecolor=(*c[:3], 0.85), edgecolor='black', label=f'{p} gov. cost'))
-        legend_handles.append(Patch(facecolor=(*c[:3], 0.35), edgecolor='black', label=f'{p} taxpayer'))
-
-    ax.set_xticks(xtick_pos)
-    ax.set_xticklabels(xtick_labels, fontsize=11)
-    ax.set_ylabel('Annual value [B£/y]\n(NET benefit ↑ / GROSS gov. cost ↓)', fontsize=13)
-    # Show absolute magnitudes on both sides of zero
-    yticks = ax.get_yticks()
-    ax.set_yticklabels([f'{abs(y):.2g}' for y in yticks])
-    ax.tick_params(labelsize=12)
-    ax.grid(True, axis='y', linestyle='--', alpha=0.35)
-    ax.legend(handles=legend_handles, fontsize=9, ncol=2, loc='best')
+    label_strings = {
+        'CAP-50£': 'CfD replacing CAP-50£',
+        'CAP-100£': 'CfD replacing CAP-100£',
+        'CAP-200£': 'CfD replacing CAP-200£',
+    }
+    legend_handles = [
+        Patch(facecolor=(*policy_colors[p][:3], box_alpha), edgecolor='black', label=label_strings[p])
+        for p in cap_policies
+    ]
+    ax_tax.legend(handles=legend_handles, fontsize=11, loc='best')
     fig.tight_layout()
     if savefig:
         out = f'{figures_dir}/multiple_cfd.png'
@@ -373,7 +374,8 @@ def plot_tax_and_gas(
     figures_dir='results_figures',
     policies=None,
     start_year=2025,
-    end_year=2035,
+    near_start_year=2027,
+    near_end_year=2035,
     end_year_long=2050,
     pounds_to_EUR=1.15,
     savefig=True,
@@ -405,15 +407,16 @@ def plot_tax_and_gas(
         'ETS': '-',
     }
 
-    keep_near = years_all <= end_year
+    keep_near = (years_all >= near_start_year) & (years_all <= near_end_year)
     keep_long = years_all <= end_year_long
     years_near = years_all[keep_near]
     years_long = years_all[keep_long]
+    near_ticks = [near_start_year, 2032, near_end_year]
 
     fig, axes = plt.subplots(1, 3, figsize=(10, 7))
     panels = [
-        (axes[0], costs_tax_all[:, keep_near], years_near, tax_scale, 'Tax costs [B£/y]', [2030, 2035]),
-        (axes[1], gas_pence[:, keep_near], years_near, 1.0, 'Gas price increase [p/kWh]', [2030, 2035]),
+        (axes[0], costs_tax_all[:, keep_near], years_near, tax_scale, 'Tax costs [B£/y]', near_ticks),
+        (axes[1], gas_pence[:, keep_near], years_near, 1.0, 'Gas price increase [p/kWh]', near_ticks),
         (axes[2], gas_pence[:, keep_long], years_long, 1.0, 'Gas price increase [p/kWh]', [2030, 2040, 2050]),
     ]
     for ax, arr, years, scale, ylabel, ticks in panels:
@@ -432,7 +435,7 @@ def plot_tax_and_gas(
         ax.grid(True, linestyle='--', alpha=0.35)
         ax.set_xlim(int(years.min()), int(years.max()))
         ax.set_xticks(ticks)
-        ax.legend(fontsize=9, loc='best')
+        ax.legend(fontsize=12, loc='best')
 
     fig.tight_layout()
     if savefig:
@@ -452,9 +455,9 @@ def plot_policy_costs(
     savefig=True,
     debug=False,
 ):
-    """Three panels of annual policy costs with uncertainty: CAP-100£, CTBO, ETS."""
+    """Three panels of annual policy costs: CTBO (as 'ETS pretend'), ETS, CAP-100£."""
     if policies is None:
-        policies = ['CAP-100£', 'CTBO', 'ETS']
+        policies = ['CTBO', 'ETS', 'CAP-100£']
     experiments = _load_experiments(results_dir)
     years = _get_years(results_dir, start_year=start_year, key='costs_suppliers')
     suppliers = _load_array(results_dir, 'costs_suppliers')
@@ -463,12 +466,18 @@ def plot_policy_costs(
     consumers = _load_array(results_dir, 'costs_consumers')
     scale = 1e-6 / pounds_to_EUR  # k€ -> B£
     magma = plt.cm.magma
+    emitters_color = magma(0.35)
     series = [
-        (suppliers, magma(0.1), 'Suppliers'),
-        (emitters, magma(0.35), 'Emitters'),
-        (tax, magma(0.6), 'Tax'),
-        (consumers, magma(0.85), 'Consumers'),
+        (suppliers, magma(0.1), 'Supplier costs'),
+        (emitters, emitters_color, 'Emitter costs'),
+        (tax, magma(0.625), 'Emitter tax'),
+        (consumers, magma(0.80), 'Consumer costs (sum)'),
     ]
+    panel_titles = {
+        'CTBO': 'ETS-without tax',
+        'ETS': 'ETS-with tax',
+        'CAP-100£': 'CAP-100£',
+    }
 
     fig, axes = plt.subplots(1, len(policies), figsize=(3.333 * len(policies), 7), sharex=True, sharey=True)
     if len(policies) == 1:
@@ -477,31 +486,48 @@ def plot_policy_costs(
     for ax, policy in zip(axes, policies):
         mask = experiments['PRICE_POLICY'] == policy
         if mask.sum() == 0:
-            ax.set_title(f'{policy} (no data)', fontsize=14)
+            ax.set_title(f'{panel_titles.get(policy, policy)} (no data)', fontsize=14)
             continue
-        for arr, color, label in series:
+        pretend = policy == 'CTBO'
+        if pretend:
+            # CTBO suppliers drawn as Emitters (ETS-like), skip real emitters series
+            panel_series = [
+                (suppliers, emitters_color, 'Emitters'),
+                (tax, magma(0.6), 'Tax'),
+                (consumers, magma(0.85), 'Consumers'),
+            ]
+            npv_text = (
+                f"NPV suppliers: {experiments.loc[mask, 'NPV_costs_emitters'].median() * scale:.3f} B£\n"
+                f"NPV emitters: {experiments.loc[mask, 'NPV_costs_suppliers'].median() * scale:.3f} B£\n"
+                f"NPV tax: {experiments.loc[mask, 'NPV_costs_tax'].median() * scale:.3f} B£\n"
+                f"NPV consumers: {experiments.loc[mask, 'NPV_costs_consumers'].median() * scale:.3f} B£"
+            )
+        else:
+            panel_series = series
+            npv_text = (
+                f"NPV suppliers: {experiments.loc[mask, 'NPV_costs_suppliers'].median() * scale:.3f} B£\n"
+                f"NPV emitters: {experiments.loc[mask, 'NPV_costs_emitters'].median() * scale:.3f} B£\n"
+                f"NPV tax: {experiments.loc[mask, 'NPV_costs_tax'].median() * scale:.3f} B£\n"
+                f"NPV consumers: {experiments.loc[mask, 'NPV_costs_consumers'].median() * scale:.3f} B£"
+            )
+        for arr, color, label in panel_series:
             med, p5, p95 = _panel_stats(arr, mask)
             ax.plot(years, med * scale, lw=2.3, color=color, label=label)
             ax.fill_between(years, p5 * scale, p95 * scale, color=color, alpha=0.2)
-        npv_text = (
-            f"NPV suppliers: {experiments.loc[mask, 'NPV_costs_suppliers'].median() * scale:.3f} B£\n"
-            f"NPV emitters: {experiments.loc[mask, 'NPV_costs_emitters'].median() * scale:.3f} B£\n"
-            f"NPV tax: {experiments.loc[mask, 'NPV_costs_tax'].median() * scale:.3f} B£\n"
-            f"NPV consumers: {experiments.loc[mask, 'NPV_costs_consumers'].median() * scale:.3f} B£"
-        )
         ax.text(
-            0.02, 0.98, npv_text, transform=ax.transAxes, va='top', ha='left', fontsize=10,
+            0.02, 0.98, npv_text, transform=ax.transAxes, va='top', ha='left', fontsize=12,
             bbox=dict(facecolor='white', alpha=0.85, edgecolor='gray'),
         )
-        ax.set_title(policy, fontsize=14)
+        ax.set_title(panel_titles.get(policy, policy), fontsize=14)
         ax.grid(True, linestyle='--', alpha=0.35)
         ax.tick_params(labelsize=12)
         ax.set_xlabel('Year', fontsize=14)
         _set_sparse_year_ticks(ax, years)
 
     axes[0].set_ylabel('Annual policy costs [B£/y]', fontsize=14)
-    handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc='upper right', fontsize=11)
+    # Legend inside a non-pretend panel so Suppliers/Emitters both appear
+    legend_ax = axes[1] if len(axes) > 1 else axes[0]
+    legend_ax.legend(fontsize=12, loc='center left')
     fig.tight_layout()
     if savefig:
         out = f'{figures_dir}/multiple_policy_costs.png'
