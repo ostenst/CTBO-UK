@@ -199,7 +199,7 @@ def plot_plant_NPV(results_dir='results_baseline', figures_dir='results_figures'
         )
     ax.axhline(0, color='grey', linestyle='--', linewidth=1.0, alpha=0.7)
     ax.set_xlabel('Investment year', fontsize=14)
-    ax.set_ylabel('Plant NPV [M£]', fontsize=14)
+    ax.set_ylabel('Plant median NPV [M£]', fontsize=14)
     y_all = np.concatenate(y_vals) if y_vals else np.array([1.0])
     # Log if all positive; else symlog so negatives remain visible
     if np.nanmin(y_all) > 0:
@@ -294,7 +294,7 @@ def plot_cfd(
     benefit_cfd = _load_array(results_dir, 'benefit_CfD_taxpayer')
     scale = 1e-6 / pounds_to_EUR  # k€ -> B£
     magma = plt.cm.magma
-    box_alpha = 0.75
+    box_alpha = 0.95
     policy_colors = {
         'CAP-50£': magma(0.25),
         'CAP-100£': magma(0.65),

@@ -472,5 +472,156 @@ fig2, ax2 = create_sector_map(
 output_file2 = f'{figures_dir}/map_sectors.png'
 plt.savefig(output_file2, dpi=400, bbox_inches='tight')
 
+def plot_desnz_fuel_balances(
+    petrol_path='data/DESNZ_petrol_balances.xlsx',
+    gas_path='data/DESNZ_gas_balances.xlsx',
+    emissions_path='data/DESNZ_emission_balances.xlsx',
+    figures_dir='results_figures',
+    year_start=1998,
+    year_end=2026,
+    savefig=True,
+    debug=False,
+):
+    """Plot DESNZ petrol, gas, and territorial GHG emission balances."""
+    import re
+
+    def _norm(label):
+        return re.sub(r'\s*\[note.*?\]', '', str(label)).strip().lower()
+
+    def _year_from_header(val):
+        m = re.search(r'(19|20)\d{2}', str(val))
+        return int(m.group(0)) if m else None
+
+    def _net_imports(imports, exports):
+        # DESNZ exports are signed negative; net = imports - |exports| = imports + exports
+        return float(imports) + float(exports)
+
+    # Fuel balances available through 2025; GHG inventory through 2024; plot extends to year_end
+    fuel_end = min(year_end, 2025)
+
+    # --- Petrol: one sheet per year, thousand tonnes → Mt ---
+    years = list(range(year_start, fuel_end + 1))
+    petrol = {k: [] for k in ('production', 'demand', 'net_imports')}
+    for year in years:
+        df = pd.read_excel(petrol_path, sheet_name=str(year), header=None)
+        rows = {_norm(v): i for i, v in enumerate(df.iloc[:, 0]) if pd.notna(v)}
+        total_col = df.shape[1] - 1
+        petrol['production'].append(float(df.iloc[rows['production'], total_col]) / 1000.0)
+        petrol['demand'].append(float(df.iloc[rows['total demand'], total_col]) / 1000.0)
+        petrol['net_imports'].append(
+            _net_imports(df.iloc[rows['imports'], total_col], df.iloc[rows['exports'], total_col]) / 1000.0
+        )
+
+    # --- Gas: sheet 4.1, GWh → TWh ---
+    gdf = pd.read_excel(gas_path, sheet_name='4.1', header=None)
+    year_cols = {}
+    for j, h in enumerate(gdf.iloc[5].tolist()):
+        y = _year_from_header(h)
+        if y is not None and year_start <= y <= fuel_end:
+            year_cols[y] = j
+    grow = {_norm(v): i for i, v in enumerate(gdf.iloc[:, 0]) if pd.notna(v)}
+    gas = {k: [] for k in ('production', 'demand', 'net_imports')}
+    gas_years = sorted(year_cols)
+    for y in gas_years:
+        j = year_cols[y]
+        gas['production'].append(float(gdf.iloc[grow['production'], j]) / 1000.0)
+        gas['demand'].append(float(gdf.iloc[grow['total demand'], j]) / 1000.0)
+        gas['net_imports'].append(
+            _net_imports(gdf.iloc[grow['imports'], j], gdf.iloc[grow['exports'], j]) / 1000.0
+        )
+
+    # --- GHG emissions: sheet 1.1, MtCO2e (data through 2024) ---
+    edf = pd.read_excel(emissions_path, sheet_name='1.1', header=None)
+    eyear_cols = {}
+    for j, h in enumerate(edf.iloc[5].tolist()):
+        y = _year_from_header(h)
+        if y is not None and year_start <= y <= 2024:
+            eyear_cols[y] = j
+    erow = {_norm(v): i for i, v in enumerate(edf.iloc[:, 0]) if pd.notna(v)}
+    non_co2_keys = [
+        'methane (ch4)',
+        'nitrous oxide (n2o)',
+        'hydrofluorocarbons (hfcs)',
+        'perfluorocarbons (pfcs)',
+        'sulphur hexafluoride (sf6)',
+        'nitrogen trifluoride (nf3)',
+    ]
+    emis_years = sorted(eyear_cols)
+    net_co2 = []
+    non_co2 = []
+    for y in emis_years:
+        j = eyear_cols[y]
+        net_co2.append(float(edf.iloc[erow['net co2 emissions (emissions minus removals)'], j]))
+        non_co2.append(sum(float(edf.iloc[erow[k], j]) for k in non_co2_keys))
+
+    if debug:
+        print(
+            f"plot_desnz_fuel_balances: petrol={years[0]}-{years[-1]}, "
+            f"gas={gas_years[0]}-{gas_years[-1]}, emis={emis_years[0]}-{emis_years[-1]}, xlim={year_end}"
+        )
+
+    magma = plt.cm.magma
+    fill_color = '#41BCAE'
+    gray = '0.45'
+
+    fig, axes = plt.subplots(1, 3, figsize=(11, 6))
+
+    # Panel 0: GHG emissions (leftmost)
+    ax_e = axes[0]
+    ax_e.plot(emis_years, net_co2, lw=2.2, color=magma(0.15), label='Net CO₂ emissions', zorder=3)
+    ax_e.plot(emis_years, non_co2, lw=2.2, color=magma(0.7), label='Non-CO₂ greenhouse gases', zorder=3)
+    # Continue last inventory values to year_end as dashed gray
+    ax_e.plot([2024, year_end], [net_co2[-1], net_co2[-1]], lw=2.2, color=gray, ls='--', zorder=3)
+    ax_e.plot([2024, year_end], [non_co2[-1], non_co2[-1]], lw=2.2, color=gray, ls='--', zorder=3)
+    gcs_y = 3.2
+    ax_e.scatter(
+        [2025], [gcs_y], s=55, color='#41BCAE', edgecolors='black', linewidths=1.0, zorder=5,
+        label='GCS capacity [MtCO2 p.a.]\nof Padeswood, Protos, Teeside',
+    )
+    ax_e.annotate(
+        f'{gcs_y:g}', xy=(2022, gcs_y), xytext=(8, 8), textcoords='offset points',
+        fontsize=11, color='black',
+    )
+    ax_e.set_xlabel('Year', fontsize=13)
+    ax_e.set_ylabel('GHG emissions [MtCO₂eq p.a.]', fontsize=13)
+    ax_e.tick_params(labelsize=11)
+    ax_e.grid(True, linestyle='--', alpha=0.35)
+    ax_e.set_xlim(year_start, year_end)
+    ax_e.set_ylim(bottom=0)
+    ax_e.legend(fontsize=9, loc='upper right')
+
+    # Panels 1–2: petroleum and gas
+    fuel_panels = [
+        (axes[1], years, petrol, 'Petroleum products [Mt p.a.]', 'petroleum'),
+        (axes[2], gas_years, gas, 'Natural gas [TWh p.a.]', 'gas'),
+    ]
+    for ax, yrs, data, ylabel, fuel in fuel_panels:
+        ax.fill_between(
+            yrs, 0, data['net_imports'], color=fill_color, alpha=0.45,
+            label=f'Net imports ({fuel})', step=None,
+        )
+        ax.plot(yrs, data['production'], lw=2.2, color=magma(0.05),
+                label=f'Domestic production ({fuel})', zorder=3)
+        ax.plot(yrs, data['demand'], lw=2.2, color=magma(0.625),
+                label=f'Demand ({fuel})', zorder=3)
+        ax.axhline(0, color='gray', lw=0.8, zorder=1)
+        ax.set_xlabel('Year', fontsize=13)
+        ax.set_ylabel(ylabel, fontsize=13)
+        ax.tick_params(labelsize=11)
+        ax.grid(True, linestyle='--', alpha=0.35)
+        ax.set_xlim(year_start, year_end)
+        ax.legend(fontsize=9, loc='upper right')
+
+    fig.tight_layout()
+    if savefig:
+        out = f'{figures_dir}/desnz_fuel_balances.png'
+        fig.savefig(out, dpi=400, bbox_inches='tight')
+        if debug:
+            print(f"plot_desnz_fuel_balances: {out}")
+    return fig
+
+
+plot_desnz_fuel_balances(figures_dir=figures_dir, debug=True)
+
 print("Wrote plants_clean.csv and map_concentrations.png. Run `model.py` for single-scenario analysis.")
 plt.show()
