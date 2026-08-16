@@ -342,12 +342,12 @@ def create_sector_map(europe, plants_gdf, bubble_scaling=1.0, remaining_gdf=None
     }
     magma = plt.cm.magma
     base_colors = {
-        'cement': magma(0.10),
-        'ccgt': magma(0.30),
-        'drax': magma(0.50),
-        'steel': magma(0.70),
-        'refinery': magma(0.90),
-        'waste': '#62a7a6',
+        'cement': magma(0.625),
+        'ccgt': magma(0.10),
+        'drax': "#52E7D6",
+        'steel': magma(0.925),
+        'refinery': magma(0.750),
+        'waste': '#41BCAE',
     }
     fallback_colors = plt.cm.tab10(np.linspace(0, 1, max(1, len(sectors))))
     sector_colors = {}
@@ -366,7 +366,7 @@ def create_sector_map(europe, plants_gdf, bubble_scaling=1.0, remaining_gdf=None
             sector_data.geometry.x, sector_data.geometry.y,
             s=sector_data['ktCO2'] * bubble_scaling, 
             c=[sector_colors[sector]],
-            alpha=0.7,
+            alpha=0.75,
             edgecolors='black', linewidth=0.5,
             label=sector_labels_dict[sector]
         )
@@ -407,7 +407,7 @@ def create_sector_map(europe, plants_gdf, bubble_scaling=1.0, remaining_gdf=None
                 shipping.geometry.y,
                 marker='D',
                 s=120,
-                c='#E55064',
+                color=magma(0.625),  # use color=, not c= (RGBA tuple ≠ colormapped values)
                 edgecolors='black',
                 linewidth=1.0,
                 label='Export hub'
@@ -464,7 +464,7 @@ plt.savefig(output_file, dpi=400, bbox_inches='tight')
 fig2, ax2 = create_sector_map(
     europe,
     plants_gdf,
-    bubble_scaling=0.8,
+    bubble_scaling=1.0,
     remaining_gdf=remaining_gdf,
     hubs_gdf=hubs_gdf,
     debug=True

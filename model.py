@@ -526,7 +526,7 @@ def simulate_ctbo(
     transport_hubs,
     single_run = False,
 
-    PHASEOUT = True,
+    PHASEOUT = False,
     DISCOUNT_RATE = 0.035,
     CTBO_QUADRATIC = 0.4,
     ETS_START = 45, # [£/tCO2]
@@ -787,6 +787,11 @@ def simulate_ctbo(
         MACC.to_csv(f'{results_dir}/macc.csv', index=False)
     if single_run:
         plot_macc(MACC, pounds_to_EUR=pounds_to_EUR, figures_dir=figures_dir, savefig=True)
+        for _areas in ('i,ii', 'i,ii,iii', 'all'):
+            plot_macc_areas(
+                MACC, areas=_areas, pounds_to_EUR=pounds_to_EUR,
+                figures_dir=figures_dir, savefig=True,
+            )
 
     # ------------------- SIMULATE THE CTBO/ETS policies ---------------------
     # Calculate diffuse carbon trajectories by subtracting point-source carbon from total supply
@@ -1453,6 +1458,131 @@ def plot_macc(macc, pounds_to_EUR=1.15, macc_shift=0.20, figures_dir='results_fi
         print(f"plot_macc axis limits: xlim={xlim}, ylim={ylim}")
 
     return len(macc_plot)
+
+
+def plot_macc_areas(
+    macc,
+    price_E=150.0,
+    capacity_target=70.0,
+    cost_marginal=None,
+    areas='all',
+    pounds_to_EUR=1.15,
+    figures_dir='results_figures',
+    savefig=False,
+    debug=False,
+):
+    """
+    Plot the MACC curve with selected policy areas shaded (no divider lines).
+
+    areas: 'i,ii' | 'i,ii,iii' | 'all' (i–v)
+
+    With E = price_E, Q* = capacity_target, M = cost_marginal (default MAC at Q*):
+      all     – i: MAC→E (MAC<E); ii: 0→min(MAC,E); iii: 0→E (x>Q*);
+                iv: max(MAC,E)→M; v: E→MAC (MAC>E); all left of Q* except iii
+      i,ii / i,ii,iii – no E-split: i: MAC→M; ii: 0→MAC (left of Q*);
+                        iii (if included): 0→M (right of Q*)
+    """
+    area_aliases = {
+        'i,ii': frozenset({'i', 'ii'}),
+        'i,ii,iii': frozenset({'i', 'ii', 'iii'}),
+        'all': frozenset({'i', 'ii', 'iii', 'iv', 'v'}),
+        'i,ii,iii,iv,v': frozenset({'i', 'ii', 'iii', 'iv', 'v'}),
+    }
+    if isinstance(areas, str):
+        key = areas.strip().lower().replace(' ', '')
+        if key not in area_aliases:
+            raise ValueError(f"areas must be one of {list(area_aliases)}, got {areas!r}")
+        show = area_aliases[key]
+    else:
+        show = frozenset(areas)
+
+    macc_plot = macc[['stack', 'ktCO2tot_ccs', 'MAC']].dropna(subset=['ktCO2tot_ccs', 'MAC']).copy()
+    if macc_plot.empty:
+        return 0
+
+    macc_plot = macc_plot.sort_values(by='MAC')
+    macc_plot['cumulative_kt'] = macc_plot['ktCO2tot_ccs'].cumsum()
+    macc_nonzero = macc_plot[macc_plot['MAC'] != 0].copy()
+    x = macc_nonzero['cumulative_kt'].to_numpy(dtype=float) / 1000.0
+    y = macc_nonzero['MAC'].to_numpy(dtype=float) / pounds_to_EUR
+    if len(x) == 0:
+        return 0
+
+    E = float(price_E)
+    Q = float(capacity_target)
+    use_E_split = {'iv', 'v'} & show  # full five-area layout uses E
+
+    def _mac_at(xq):
+        xq = np.asarray(xq, dtype=float)
+        idx = np.searchsorted(x, xq, side='left')
+        idx = np.clip(idx, 0, len(y) - 1)
+        return y[idx]
+
+    if cost_marginal is None:
+        M = float(_mac_at(Q))
+    else:
+        M = float(cost_marginal)
+    if use_E_split:
+        M = max(M, E)
+
+    x_max = float(np.max(x))
+    xlim = (0.0, x_max * 1.02)
+    ylim = (0.0, max(float(np.max(y)), M) * 1.08)
+
+    xd = np.linspace(0.0, x_max, 2500)
+    ym = _mac_at(xd)
+    left = xd <= Q
+    right = xd >= Q
+
+    magma = plt.cm.magma
+    c_low, c_high = magma(0.125), magma(0.625)
+    # Differing opacities within each color family
+    a_i, a_ii, a_iii = 0.40, 0.55, 0.70
+    a_iv, a_v = 0.40, 0.70
+
+    fig, ax = plt.subplots(figsize=(9, 3.2))
+
+    if use_E_split:
+        # Full layout: ceiling E for i–iii bottoms, M for iv
+        if 'ii' in show:
+            ax.fill_between(xd, 0.0, np.minimum(ym, E), where=left, color=c_low, alpha=a_ii, linewidth=0, zorder=1)
+        if 'iii' in show:
+            ax.fill_between(xd, 0.0, E, where=right, color=c_low, alpha=a_iii, linewidth=0, zorder=1)
+        if 'i' in show:
+            ax.fill_between(xd, ym, E, where=left & (ym < E), color=c_low, alpha=a_i, linewidth=0, zorder=2)
+        if 'v' in show:
+            ax.fill_between(xd, E, ym, where=left & (ym > E), color=c_high, alpha=a_v, linewidth=0, zorder=2)
+        if 'iv' in show:
+            ax.fill_between(
+                xd, np.maximum(ym, E), M, where=left & (np.maximum(ym, E) < M),
+                color=c_high, alpha=a_iv, linewidth=0, zorder=2,
+            )
+    else:
+        # Simplified: extend fills up to marginal cost M (no E split)
+        if 'ii' in show:
+            ax.fill_between(xd, 0.0, np.minimum(ym, M), where=left, color=c_low, alpha=a_ii, linewidth=0, zorder=1)
+        if 'iii' in show:
+            ax.fill_between(xd, 0.0, M, where=right, color=c_low, alpha=a_iii, linewidth=0, zorder=1)
+        if 'i' in show:
+            ax.fill_between(xd, ym, M, where=left & (ym < M), color=c_low, alpha=a_i, linewidth=0, zorder=2)
+
+    ax.step(x, y, where='pre', color='0.35', linewidth=2.2, zorder=4)
+
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    ax.set_xlabel('Cumulative CCS/BECCS capacity [MtCO₂]', fontsize=14)
+    ax.set_ylabel('Abatement cost of CCS/BECCS [£/tCO₂]', fontsize=14)
+    ax.grid(True, linestyle='--', alpha=0.4)
+    ax.tick_params(labelsize=12, labelbottom=False, labelleft=False)
+    fig.tight_layout()
+    if savefig:
+        order = ['i', 'ii', 'iii', 'iv', 'v']
+        tag = 'all' if show == area_aliases['all'] else '_'.join(a for a in order if a in show)
+        out = f'{figures_dir}/single_macc_areas_{tag}.png'
+        fig.savefig(out, dpi=450, bbox_inches='tight')
+        if debug:
+            print(f"plot_macc_areas: areas={tag}, E={E}, Q={Q}, M={M}, {out}")
+    return fig
 
 if __name__ == "__main__":
     plants_clean = pd.read_csv('results_baseline/plants_clean.csv')
