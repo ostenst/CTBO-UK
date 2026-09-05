@@ -336,17 +336,17 @@ def create_sector_map(europe, plants_gdf, bubble_scaling=1.0, remaining_gdf=None
         'ccgt': 'Gas power',
         'cement': 'Cement',
         'drax': 'Drax',
-        'refinery': 'Refinery',
-        'steel': 'Steel',
-        'waste': 'Waste',
+        'refinery': 'Refinery (stack)',
+        'steel': 'Steel (stack)',
+        'waste': 'Waste-to-energy',
     }
     magma = plt.cm.magma
     base_colors = {
-        'cement': magma(0.625),
+        'cement': magma(0.325),
         'ccgt': magma(0.10),
         'drax': "#52E7D6",
         'steel': magma(0.925),
-        'refinery': magma(0.750),
+        'refinery': magma(0.625),
         'waste': '#41BCAE',
     }
     fallback_colors = plt.cm.tab10(np.linspace(0, 1, max(1, len(sectors))))

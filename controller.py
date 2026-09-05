@@ -37,7 +37,6 @@ if __name__ == "__main__":
         # Scenario uncertainties
         RealParameter("DIFFUSE_END_FRACTION", 0.05, 0.50),
         CategoricalParameter("DACCS_SCENARIO", ['£322', '£391']),
-        CategoricalParameter("LR", ['0%', '5%', '10%']), # lower than 12% because initial costs are not FOAK!
         # Sector-specific uncertainties
         RealParameter("fraction_limestone", 0.55, 0.65),  # [-] cementite fraction
         RealParameter("fraction_fossil_waste", 0.40, 0.55),  # [-] fossil fraction in waste
@@ -76,6 +75,7 @@ if __name__ == "__main__":
     # Levers: policy choices set by each explicit policy below (must stay in sync with Policy/Sample kwargs).
     model.levers = [
         CategoricalParameter("PRICE_POLICY", ['CTBO', 'ETS', 'CAP-50£', 'CAP-100£', 'CAP-200£']),
+        CategoricalParameter("LR", ['0%', '5%', '10%']),  # lower than 12% because initial costs are not FOAK
     ]
 
     # Outcomes: metrics to track (aligned with simulate_ctbo return keys)
@@ -153,14 +153,14 @@ if __name__ == "__main__":
 
     # Run experiments
     # Explicit policies: kwargs must match lever names (a dict as 2nd positional arg is wrong — it becomes unique_id).
+    price_policies = ['CTBO', 'ETS', 'CAP-50£', 'CAP-100£', 'CAP-200£']
+    learning_rates = ['0%', '5%', '10%']
     policies = [
-        PolicySample("CTBO", PRICE_POLICY="CTBO"),
-        PolicySample("ETS", PRICE_POLICY="ETS"),
-        PolicySample("CAP-50£", PRICE_POLICY="CAP-50£"),
-        PolicySample("CAP-100£", PRICE_POLICY="CAP-100£"),
-        PolicySample("CAP-200£", PRICE_POLICY="CAP-200£"),
+        PolicySample(f"{price}_{lr}", PRICE_POLICY=price, LR=lr)
+        for price in price_policies
+        for lr in learning_rates
     ]
-    n_scenarios = 1000
+    n_scenarios = 100
     
     results = perform_experiments(
         model,

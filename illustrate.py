@@ -40,6 +40,12 @@ def _panel_stats(arr, mask=None):
     return np.nanmedian(panel, axis=0), np.nanpercentile(panel, 5, axis=0), np.nanpercentile(panel, 95, axis=0)
 
 
+def _lr_mask(experiments, lr='5%'):
+    if lr is None or 'LR' not in experiments.columns:
+        return pd.Series(True, index=experiments.index)
+    return experiments['LR'].astype(str) == str(lr)
+
+
 GREEN_CMAP = [
     "#144842",
     "#237067",
@@ -93,11 +99,11 @@ def _set_sparse_year_ticks(ax, years, end_year=2050):
 def _get_sector_colors(sectors):
     magma = plt.cm.magma
     base = {
-        'cement': magma(0.10),
-        'ccgt': magma(0.30),
-        'refinery': magma(0.85),
-        'steel': magma(0.70),
-        'drax': magma(0.50),
+        'cement': magma(0.325),
+        'ccgt': magma(0.10),
+        'drax': "#52E7D6",
+        'steel': magma(0.925),
+        'refinery': magma(0.625),
         'waste': '#41BCAE',
     }
     fallback = plt.cm.tab10(np.linspace(0, 1, max(1, len(sectors))))
@@ -107,7 +113,17 @@ def _get_sector_colors(sectors):
     }
 
 
-def plot_carbon_trajectories(results_dir='results_baseline', figures_dir='results_figures', start_year=2025, end_year=2050, savefig=True, debug=False):
+SECTOR_LABELS = {
+    'ccgt': 'Gas power',
+    'waste': 'Waste-to-energy',
+    'cement': 'Cement',
+    'drax': 'Drax',
+    'steel': 'Steel (stack)',
+    'refinery': 'Refinery (stack)',
+}
+
+
+def plot_carbon_trajectories(results_dir='results_baseline', figures_dir='results_figures', start_year=2025, end_year=2050, display_legend=False, savefig=True, debug=False):
     """One panel: median carbon trajectories across all PRICE_POLICY experiments."""
     years_all = _get_years(results_dir, start_year=start_year, key='supply_ktCO2f')
     keep = years_all <= end_year
@@ -123,7 +139,7 @@ def plot_carbon_trajectories(results_dir='results_baseline', figures_dir='result
     fig, ax = _friends_axes(FRIENDS1_FIGSIZE, FRIENDS1_RECT)
     for arr, color, label in [
         (supply, magma(0.0), 'Fossil fuel supply (coal, oil, gas)'),
-        (stored_total, magma(0.45), 'Storage capacity (CCS, BECCS, DACCS)'),
+        (stored_total, magma(0.55), 'Storage capacity (CCS, BECCS, DACCS)'),
         (stored_cdr, '#41BCAE', 'Storage capacity (BECCS, DACCS)'),
     ]:
         med, p5, p95 = _panel_stats(arr)
@@ -148,12 +164,14 @@ def plot_carbon_trajectories(results_dir='results_baseline', figures_dir='result
         if debug:
             print(f"plot_carbon_trajectories DACCS marker: year={med_year}, ktCO2b={med_b:.1f}")
 
+    ax.set_ylim(0, 300)
     ax.set_ylabel('Carbon [MtCO₂/y]', fontsize=14)
     ax.set_xlabel('Year', fontsize=14)
     ax.grid(True, linestyle='--', alpha=0.35)
     ax.tick_params(labelsize=12)
     _set_sparse_year_ticks(ax, years, end_year=end_year)
-    ax.legend(fontsize=11, loc='upper left')
+    if display_legend:
+        ax.legend(fontsize=11, loc='upper left')
     if savefig:
         out = f'{figures_dir}/multiple_carbon_trajectories.png'
         fig.savefig(out, dpi=450)  # no tight crop: keep Friends1 panel width
@@ -162,7 +180,7 @@ def plot_carbon_trajectories(results_dir='results_baseline', figures_dir='result
     return fig
 
 
-def plot_plant_NPV(results_dir='results_baseline', figures_dir='results_figures', pounds_to_EUR=1.15, end_year=2050, savefig=True, debug=False):
+def plot_plant_NPV(results_dir='results_baseline', figures_dir='results_figures', pounds_to_EUR=1.15, end_year=2050, display_legend=False, savefig=True, debug=False):
     """One panel: median plant NPV vs investment year across all PRICE_POLICY experiments."""
     plant_ref = pd.read_csv(f'{results_dir}/plant_reference.csv')
     npv_total = _load_array(results_dir, 'plants_NPV_total')
@@ -195,8 +213,9 @@ def plot_plant_NPV(results_dir='results_baseline', figures_dir='results_figures'
             alpha=0.75,
             edgecolors='black',
             linewidths=0.45,
-            label=sector,
+            label=SECTOR_LABELS.get(sector, sector),
         )
+    ax.set_ylim(0, 10**4)
     ax.axhline(0, color='grey', linestyle='--', linewidth=1.0, alpha=0.7)
     ax.set_xlabel('Investment year', fontsize=14)
     ax.set_ylabel('Plant median NPV [M£]', fontsize=14)
@@ -214,9 +233,10 @@ def plot_plant_NPV(results_dir='results_baseline', figures_dir='results_figures'
     ax.set_xticklabels(['2030', '2040', '2050'])
     ax.grid(True, linestyle='--', alpha=0.35)
     ax.tick_params(labelsize=12)
-    leg = ax.legend(fontsize=12, title='Sector', title_fontsize=12, loc='best')
-    for handle in leg.legend_handles:
-        handle.set_sizes([55])
+    if display_legend:
+        leg = ax.legend(fontsize=12, title_fontsize=12, loc='upper right')
+        for handle in leg.legend_handles:
+            handle.set_sizes([55])
     if savefig:
         out = f'{figures_dir}/multiple_plant_NPV.png'
         fig.savefig(out, dpi=450)  # no tight crop: keep Friends1 panel width
@@ -446,6 +466,96 @@ def plot_tax_and_gas(
     return fig
 
 
+def plot_csu(
+    results_dir='results_baseline',
+    figures_dir='results_figures',
+    cap_policies=None,
+    plot_years=None,
+    start_year=2025,
+    pounds_to_EUR=1.15,
+    savefig=True,
+    debug=False,
+):
+    """Two stacked CSU boxplot panels split by DIFFUSE_END_FRACTION."""
+    if cap_policies is None:
+        cap_policies = ['CAP-50£', 'CAP-100£', 'CAP-200£']
+    if plot_years is None:
+        plot_years = [2035, 2040, 2045]
+    experiments = _load_experiments(results_dir)
+    years = _get_years(results_dir, start_year=start_year, key='costs_suppliers')
+    suppliers = _load_array(results_dir, 'costs_suppliers')
+    scale = 1e-6 / pounds_to_EUR  # k€ -> B£
+    magma = plt.cm.magma
+    box_alpha = 0.95
+    policy_colors = {
+        'CAP-50£': magma(0.25),
+        'CAP-100£': magma(0.65),
+        'CAP-200£': colors.to_rgba('#41BCAE'),
+    }
+
+    pol_gap = 0.35
+    year_gap = len(cap_policies) * pol_gap + 0.40
+    fig, axes = plt.subplots(2, 1, figsize=(8.0, 7.0), sharex=True, sharey=True)
+    ax_high, ax_low = axes
+
+    def _collect_boxes(row_filter):
+        box_data, positions, facecolors = [], [], []
+        for i_year, year in enumerate(plot_years):
+            year_idx = int(np.where(years == year)[0][0])
+            cluster = i_year * year_gap
+            for i_pol, policy in enumerate(cap_policies):
+                mask = (experiments['PRICE_POLICY'] == policy) & row_filter
+                if mask.sum() == 0:
+                    continue
+                color = policy_colors[policy]
+                x0 = cluster + i_pol * pol_gap
+                box_data.append(suppliers[mask, year_idx] * scale)
+                positions.append(x0)
+                facecolors.append((*color[:3], box_alpha))
+        return box_data, positions, facecolors
+
+    panels = [
+        (ax_high, experiments['DIFFUSE_END_FRACTION'] > 0.25, 'DIFFUSE_END_FRACTION > 0.25'),
+        (ax_low, experiments['DIFFUSE_END_FRACTION'] < 0.25, 'DIFFUSE_END_FRACTION < 0.25'),
+    ]
+    for ax, row_filter, title in panels:
+        box_data, positions, facecolors = _collect_boxes(row_filter)
+        bp = ax.boxplot(
+            box_data, positions=positions, widths=0.28, patch_artist=True,
+            showfliers=False, medianprops=dict(color='black', linewidth=1.5),
+        )
+        for patch, fc in zip(bp['boxes'], facecolors):
+            patch.set_facecolor(fc)
+            patch.set_edgecolor('black')
+            patch.set_linewidth(1.0)
+        ax.axhline(0, color='black', linewidth=1.0, zorder=1)
+        ax.set_ylabel('CSU demand [B£ p.a.] by fuel suppliers', fontsize=13)
+        ax.set_title(title, fontsize=13)
+        ax.tick_params(labelsize=12)
+        ax.grid(True, axis='y', linestyle='--', alpha=0.35)
+
+    year_tick_pos = [
+        i_year * year_gap + (len(cap_policies) - 1) * pol_gap / 2
+        for i_year in range(len(plot_years))
+    ]
+    ax_low.set_xticks(year_tick_pos)
+    ax_low.set_xticklabels([str(y) for y in plot_years], fontsize=13)
+
+    from matplotlib.patches import Patch
+    legend_handles = [
+        Patch(facecolor=(*policy_colors[p][:3], box_alpha), edgecolor='black', label=p)
+        for p in cap_policies
+    ]
+    ax_high.legend(handles=legend_handles, fontsize=11, loc='best')
+    fig.tight_layout()
+    if savefig:
+        out = f'{figures_dir}/multiple_csu.png'
+        fig.savefig(out, dpi=450, bbox_inches='tight')
+        if debug:
+            print(f"plot_csu: {out}")
+    return fig
+
+
 def plot_policy_costs(
     results_dir='results_baseline',
     figures_dir='results_figures',
@@ -537,6 +647,91 @@ def plot_policy_costs(
     return fig
 
 
+def plot_lr_suppliers(
+    results_dir='results_baseline',
+    figures_dir='results_figures',
+    learning_rates=None,
+    start_year=2025,
+    end_year=2050,
+    pounds_to_EUR=1.15,
+    savefig=True,
+    debug=False,
+):
+    """CTBO supplier costs by LR, plus paired differences vs LR=0%."""
+    if learning_rates is None:
+        learning_rates = ['0%', '5%', '10%']
+    experiments = _load_experiments(results_dir)
+    years_all = _get_years(results_dir, start_year=start_year, key='costs_suppliers')
+    keep = years_all <= end_year
+    years = years_all[keep]
+    suppliers = _load_array(results_dir, 'costs_suppliers')[:, keep]
+    scale = 1e-6 / pounds_to_EUR  # k€ -> B£
+    magma = plt.cm.magma
+    lr_colors = {
+        '0%': "black",
+        '5%': magma(0.78),
+        '10%': magma(0.35),
+    }
+    diff_specs = [
+        ('5%', GREEN_CMAP[0], 'Savings between 0 and 5% LR'),
+        ('10%', GREEN_CMAP[3], 'Savings between 0 and 10% LR'),
+    ]
+
+    fig, axes = plt.subplots(1, 2, figsize=(9, 6.5), sharex=True)
+    ax_abs, ax_diff = axes
+
+    for lr in learning_rates:
+        mask = (experiments['PRICE_POLICY'] == 'CTBO') & _lr_mask(experiments, lr)
+        if mask.sum() == 0:
+            continue
+        med, p5, p95 = _panel_stats(suppliers, mask)
+        color = lr_colors.get(lr, 'gray')
+        ax_abs.plot(years, med * scale, lw=2.3, color=color, label=f'LR={lr}')
+        ax_abs.fill_between(years, p5 * scale, p95 * scale, color=color, alpha=0.25)
+    ax_abs.set_ylabel('GCS costs [B£ p.a.]', fontsize=14)
+    ax_abs.set_xlabel('Year', fontsize=14)
+    ax_abs.tick_params(labelsize=12)
+    ax_abs.grid(True, linestyle='--', alpha=0.35)
+    _set_sparse_year_ticks(ax_abs, years, end_year=end_year)
+    ax_abs.legend(fontsize=12, loc='best')
+
+    ctbo = experiments['PRICE_POLICY'] == 'CTBO'
+    if 'scenario' in experiments.columns:
+        for lr_b, color, label in diff_specs:
+            mask_0 = ctbo & _lr_mask(experiments, '0%')
+            mask_b = ctbo & _lr_mask(experiments, lr_b)
+            scen_0 = experiments.loc[mask_0, 'scenario'].to_numpy()
+            scen_b = experiments.loc[mask_b, 'scenario'].to_numpy()
+            rows_0 = np.flatnonzero(mask_0.to_numpy())
+            rows_b = np.flatnonzero(mask_b.to_numpy())
+            order_0 = np.argsort(scen_0)
+            order_b = np.argsort(scen_b)
+            common, i0, ib = np.intersect1d(scen_0[order_0], scen_b[order_b], return_indices=True)
+            if len(common) == 0:
+                continue
+            diff = suppliers[rows_0[order_0][i0]] - suppliers[rows_b[order_b][ib]]
+            med, p5, p95 = _panel_stats(diff)
+            ax_diff.plot(years, med * scale, lw=2.3, color=color, label=label)
+            ax_diff.fill_between(years, p5 * scale, p95 * scale, color=color, alpha=0.18)
+            if debug:
+                print(f"plot_lr_suppliers paired n={len(common)} for 0% vs {lr_b}")
+    ax_diff.axhline(0, color='grey', linestyle='--', linewidth=1.0, alpha=0.7)
+    ax_diff.set_ylabel('GCS cost difference [B£ p.a.]', fontsize=14)
+    ax_diff.set_xlabel('Year', fontsize=14)
+    ax_diff.tick_params(labelsize=12)
+    ax_diff.grid(True, linestyle='--', alpha=0.35)
+    _set_sparse_year_ticks(ax_diff, years, end_year=end_year)
+    ax_diff.legend(fontsize=12, loc='best')
+
+    fig.tight_layout()
+    if savefig:
+        out = f'{figures_dir}/multiple_lr_suppliers.png'
+        fig.savefig(out, dpi=450, bbox_inches='tight')
+        if debug:
+            print(f"plot_lr_suppliers: {out}")
+    return fig
+
+
 def plot_macc_curves(results_dir='results_baseline', figures_dir='results_figures', pounds_to_EUR=1.15,
                      APPLY_LR=False, savefig=True, debug=False):
     """Many MAC curves (one per experiment); min/max summed cost highlighted.
@@ -623,6 +818,8 @@ if __name__ == "__main__":
     plot_carbon_prices(results_dir=selected_results_dir, figures_dir='results_figures', PRICE_POLICY='CAP-100£', debug=True)
     plot_cfd(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     plot_tax_and_gas(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    plot_csu(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     plot_policy_costs(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    plot_lr_suppliers(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     plot_macc_curves(results_dir=selected_results_dir, figures_dir='results_figures', APPLY_LR=APPLY_LR, debug=True)
     plt.show()
