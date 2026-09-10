@@ -123,7 +123,7 @@ SECTOR_LABELS = {
 }
 
 
-def plot_carbon_trajectories(results_dir='results_baseline', figures_dir='results_figures', start_year=2025, end_year=2050, display_legend=False, savefig=True, debug=False):
+def plot_carbon_trajectories(results_dir='results_baseline', figures_dir='results_figures', start_year=2025, end_year=2050, display_legend=True, savefig=True, debug=False):
     """One panel: median carbon trajectories across all PRICE_POLICY experiments."""
     years_all = _get_years(results_dir, start_year=start_year, key='supply_ktCO2f')
     keep = years_all <= end_year
@@ -165,7 +165,7 @@ def plot_carbon_trajectories(results_dir='results_baseline', figures_dir='result
             print(f"plot_carbon_trajectories DACCS marker: year={med_year}, ktCO2b={med_b:.1f}")
 
     ax.set_ylim(0, 300)
-    ax.set_ylabel('Carbon [MtCO₂/y]', fontsize=14)
+    ax.set_ylabel('Carbon [MtCO₂ p.a.]', fontsize=14)
     ax.set_xlabel('Year', fontsize=14)
     ax.grid(True, linestyle='--', alpha=0.35)
     ax.tick_params(labelsize=12)
@@ -180,7 +180,7 @@ def plot_carbon_trajectories(results_dir='results_baseline', figures_dir='result
     return fig
 
 
-def plot_plant_NPV(results_dir='results_baseline', figures_dir='results_figures', pounds_to_EUR=1.15, end_year=2050, display_legend=False, savefig=True, debug=False):
+def plot_plant_NPV(results_dir='results_baseline', figures_dir='results_figures', pounds_to_EUR=1.15, end_year=2050, display_legend=True, savefig=True, debug=False):
     """One panel: median plant NPV vs investment year across all PRICE_POLICY experiments."""
     plant_ref = pd.read_csv(f'{results_dir}/plant_reference.csv')
     npv_total = _load_array(results_dir, 'plants_NPV_total')
@@ -188,7 +188,7 @@ def plot_plant_NPV(results_dir='results_baseline', figures_dir='results_figures'
     mac = _load_array(results_dir, 'plants_MAC')
     cap_ref = pd.read_csv(f'{results_dir}/plants_costbenefit_extended.csv', usecols=['stack', 'ktCO2tot_ccs'])
     cap_by_stack = cap_ref.groupby('stack')['ktCO2tot_ccs'].median().to_dict()
-    sector_colors = _get_sector_colors(plant_ref['sector'].dropna().unique())
+    sector_colors = _get_sector_colors(list(SECTOR_LABELS.keys()))
 
     panel = plant_ref.copy()
     panel['NPV_total'] = np.nanmedian(npv_total, axis=0)
@@ -200,8 +200,12 @@ def plot_plant_NPV(results_dir='results_baseline', figures_dir='results_figures'
 
     fig, ax = _friends_axes(FRIENDS1_FIGSIZE, FRIENDS1_RECT)
     y_vals = []
-    for sector in sorted(panel['sector'].dropna().unique()):
+    for sector, label in SECTOR_LABELS.items():
         sector_df = panel[panel['sector'] == sector]
+        color = sector_colors.get(sector, 'grey')
+        if len(sector_df) == 0:
+            ax.scatter([], [], s=55, c=[color], alpha=0.75, edgecolors='black', linewidths=0.45, label=label)
+            continue
         sizes = np.clip(sector_df['ktCO2tot_ccs'].to_numpy(dtype=float), 1.0, None) * 0.25
         y = sector_df['NPV_total'].to_numpy(dtype=float) / 1000.0 / pounds_to_EUR
         y_vals.append(y)
@@ -209,16 +213,16 @@ def plot_plant_NPV(results_dir='results_baseline', figures_dir='results_figures'
             sector_df['investment_year'].to_numpy(dtype=float),
             y,
             s=sizes,
-            c=[sector_colors.get(sector, 'grey')],
+            c=[color],
             alpha=0.75,
             edgecolors='black',
             linewidths=0.45,
-            label=SECTOR_LABELS.get(sector, sector),
+            label=label,
         )
     ax.set_ylim(0, 10**4)
     ax.axhline(0, color='grey', linestyle='--', linewidth=1.0, alpha=0.7)
     ax.set_xlabel('Investment year', fontsize=14)
-    ax.set_ylabel('Plant median NPV [M£]', fontsize=14)
+    ax.set_ylabel('Investment median NPV [M£]', fontsize=14)
     y_all = np.concatenate(y_vals) if y_vals else np.array([1.0])
     # Log if all positive; else symlog so negatives remain visible
     if np.nanmin(y_all) > 0:
@@ -279,7 +283,7 @@ def plot_carbon_prices(
         ax.fill_between(years, p5, p95, color=color, alpha=0.2)
 
     ax.set_title(f'Carbon prices — {PRICE_POLICY}', fontsize=16)
-    ax.set_ylabel('Price [£/tCO₂]', fontsize=14)
+    ax.set_ylabel('Price/cost [£/tCO₂]', fontsize=14)
     ax.set_xlabel('Year', fontsize=14)
     ax.grid(True, linestyle='--', alpha=0.35)
     ax.tick_params(labelsize=12)
@@ -343,8 +347,8 @@ def plot_cfd(
         return box_data, positions, facecolors
 
     panels = [
-        (ax_tax, benefit_cfd, 'Taxpayer savings [B£/y]'),
-        (ax_gov, cost_cfd, 'Government cost [B£/y]'),
+        (ax_tax, benefit_cfd, 'Consumer cost reductions [B£ p.a.]'),
+        (ax_gov, cost_cfd, 'Government cost [B£ p.a.]'),
     ]
     for ax, arr, ylabel in panels:
         box_data, positions, facecolors = _collect_boxes(arr)
@@ -431,11 +435,11 @@ def plot_tax_and_gas(
     keep_long = years_all <= end_year_long
     years_near = years_all[keep_near]
     years_long = years_all[keep_long]
-    near_ticks = [near_start_year, 2032, near_end_year]
+    near_ticks = [near_start_year, 2030, near_end_year]
 
     fig, axes = plt.subplots(1, 3, figsize=(10, 7))
     panels = [
-        (axes[0], costs_tax_all[:, keep_near], years_near, tax_scale, 'Tax costs [B£/y]', near_ticks),
+        (axes[0], costs_tax_all[:, keep_near], years_near, tax_scale, 'Tax [B£ p.a.]', near_ticks),
         (axes[1], gas_pence[:, keep_near], years_near, 1.0, 'Gas price increase [p/kWh]', near_ticks),
         (axes[2], gas_pence[:, keep_long], years_long, 1.0, 'Gas price increase [p/kWh]', [2030, 2040, 2050]),
     ]
@@ -634,7 +638,7 @@ def plot_policy_costs(
         ax.set_xlabel('Year', fontsize=14)
         _set_sparse_year_ticks(ax, years)
 
-    axes[0].set_ylabel('Annual policy costs [B£/y]', fontsize=14)
+    axes[0].set_ylabel('Annual policy costs [B£ p.a.]', fontsize=14)
     # Legend inside a non-pretend panel so Suppliers/Emitters both appear
     legend_ax = axes[1] if len(axes) > 1 else axes[0]
     legend_ax.legend(fontsize=12, loc='center left')
@@ -801,7 +805,7 @@ def plot_macc_curves(results_dir='results_baseline', figures_dir='results_figure
     sm.set_array([])
     cbar = fig.colorbar(sm, cax=cax)
     cbar.set_label('Summed cost [B£ p.a.]', fontsize=12)
-    cbar.ax.tick_params(labelsize=11)
+    cbar.ax.tick_params(labelsize=11, rotation=90)
     if savefig:
         out = f'{figures_dir}/multiple_macc_curves.png'
         fig.savefig(out, dpi=450)  # no tight crop: keep Friends2 panel height
