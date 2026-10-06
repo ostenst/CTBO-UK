@@ -470,6 +470,108 @@ def plot_tax_and_gas(
     return fig
 
 
+def plot_fuel_increases(
+    results_dir='results_baseline',
+    figures_dir='results_figures',
+    plot_years=None,
+    start_year=2025,
+    pounds_to_EUR=1.15,
+    savefig=True,
+    debug=False,
+):
+    """Fuel price-increase boxplots: gas vs liquids, repeated for LR=0% and LR=10%."""
+    if plot_years is None:
+        plot_years = [2030, 2035, 2040, 2045, 2050]
+    experiments = _load_experiments(results_dir)
+    years = _get_years(results_dir, start_year=start_year, key='gas_increase_abs')
+    gas = _load_array(results_dir, 'gas_increase_abs') / pounds_to_EUR * (100.0 / 1000.0)
+    petrol = _load_array(results_dir, 'petrol_increase_abs')
+    diesel = _load_array(results_dir, 'diesel_increase_abs')
+    kerosene = _load_array(results_dir, 'kerosene_increase_abs')
+    magma = plt.cm.magma
+    box_alpha = 0.95
+    gas_color = magma(0.25)
+    liquid_series = [
+        (petrol, magma(0.45), 'Petrol'),
+        (diesel, magma(0.70), 'Diesel'),
+        (kerosene, magma(0.90), 'Kerosene'),
+    ]
+    fuel_gap = 0.35
+    year_gap = len(liquid_series) * fuel_gap + 0.40
+    fig, axes = plt.subplots(2, 2, figsize=(11.0, 7.5), sharex=True)
+    axes[0, 0].sharey(axes[1, 0])
+    axes[0, 1].sharey(axes[1, 1])
+
+    def _draw_boxes(ax, series, row_filter):
+        box_data, positions, facecolors = [], [], []
+        for i_year, year in enumerate(plot_years):
+            year_idx = int(np.where(years == year)[0][0])
+            cluster = i_year * year_gap
+            for i_fuel, (arr, color, _label) in enumerate(series):
+                mask = row_filter
+                if mask.sum() == 0:
+                    continue
+                x0 = cluster + i_fuel * fuel_gap
+                if len(series) == 1:
+                    x0 = cluster + (len(liquid_series) - 1) * fuel_gap / 2
+                box_data.append(arr[mask, year_idx])
+                positions.append(x0)
+                facecolors.append((*colors.to_rgba(color)[:3], box_alpha))
+        bp = ax.boxplot(
+            box_data, positions=positions, widths=0.28, patch_artist=True,
+            showfliers=False, medianprops=dict(color='black', linewidth=1.5),
+        )
+        for patch, fc in zip(bp['boxes'], facecolors):
+            patch.set_facecolor(fc)
+            patch.set_edgecolor('black')
+            patch.set_linewidth(1.0)
+        ax.axhline(0, color='black', linewidth=1.0, zorder=1)
+        ax.tick_params(labelsize=12)
+        ax.grid(True, axis='y', linestyle='--', alpha=0.35)
+
+    bill_axes = []
+    pence_to_bill = 13600.0 / 100.0  # 13,600 kWh/y → £ p.a. from p/kWh
+    for i_lr, lr in enumerate(['0%', '10%']):
+        row_filter = _lr_mask(experiments, lr)
+        _draw_boxes(axes[i_lr, 0], [(gas, gas_color, 'Gas')], row_filter)
+        _draw_boxes(axes[i_lr, 1], liquid_series, row_filter)
+        axes[i_lr, 0].set_ylabel('Gas price increase [p/kWh]', fontsize=13)
+        axes[i_lr, 1].set_ylabel('Liquid fuel increase [p/L]', fontsize=13)
+        axes[i_lr, 0].set_title(f'LR={lr}', fontsize=14)
+        ax_bill = axes[i_lr, 0].twinx()
+        lo, hi = axes[i_lr, 0].get_ylim()
+        ax_bill.set_ylim(lo * pence_to_bill, hi * pence_to_bill)
+        ax_bill.set_ylabel('Gas bill increase [£ p.a.]', fontsize=13)
+        ax_bill.tick_params(labelsize=12)
+        bill_axes.append(ax_bill)
+
+    year_tick_pos = [
+        i_year * year_gap + (len(liquid_series) - 1) * fuel_gap / 2
+        for i_year in range(len(plot_years))
+    ]
+    for ax in axes[1]:
+        ax.set_xticks(year_tick_pos)
+        ax.set_xticklabels([str(y) for y in plot_years], fontsize=13)
+        ax.set_xlabel('Year', fontsize=14)
+
+    from matplotlib.patches import Patch
+    legend_handles = [
+        Patch(facecolor=(*colors.to_rgba(c)[:3], box_alpha), edgecolor='black', label=lab)
+        for _arr, c, lab in liquid_series
+    ]
+    axes[0, 1].legend(handles=legend_handles, fontsize=11, loc='best')
+    fig.tight_layout()
+    for ax_gas, ax_bill in zip((axes[0, 0], axes[1, 0]), bill_axes):
+        lo, hi = ax_gas.get_ylim()
+        ax_bill.set_ylim(lo * pence_to_bill, hi * pence_to_bill)
+    if savefig:
+        out = f'{figures_dir}/multiple_fuel_increases.png'
+        fig.savefig(out, dpi=450, bbox_inches='tight')
+        if debug:
+            print(f"plot_fuel_increases: {out}")
+    return fig
+
+
 def plot_csu(
     results_dir='results_baseline',
     figures_dir='results_figures',
@@ -814,6 +916,56 @@ def plot_macc_curves(results_dir='results_baseline', figures_dir='results_figure
     return fig
 
 
+def plot_sector_mac(
+    results_dir='results_baseline',
+    figures_dir='results_figures',
+    pounds_to_EUR=1.15,
+    savefig=True,
+    debug=False,
+):
+    """One box per sector: distribution of pre-learning abatement costs (plants_MAC0)."""
+    plant_ref = pd.read_csv(f'{results_dir}/plant_reference.csv')
+    mac = _load_array(results_dir, 'plants_MAC0') / pounds_to_EUR
+    sector_colors = _get_sector_colors(list(SECTOR_LABELS.keys()))
+    box_alpha = 0.95
+
+    box_data, positions, facecolors, tick_labels = [], [], [], []
+    for i, (sector, label) in enumerate(SECTOR_LABELS.items()):
+        cols = np.flatnonzero(plant_ref['sector'].to_numpy() == sector)
+        vals = mac[:, cols].ravel()
+        vals = vals[np.isfinite(vals)]
+        if len(vals) == 0:
+            continue
+        color = colors.to_rgba(sector_colors.get(sector, 'grey'))
+        box_data.append(vals)
+        positions.append(i)
+        facecolors.append((*color[:3], box_alpha))
+        tick_labels.append(label)
+
+    fig, ax = plt.subplots(figsize=(8.0, 6.5))
+    bp = ax.boxplot(
+        box_data, positions=positions, widths=0.55, patch_artist=True,
+        showfliers=False, medianprops=dict(color='black', linewidth=1.5),
+    )
+    for patch, fc in zip(bp['boxes'], facecolors):
+        patch.set_facecolor(fc)
+        patch.set_edgecolor('black')
+        patch.set_linewidth(1.0)
+    ax.axhline(0, color='black', linewidth=1.0, zorder=1)
+    ax.set_xticks(positions)
+    ax.set_xticklabels(tick_labels, fontsize=12, rotation=25, ha='right')
+    ax.set_ylabel('Abatement cost [£/tCO₂]', fontsize=14)
+    ax.tick_params(labelsize=12)
+    ax.grid(True, axis='y', linestyle='--', alpha=0.35)
+    fig.tight_layout()
+    if savefig:
+        out = f'{figures_dir}/multiple_sector_mac.png'
+        fig.savefig(out, dpi=450, bbox_inches='tight')
+        if debug:
+            print(f"plot_sector_mac: {out}")
+    return fig
+
+
 if __name__ == "__main__":
     APPLY_LR = False  # False → pre-learning MAC0; True → learned MAC at FID
     selected_results_dir = _select_results_dir(debug=True)
@@ -822,8 +974,10 @@ if __name__ == "__main__":
     plot_carbon_prices(results_dir=selected_results_dir, figures_dir='results_figures', PRICE_POLICY='CAP-100£', debug=True)
     plot_cfd(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     plot_tax_and_gas(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    plot_fuel_increases(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     plot_csu(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     plot_policy_costs(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     plot_lr_suppliers(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     plot_macc_curves(results_dir=selected_results_dir, figures_dir='results_figures', APPLY_LR=APPLY_LR, debug=True)
+    plot_sector_mac(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     plt.show()
