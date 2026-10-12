@@ -55,7 +55,7 @@ for ax, (name, E, y) in zip(axes, SCENARIOS):
     europe.plot(ax=ax, color="lightgray", edgecolor="white", alpha=0.45)
     colored = None
     if viable.any():
-        colors = np.where(_pnet(E, y, 0)[viable] > 0, GREEN, RED_COLOR)
+        colors = np.where(_pnet(E, y, 1)[viable] > 0, GREEN, RED_COLOR)
         colored = ax.scatter(
             lon[viable], lat[viable], s=size[viable], c=colors,
             alpha=0.85, edgecolors="black", linewidth=0.5, zorder=3,
@@ -89,7 +89,7 @@ axes[0].legend(
 )
 
 slider_ax = fig.add_axes([0.22, 0.06, 0.42, 0.04])
-m_slider = Slider(slider_ax, "CBAM strength m [%]", 0, 100, valinit=0, valstep=0.05)
+m_slider = Slider(slider_ax, "CBAM strength m [%]", 0, 100, valinit=100, valstep=0.05)
 m_slider.label.set_fontsize(16)
 m_slider.valtext.set_fontsize(16)
 
