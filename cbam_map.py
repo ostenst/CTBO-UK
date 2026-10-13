@@ -13,7 +13,6 @@ r = 0.90
 SCENARIOS = [("ETS", 250, 0), ("CSU", 0, 250)]
 GREEN = "#41BCAE"
 RED_COLOR = "#E75263"
-BLUE = "#2E6BFF"
 BUBBLE_SCALE = 0.8
 
 plants = pd.read_csv("results_baseline/plants_clean.csv")
@@ -75,7 +74,7 @@ for ax, (name, E, y) in zip(axes, SCENARIOS):
     ax.set_title(f"ETS={E:.0f}, CSU={y:.0f} EUR/tCO₂", fontsize=18)
     ax.grid(True, alpha=0.3)
     for spine in ax.spines.values():
-        spine.set_color(BLUE)
+        spine.set_color(plt.cm.magma_r(1.0))
         spine.set_linewidth(8)
         spine.set_alpha(1)
     panels.append((colored, gray, E, y, viable))
@@ -94,7 +93,7 @@ axes[0].legend(
 )
 
 slider_ax = fig.add_axes([0.22, 0.06, 0.42, 0.04])
-m_slider = Slider(slider_ax, "CBAM strength m [%]", 0, 100, valinit=100, valstep=0.05, color=BLUE, initcolor="none")
+m_slider = Slider(slider_ax, "CBAM strength m [%]", 0, 100, valinit=100, valstep=0.05, color=plt.cm.magma_r(1.0), initcolor="none")
 m_slider.label.set_fontsize(16)
 m_slider.valtext.set_fontsize(16)
 
@@ -110,8 +109,11 @@ def _on_m(val):
             continue
         colors = np.where(_pnet(E, y, mm)[viable] > 0, GREEN, RED_COLOR)
         colored.set_facecolors(colors)
+    shade = plt.cm.magma_r(mm)
+    m_slider.poly.set_facecolor(shade)
     for ax in axes:
         for spine in ax.spines.values():
+            spine.set_color(shade)
             spine.set_linewidth(1 + 7 * mm)
             spine.set_alpha(mm)
     fig.canvas.draw_idle()
