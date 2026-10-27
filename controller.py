@@ -22,13 +22,14 @@ except ImportError:
 
 if __name__ == "__main__":
     ema_logging.log_to_stderr(ema_logging.INFO)
-    PHASEOUT = True
+    PHASEOUT = False
     results_dir = "results_phaseout" if PHASEOUT else "results_baseline"
     figures_dir = "results_figures"
     
     # Load data once
     plants_clean = pd.read_csv("results_baseline/plants_clean.csv")
     transport_hubs = pd.read_csv('data/transport_hubs.csv')
+    g_table = pd.read_csv('data/g.csv')
 
     model = Model("UKCTBO", function=simulate_ctbo)
 
@@ -36,12 +37,12 @@ if __name__ == "__main__":
     model.uncertainties = [
         # Scenario uncertainties
         RealParameter("DIFFUSE_END_FRACTION", 0.05, 0.50),
-        CategoricalParameter("DACCS_SCENARIO", ['£322', '£391']),
-        # Sector-specific uncertainties
-        RealParameter("fraction_limestone", 0.55, 0.65),  # [-] cementite fraction
-        RealParameter("fraction_fossil_waste", 0.40, 0.55),  # [-] fossil fraction in waste
-        RealParameter("drax_efficiency", 40, 46),  # [%] Drax efficiency
-        RealParameter("drax_efficiency_loss", 0.20, 0.28),  # [-] CCS efficiency penalty
+        RealParameter("daccs_cost", 242, 420),  # [£/tCO2]
+        # Sector-specific uncertainties, now fixed at the range mean. Restore by uncommenting:
+        # RealParameter("fraction_limestone", 0.55, 0.65),  # [-] cementite fraction
+        # RealParameter("fraction_fossil_waste", 0.40, 0.55),  # [-] fossil fraction in waste
+        # RealParameter("drax_efficiency", 40, 46),  # [%] Drax efficiency
+        # RealParameter("drax_efficiency_loss", 0.20, 0.28),  # [-] CCS efficiency penalty
         # Technology uncertainties
         RealParameter("capture_rate", 0.90, 0.95),
         RealParameter("qreb", 2.8, 3.8),  # [GJ/tCO2] reboiler duty
@@ -49,23 +50,23 @@ if __name__ == "__main__":
         RealParameter("pcomp_liquefy", 0.28, 0.38),  # [MJ/kgCO2] compression & liquefaction power
         RealParameter("FLH_industry", 8000, 8500),
         RealParameter("FLH_waste", 7200, 8000),  # [h/y] waste plant operating hours
-        RealParameter("ccgt_efficiency", 0.45, 0.55),
+        # RealParameter("ccgt_efficiency", 0.45, 0.55),  # fixed at the range mean; restore to sample again
         RealParameter("ccgt_efficiency_loss", 0.10, 0.15),  # [-] CCS efficiency penalty
-        # Cost uncertainties
-        RealParameter("cgas", 10, 100),  # [€/MWh] 
-        RealParameter("celc", 150, 300),  # [€/MWh]
-        RealParameter("cstraw", 100, 200),  # [€/t]
-        RealParameter("cliquefy", 5, 10),  # [€/tCO2]
-        RealParameter("cHCN", 4, 8),  # [€/t steam]
-        RealParameter("cHRSG", 8, 15),  # [€/t steam]
-        RealParameter("camine", 2, 6),  # [€/tCO2]
-        RealParameter("cstorage", 20, 30),  # [€/tCO2]
+        # Cost uncertainties, sampled in £. model.py converts these to €.
+        RealParameter("cgas", 11, 43),  # [£/MWh]
+        RealParameter("celc", 70, 200),  # [£/MWh]
+        RealParameter("cstraw", 100, 200),  # [£/t]
+        RealParameter("cliquefy", 4, 8),  # [£/tCO2]
+        RealParameter("cHCN", 4, 8),  # [£/t steam]
+        RealParameter("cHRSG", 8, 16),  # [£/t steam]
+        RealParameter("camine", 1.7, 5.2),  # [£/tCO2]
+        RealParameter("cstorage", 5, 31),  # [£/tCO2]
         RealParameter("transport_uncertainty", 0.0, 0.30),
-        RealParameter("CAPEX_gasboiler", 0.10, 0.20),  # [M€/MW]
-        RealParameter("CAPEX_bioboiler", 0.80, 1.20),  # [M€/MW]
+        RealParameter("CAPEX_gasboiler", 87, 175),  # [k£/MW]
+        RealParameter("CAPEX_bioboiler", 700, 1000),  # [k£/MW]
         # Financial uncertainties
-        RealParameter("fixate_CAPEX", 0.02, 0.05),  # [-] fixed OPEX fraction
-        RealParameter("CAPEX_m", 0.80, 0.90),  # [-] CAPEX scale exponent
+        RealParameter("fixate_CAPEX", 0.05, 0.07),  # [-] fixed OPEX fraction
+        RealParameter("CAPEX_m", 0.75, 0.95),  # [-] CAPEX scale exponent
         RealParameter("discount_rate_ccs", 0.06, 0.12),
         IntegerParameter("lifetime_ccs", 20, 30),  # [years]
         RealParameter("CEPCI_2025", 880, 980),
@@ -129,6 +130,10 @@ if __name__ == "__main__":
         ArrayOutcome("plants_MAC"),   # learned MAC at FID (final learned if never invested)
         ArrayOutcome("plants_MAC0"),  # pre-learning MAC
         ArrayOutcome("plants_ktCO2tot_ccs"),
+        ArrayOutcome("plants_capex_eur_t"),       # levelized CAPEX [€/tCO2]
+        ArrayOutcome("plants_fixed_opex_eur_t"),  # fixed OPEX, incl. amine [€/tCO2]
+        ArrayOutcome("plants_energy_opex_eur_t"), # energy OPEX [€/tCO2]
+        ArrayOutcome("plants_transport_eur_t"),   # transport and storage [€/tCO2]
     ]
 
     # Constants: fixed parameters for all runs
@@ -137,7 +142,7 @@ if __name__ == "__main__":
         Constant("transport_hubs", transport_hubs),
         Constant("single_run", False),
         Constant("PHASEOUT", PHASEOUT),
-        Constant("CTBO_QUADRATIC", 0.4),
+        Constant("g_table", g_table),
         Constant("DISCOUNT_RATE", 0.035), # Can try 3.5% (social) or 9% (private)
         Constant("ETS_START", 45),
         Constant("START_YEAR", 2025),
@@ -149,6 +154,11 @@ if __name__ == "__main__":
         Constant("CfD_inefficiency", 0.0), # [-] % extra cost incurred relative to MAC if relying on CfDs
         Constant("TAXING", True),
         Constant("LEARNING", True),
+        Constant("fraction_limestone", 0.60),  # mean of 0.55–0.65
+        Constant("fraction_fossil_waste", 0.475),  # mean of 0.40–0.55
+        Constant("drax_efficiency", 43),  # mean of 40–46
+        Constant("drax_efficiency_loss", 0.24),  # mean of 0.20–0.28
+        Constant("ccgt_efficiency", 0.50),  # mean of 0.45–0.55
     ]
 
     # Run experiments
@@ -160,7 +170,7 @@ if __name__ == "__main__":
         for price in price_policies
         for lr in learning_rates
     ]
-    n_scenarios = 1000
+    n_scenarios = 50
     
     results = perform_experiments(
         model,
@@ -182,6 +192,20 @@ if __name__ == "__main__":
     # Save array outcomes as .npy files
     for name, arr in array_outcomes.items():
         np.save(f"{results_dir}/outcomes_{name}.npy", arr)
+
+    stacks = np.asarray(outcomes['plants_stack'])
+    sectors = np.asarray(outcomes['plants_sector'])
+    n_scen, n_plants = stacks.shape
+    breakdown = pd.DataFrame({
+        'scenario': np.repeat(np.arange(n_scen), n_plants),
+        'stack': stacks.ravel(),
+        'sector': sectors.ravel(),
+        'capex_eur_t': np.asarray(outcomes['plants_capex_eur_t'], dtype=float).ravel(),
+        'fixed_opex_eur_t': np.asarray(outcomes['plants_fixed_opex_eur_t'], dtype=float).ravel(),
+        'energy_opex_eur_t': np.asarray(outcomes['plants_energy_opex_eur_t'], dtype=float).ravel(),
+        'transport_eur_t': np.asarray(outcomes['plants_transport_eur_t'], dtype=float).ravel(),
+    })
+    breakdown.to_csv(f"{results_dir}/plants_cost_breakdown.csv", index=False)
     
     # Save plant names reference (alphabetically ordered, same for all runs)
     # Use same constants as model to ensure consistency if PHASEOUT=True

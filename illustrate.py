@@ -916,6 +916,101 @@ def plot_macc_curves(results_dir='results_baseline', figures_dir='results_figure
     return fig
 
 
+def plot_sector_macc_curves(
+    results_dir='results_baseline',
+    figures_dir='results_figures',
+    pounds_to_EUR=1.15,
+    APPLY_LR=False,
+    savefig=True,
+    debug=False,
+):
+    """One panel per sector: MACC curves across experiments, colored by that sector's summed cost."""
+    mac_key = 'plants_MAC' if APPLY_LR else 'plants_MAC0'
+    mac = _load_array(results_dir, mac_key)
+    stacks = _load_array(results_dir, 'plants_stack')
+    plant_sectors = _load_array(results_dir, 'plants_sector')
+    cap_ref = pd.read_csv(f'{results_dir}/plants_costbenefit_extended.csv', usecols=['stack', 'ktCO2tot_ccs'])
+    cap_by_stack = cap_ref.groupby('stack')['ktCO2tot_ccs'].median().to_dict()
+
+    found = set(np.asarray(plant_sectors, dtype=object).ravel())
+    present = [s for s in SECTOR_LABELS if s in found]
+    present += [s for s in found if s not in present and s is not None and str(s) != 'nan']
+    if len(present) == 0:
+        raise ValueError("No sector labels found for MACC curves.")
+
+    ncols = 3
+    nrows = int(np.ceil(len(present) / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(5.4 * ncols, 4.8 * nrows), squeeze=False)
+    n_experiments = mac.shape[0]
+
+    for ax, sector in zip(axes.ravel(), present):
+        scenario_data = []
+        summed_costs = np.full(n_experiments, np.nan)
+        for i in range(n_experiments):
+            in_sector = np.asarray(plant_sectors[i], dtype=object) == sector
+            stack_i = np.asarray(stacks[i], dtype=object)[in_sector]
+            mac_i = np.asarray(mac[i], dtype=float)[in_sector] / pounds_to_EUR
+            co2_i = np.array([cap_by_stack.get(s, np.nan) for s in stack_i], dtype=float) / 1000.0
+            valid = np.isfinite(mac_i) & np.isfinite(co2_i) & (co2_i > 0)
+            if not np.any(valid):
+                scenario_data.append(None)
+                continue
+            co2_valid = co2_i[valid]
+            mac_valid = mac_i[valid]
+            summed_costs[i] = np.sum(co2_valid * mac_valid) / 1000.0
+            order = np.argsort(mac_valid)
+            cum = np.concatenate([[0.0], np.cumsum(co2_valid[order])])
+            mac_line = np.concatenate([mac_valid[order], mac_valid[order][-1:]])
+            scenario_data.append((cum, mac_line))
+
+        valid_idx = np.flatnonzero(np.isfinite(summed_costs))
+        if len(valid_idx) == 0:
+            ax.set_visible(False)
+            continue
+        idx_min = valid_idx[np.argmin(summed_costs[valid_idx])]
+        idx_max = valid_idx[np.argmax(summed_costs[valid_idx])]
+        cost_min = float(summed_costs[idx_min])
+        cost_max = float(summed_costs[idx_max])
+        norm = colors.Normalize(vmin=cost_min, vmax=cost_max if cost_max > cost_min else cost_min + 1.0)
+
+        for i, data in enumerate(scenario_data):
+            if data is None or i in (idx_min, idx_max):
+                continue
+            cum, mac_line = data
+            ax.step(cum, mac_line, where='post', color=COST_CMAP(norm(summed_costs[i])), alpha=0.45, linewidth=1.0)
+        for i in (idx_min, idx_max):
+            data = scenario_data[i]
+            if data is None:
+                continue
+            cum, mac_line = data
+            ax.step(cum, mac_line, where='post', color='black', alpha=1.0, linewidth=2.4)
+            ax.step(cum, mac_line, where='post', color=COST_CMAP(norm(summed_costs[i])), alpha=1.0, linewidth=1.6)
+
+        ax.axhline(0, color='gray', linestyle='-', linewidth=0.6)
+        ax.set_title(SECTOR_LABELS.get(sector, sector), fontsize=15)
+        ax.set_xlabel('Cumulative capacity [MtCO₂ p.a.]', fontsize=13)
+        ax.set_ylabel('Abatement cost [£/tCO₂]', fontsize=13)
+        ax.tick_params(labelsize=12)
+        ax.grid(True, linestyle='--', alpha=0.35)
+        sm = plt.cm.ScalarMappable(norm=norm, cmap=COST_CMAP)
+        sm.set_array([])
+        cbar = fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
+        cbar.set_label('Summed cost [B£ p.a.]', fontsize=11)
+        cbar.ax.tick_params(labelsize=10)
+        if debug:
+            print(f"plot_sector_macc_curves {sector}: n={len(valid_idx)}, cost {cost_min:.2f}–{cost_max:.2f} B£/y")
+
+    for ax in axes.ravel()[len(present):]:
+        ax.set_visible(False)
+    fig.tight_layout()
+    if savefig:
+        out = f'{figures_dir}/multiple_sector_macc_curves.png'
+        fig.savefig(out, dpi=450, bbox_inches='tight')
+        if debug:
+            print(f"plot_sector_macc_curves: APPLY_LR={APPLY_LR}, key={mac_key}, {out}")
+    return fig
+
+
 def plot_sector_mac(
     results_dir='results_baseline',
     figures_dir='results_figures',
@@ -966,18 +1061,85 @@ def plot_sector_mac(
     return fig
 
 
+def plot_cost_breakdown(
+    results_dir='results_baseline',
+    figures_dir='results_figures',
+    pounds_to_EUR=1.15,
+    savefig=True,
+    debug=False,
+):
+    """One figure per sector: cost-component distributions for a cheap, median, and expensive plant."""
+    df = pd.read_csv(f'{results_dir}/plants_cost_breakdown.csv')
+    components = [
+        ('capex_eur_t', 'CAPEX', 'black'),
+        ('fixed_opex_eur_t', 'Fixed OPEX', 'gray'),
+        ('energy_opex_eur_t', 'Energy OPEX', plt.cm.magma(0.55)),
+        ('transport_eur_t', 'Transport', '#41BCAE'),
+    ]
+    df['total'] = df[[name for name, _, _ in components]].sum(axis=1) / pounds_to_EUR
+    present = [s for s in SECTOR_LABELS if s in set(df['sector'])]
+    present += [s for s in df['sector'].unique() if s not in present]
+    figs = []
+    for sector in present:
+        plants = df[df['sector'] == sector]
+        plant_median = plants.groupby('stack')['total'].median().sort_values()
+        ordered = list(plant_median.index)
+        if len(ordered) == 1:
+            chosen = [('', ordered[0])]
+        elif len(ordered) == 2:
+            chosen = [('Cheap', ordered[0]), ('Expensive', ordered[-1])]
+        else:
+            chosen = [
+                ('Cheap', ordered[0]),
+                ('Median', ordered[len(ordered) // 2]),
+                ('Expensive', ordered[-1]),
+            ]
+        fig, axes = plt.subplots(1, len(chosen), figsize=(4.2 * len(chosen), 5.5), sharey=True)
+        axes = np.atleast_1d(axes)
+        for ax, (label, stack) in zip(axes, chosen):
+            rows = plants[plants['stack'] == stack]
+            data = [rows[name].to_numpy(dtype=float) / pounds_to_EUR for name, _, _ in components]
+            bp = ax.boxplot(
+                data, positions=np.arange(len(components)), widths=0.6, patch_artist=True,
+                showfliers=False, medianprops=dict(color='black', linewidth=1.5),
+            )
+            for patch, (_, _, color) in zip(bp['boxes'], components):
+                patch.set_facecolor(color)
+                patch.set_edgecolor('black')
+                patch.set_alpha(0.85)
+            ax.set_xticks(np.arange(len(components)))
+            ax.set_xticklabels([name for _, name, _ in components], fontsize=12, rotation=20, ha='right')
+            ax.set_title(f'{label}\n{stack}' if label else stack, fontsize=14)
+            ax.tick_params(labelsize=12)
+            ax.grid(True, axis='y', linestyle='--', alpha=0.35)
+            if debug:
+                print(f"plot_cost_breakdown {sector} {label}: {stack}, median total={plant_median[stack]:.1f} £/t")
+        axes[0].set_ylabel('Cost [£/tCO₂]', fontsize=14)
+        fig.suptitle(SECTOR_LABELS.get(sector, sector), fontsize=16)
+        fig.tight_layout()
+        if savefig:
+            out = f'{figures_dir}/cost_breakdown_{sector}.png'
+            fig.savefig(out, dpi=450, bbox_inches='tight')
+            if debug:
+                print(f"plot_cost_breakdown: {out}")
+        figs.append(fig)
+    return figs
+
+
 if __name__ == "__main__":
     APPLY_LR = False  # False → pre-learning MAC0; True → learned MAC at FID
     selected_results_dir = _select_results_dir(debug=True)
-    plot_carbon_trajectories(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
-    plot_plant_NPV(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
-    plot_carbon_prices(results_dir=selected_results_dir, figures_dir='results_figures', PRICE_POLICY='CAP-100£', debug=True)
-    plot_cfd(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
-    plot_tax_and_gas(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
-    plot_fuel_increases(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
-    plot_csu(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
-    plot_policy_costs(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
-    plot_lr_suppliers(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    # plot_carbon_trajectories(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    # plot_plant_NPV(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    # plot_carbon_prices(results_dir=selected_results_dir, figures_dir='results_figures', PRICE_POLICY='CAP-100£', debug=True)
+    # plot_cfd(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    # plot_tax_and_gas(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    # plot_fuel_increases(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    # plot_csu(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    # plot_policy_costs(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    # plot_lr_suppliers(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     plot_macc_curves(results_dir=selected_results_dir, figures_dir='results_figures', APPLY_LR=APPLY_LR, debug=True)
+    plot_sector_macc_curves(results_dir=selected_results_dir, figures_dir='results_figures', APPLY_LR=APPLY_LR, debug=True)
     plot_sector_mac(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    plot_cost_breakdown(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     plt.show()

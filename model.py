@@ -80,7 +80,7 @@ def capture_condition(stack, x, liquefy=False):
         xCO2 = nCO2 / nmix # [-]
 
         # Calculate OPEXE
-        OPEXE = Qbio_boiler * x['cstraw'] / (x['LHV_straw']/3.6) # [€/h]
+        OPEXE = Qbio_boiler * x['cstraw'] / (x['LHV_straw'] / 3.6)  # [€/h]; cstraw is €/t, Q is MW, LHV is MJ/kg
         OPEXE = OPEXE / (mCO2_total * x['capture_rate']) # [€/tCO2]
         power_demand = x['pcapture']   
         if liquefy:
@@ -292,15 +292,15 @@ def approximate_CAPEX(mCO2, xCO2, fixate_CAPEX, CEPCI_2025, CAPEX_m=0.8391, CEPC
     if remaining_V_fluegas > 0:
         TEC = a + (b * (xCO2)**n + c) * (remaining_V_fluegas)**CAPEX_m
         CAPEX += TEC
-
-    OPEX_fixed = CAPEX * fixate_CAPEX
+    
     CAPEX = CAPEX * NETL * CEPCI_2025 / CEPCI_base
+    OPEX_fixed = CAPEX * fixate_CAPEX
     
     return CAPEX, OPEX_fixed
 
 def auxiliary_CAPEX(Qgas_boiler, Qbio_boiler, x, liquefy=False):
-    CAPEX_gasboiler = Qgas_boiler * x['CAPEX_gasboiler'] # [M€]
-    CAPEX_bioboiler = Qbio_boiler * x['CAPEX_bioboiler'] # [M€]
+    CAPEX_gasboiler = Qgas_boiler * x['CAPEX_gasboiler']  # [M€]; specific cost already in M€/MW
+    CAPEX_bioboiler = Qbio_boiler * x['CAPEX_bioboiler']  # [M€]
 
     if liquefy:
         CAPEX_liquefaction = x['cliquefy'] # [€/tCO2]
@@ -528,11 +528,11 @@ def simulate_ctbo(
 
     PHASEOUT = False,
     DISCOUNT_RATE = 0.035,
-    CTBO_QUADRATIC = 0.4,
+    g_table = None,
     ETS_START = 45, # [£/tCO2]
     PRICE_POLICY = 'CAP-100£', # ['CTBO', 'ETS', 'CAP-50£', 'CAP-100£', 'CAP-200£']),
     CfD_ANALYSIS = True,
-    DACCS_SCENARIO = '£391', # [£/tCO2] 322, 391, 7th Carbon Budget
+    daccs_cost = 391, # [£/tCO2] sampled in controller over 242–420; was DACCS_SCENARIO £322 or £391
     LEARNING = True,  # if False, forces LR=0
     LR = '5%',  # full-MAC learning rate; categorical ['0%', '5%', '10%']
     TAXING = True,
@@ -581,18 +581,18 @@ def simulate_ctbo(
     ccgt_efficiency = 0.49, # [MWelc/MWfuel] DUKES DESNZ  
     ccgt_efficiency_loss = (67.3 - 13.260)/420, # [MWlost/MWbaseline] based on Sherman FEED study, using LP steam, subtracting the compression work
 
-    cgas = 40, # [€/MWh] Mersch et al. (2023)
-    celc = 250, # [€/MWh]
-    cstraw = 150, # [€/t biostraw]
-    cliquefy = 7, # [€/tCO2] @20bar includes CAPEX excludes electricity OPEX
-    cHCN = 6, # [€/t steam] Biermann et al. (2022)
-    cHRSG = 10, # [€/t steam]
-    camine = 4, # [€/tCO2] NOTE: No ref currently!
-    CAPEX_gasboiler = (0.04+0.27)/2, # [M€/MW] Danish Energy Agency
-    CAPEX_bioboiler = (0.81+1.15)/2, # [M€/MW] Danish Energy Agency
+    cgas = 27,  # [£/MWh] midpoint of 11–43
+    celc = 135,  # [£/MWh] midpoint of 70–200
+    cstraw = 132,  # [£/t] midpoint of 100–200
+    cliquefy = 6,  # [£/tCO2] midpoint of 4–8
+    cHCN = 6,  # [£/t steam] midpoint of 4–8
+    cHRSG = 12,  # [£/t steam] midpoint of 8–16
+    camine = 3.45,  # [£/tCO2] midpoint of 1.7–5.2
+    CAPEX_gasboiler = 131,  # [k£/MW] midpoint of 87–175
+    CAPEX_bioboiler = 850,  # [k£/MW] midpoint of 700–1000
     CONSTRUCTION_YEARS = 3,
 
-    fixate_CAPEX = 0.03, # [-] of CAPEX
+    fixate_CAPEX = 0.06,  # [-] of CAPEX; midpoint of 0.05–0.07
     CEPCI_2023 = 898.7,
     CEPCI_2025 = 930,
     NETL_2025 = 5.509,
@@ -602,7 +602,7 @@ def simulate_ctbo(
     pounds_to_EUR = 1.15,
 
     transport_uncertainty = 0.15, # [-] 
-    cstorage = 25, # [€/tCO2] CATF (2025)
+    cstorage = 18,  # [£/tCO2] midpoint of 5–31
     results_dir = 'results_baseline',
     figures_dir = 'results_figures',
     save_aux_results = False,
@@ -613,6 +613,19 @@ def simulate_ctbo(
     CfD_inefficiency = float(CfD_inefficiency)
     lr = 0.0 if not LEARNING else float(str(LR).strip().rstrip('%')) / 100.0
     b_learn = 0.0 if lr <= 0 else -np.log(1.0 - lr) / np.log(2.0)
+
+    # Controller inputs are in £. Costs below are in €. Boiler CAPEX arrives as k£/MW.
+    cgas *= pounds_to_EUR
+    celc *= pounds_to_EUR
+    cstraw *= pounds_to_EUR
+    cliquefy *= pounds_to_EUR
+    cHCN *= pounds_to_EUR
+    cHRSG *= pounds_to_EUR
+    camine *= pounds_to_EUR
+    cstorage *= pounds_to_EUR
+    daccs_cost *= pounds_to_EUR
+    CAPEX_gasboiler *= pounds_to_EUR / 1000
+    CAPEX_bioboiler *= pounds_to_EUR / 1000
 
     # Store assumptions
     x = {
@@ -685,7 +698,8 @@ def simulate_ctbo(
     MACC = pd.DataFrame(columns=[
         'sector', 'site', 'stack', 'ktCO2f', 'ktCO2cem', 'ktCO2pl', 'ktCO2b',
         'MAC', 'CAPEX', 'OPEX', 'invested', 'year_invest', 
-        'ktCO2f_inc', 'ktCO2f_ccs', 'ktCO2cem_ccs', 'ktCO2pl_ccs', 'ktCO2b_ccs', 'ktCO2tot_ccs', 'ktCO2f_res', 'ktCO2cem_res', 'ktCO2pl_res', 
+        'ktCO2f_inc', 'ktCO2f_ccs', 'ktCO2cem_ccs', 'ktCO2pl_ccs', 'ktCO2b_ccs', 'ktCO2tot_ccs', 'ktCO2f_res', 'ktCO2cem_res', 'ktCO2pl_res',
+        'capex_eur_t', 'fixed_opex_eur_t', 'energy_opex_eur_t', 'transport_eur_t',
         ])
 
     OPEX_results = {}
@@ -731,6 +745,11 @@ def simulate_ctbo(
         OPEX_results[stack['stack']] = OPEX
         CAPEX_results[stack['stack']] = CAPEX_levelized
         TS_results[stack['stack']] = OPEX_transtorage
+        # Pre-subsidy breakdown, all [€/tCO2]. Liquefaction sits in levelized CAPEX
+        cost_capex = CAPEX_levelized
+        cost_fixed_opex = OPEX_fixed
+        cost_energy_opex = OPEXE
+        cost_transport = OPEX_transtorage
 
         # Store results as a MACC row
         MACC.loc[len(MACC)] = {
@@ -755,6 +774,10 @@ def simulate_ctbo(
             'ktCO2f_res': ktCO2_dict['ktCO2f_res'], 
             'ktCO2cem_res': ktCO2_dict['ktCO2cem_res'],
             'ktCO2pl_res': ktCO2_dict['ktCO2pl_res'],
+            'capex_eur_t': cost_capex,
+            'fixed_opex_eur_t': cost_fixed_opex,
+            'energy_opex_eur_t': cost_energy_opex,
+            'transport_eur_t': cost_transport,
         }
     MACC, cost_initial_outliers = subsidize_outliers(MACC, outliers)
     MACC = MACC.sort_values(by='MAC', ascending=True)
@@ -806,10 +829,7 @@ def simulate_ctbo(
     diffuse_trajectory = diffuse_ktCO2f * diffuse_fraction
 
     # Calculate ETS cap (organic price rise, hard stop at CAP) and CTBO trajectories
-    if DACCS_SCENARIO == '£322':
-        cost_DACCS0 = 322 * pounds_to_EUR
-    elif DACCS_SCENARIO == '£391':
-        cost_DACCS0 = 391 * pounds_to_EUR
+    cost_DACCS0 = daccs_cost  # already converted from £/tCO2 to €/tCO2
     cost_DACCS = cost_DACCS0  # learns with same a^(-b) as plant MACs (see year loop)
     if PRICE_POLICY == 'CTBO':
         ETS_START = 0
@@ -825,10 +845,12 @@ def simulate_ctbo(
     # Ceiling used for organic ETS: policy CAP in €, never above (learned) DACCS
     ets_cap_eur = cost_DACCS if not np.isfinite(ETS_CAP) else min(ETS_CAP * pounds_to_EUR, cost_DACCS)
     ets_ceiling_eur = np.full(len(years), ets_cap_eur, dtype=float)
-    # Quadratic CTBO fraction in [0,1] scale; hold constant after DIFFUSE_END_YEAR (default 2050 → 1.0 with default params).
-    ctbo_raw = ((years - START_YEAR) * CTBO_QUADRATIC) ** 2 / 100
-    ctbo_at_cap = ((DIFFUSE_END_YEAR - START_YEAR) * CTBO_QUADRATIC) ** 2 / 100
-    ctbo_trajectory = np.where(years <= DIFFUSE_END_YEAR, ctbo_raw, ctbo_at_cap)
+    # g.csv is a percent schedule. Divide by 100 to store the CTBO fraction. np.interp holds the last value after the file ends.
+    if g_table is None:
+        g_table = pd.read_csv('data/g.csv')
+    g_year = g_table.iloc[:, 0].to_numpy(dtype=float)
+    g_frac = g_table.iloc[:, 2].to_numpy(dtype=float) / 100
+    ctbo_trajectory = np.interp(years, g_year, g_frac)
 
     # Initialize results arrays for carbon (f=fuels, cem=cement, pl=plastic, g=f+cem+pl, b=biomass)
     _supply_ktCO2f = []
@@ -1158,6 +1180,8 @@ def simulate_ctbo(
             mac0_by_stack[outlier_name] = cost_initial_outliers[outlier_name]
     npv_plants['MAC'] = npv_plants['stack'].map(mac_by_stack)
     npv_plants['MAC0'] = npv_plants['stack'].map(mac0_by_stack)
+    for cost_col in ('capex_eur_t', 'fixed_opex_eur_t', 'energy_opex_eur_t', 'transport_eur_t'):
+        npv_plants[cost_col] = npv_plants['stack'].map(dict(zip(MACC['stack'], MACC[cost_col])))
     if single_run or save_aux_results:
         NPV_data_all.to_csv(f'{results_dir}/plants_costbenefit_extended.csv', index=False)
         npv_plants.to_csv(f'{results_dir}/plants_npv.csv', index=False)
@@ -1227,6 +1251,10 @@ def simulate_ctbo(
     results['plants_MAC'] = npv_plants['MAC'].tolist()       # learned at FID (or final if unbuilt)
     results['plants_MAC0'] = npv_plants['MAC0'].tolist()     # pre-learning
     results['plants_ktCO2tot_ccs'] = npv_plants['ktCO2tot_ccs'].tolist()
+    results['plants_capex_eur_t'] = npv_plants['capex_eur_t'].tolist()
+    results['plants_fixed_opex_eur_t'] = npv_plants['fixed_opex_eur_t'].tolist()
+    results['plants_energy_opex_eur_t'] = npv_plants['energy_opex_eur_t'].tolist()
+    results['plants_transport_eur_t'] = npv_plants['transport_eur_t'].tolist()
 
     if single_run:
         plot_results_groups(years, results, figures_dir=figures_dir, savefig=True)
@@ -1435,10 +1463,14 @@ def plot_macc(macc, pounds_to_EUR=1.15, macc_shift=0.20, figures_dir='results_fi
         ax.tick_params(labelsize=12)
 
     # Figure 1: base MACC curve
-    fig1, ax1 = plt.subplots(figsize=(9, 4.5))
+    # fig1, ax1 = plt.subplots(figsize=(9, 4.5))
+    fig1, ax1 = plt.subplots(figsize=(6, 4.5))
     ax1.step(x, y_base, where='pre', color='black', linewidth=2.5)
     _style_macc_axes(ax1)
     fig1.tight_layout()
+    xmin, xmax = ax1.get_xlim()
+    ax1.set_xlim(xmin, 120)
+
     if savefig:
         fig1.savefig(f'{figures_dir}/single_macc.png', dpi=450, bbox_inches='tight')
 
@@ -1587,6 +1619,7 @@ def plot_macc_areas(
 if __name__ == "__main__":
     plants_clean = pd.read_csv('results_baseline/plants_clean.csv')
     transport_hubs = pd.read_csv('data/transport_hubs.csv')
-    results = simulate_ctbo(plants_clean, transport_hubs, single_run=True, results_dir='results_baseline', figures_dir='results_figures')
+    g_table = pd.read_csv('data/g.csv')
+    results = simulate_ctbo(plants_clean, transport_hubs, g_table=g_table, single_run=True, results_dir='results_baseline', figures_dir='results_figures')
     print("Wrote baseline MAC curve to results_baseline/macc.csv. Run 'controller.py' for multiple-scenario analysis.")
     plt.show()
