@@ -89,6 +89,20 @@ def _friends_axes(figsize, rect):
     return fig, ax
 
 
+def _macc_keep_indices(summed_costs, fraction):
+    """Scenario rows to draw, spaced evenly from cheapest to dearest summed cost."""
+    valid = np.flatnonzero(np.isfinite(summed_costs))
+    if len(valid) == 0:
+        return valid
+    order = valid[np.argsort(summed_costs[valid])]
+    fraction = float(np.clip(fraction, 0.0, 1.0))
+    if fraction >= 1.0:
+        return order
+    n_keep = max(2, int(np.ceil(len(order) * fraction)))
+    pick = np.unique(np.round(np.linspace(0, len(order) - 1, n_keep)).astype(int))
+    return order[pick]
+
+
 def _set_sparse_year_ticks(ax, years, end_year=2050):
     ticks = [y for y in (2030, 2040, 2050) if y <= end_year]
     ax.set_xlim(int(np.nanmin(years)), end_year)
@@ -839,8 +853,11 @@ def plot_lr_suppliers(
 
 
 def plot_macc_curves(results_dir='results_baseline', figures_dir='results_figures', pounds_to_EUR=1.15,
-                     APPLY_LR=False, savefig=True, debug=False):
+                     APPLY_LR=False, scenario_fraction=1.0, savefig=True, debug=False):
     """Many MAC curves (one per experiment); min/max summed cost highlighted.
+
+    scenario_fraction is the share of scenarios to draw, from 0 to 1.
+    The sample is spaced from the cheapest to the dearest summed cost, so both ends stay visible.
 
     APPLY_LR=False → plants_MAC0 (pre-learning).
     APPLY_LR=True  → plants_MAC (learned MAC at FID; final learned if never invested).
@@ -874,6 +891,7 @@ def plot_macc_curves(results_dir='results_baseline', figures_dir='results_figure
         raise ValueError("No valid MACC data to plot.")
     idx_min = valid_idx[np.argmin(summed_costs[valid_idx])]
     idx_max = valid_idx[np.argmax(summed_costs[valid_idx])]
+    keep = set(_macc_keep_indices(summed_costs, scenario_fraction).tolist())
 
     fig, ax = _friends_axes(FRIENDS2_MACC_FIGSIZE, FRIENDS2_MACC_RECT)
     cost_min = float(np.nanmin(summed_costs[valid_idx]))
@@ -882,7 +900,7 @@ def plot_macc_curves(results_dir='results_baseline', figures_dir='results_figure
 
     plotted = 0
     for i, data in enumerate(scenario_data):
-        if data is None or i in (idx_min, idx_max):
+        if data is None or i not in keep or i in (idx_min, idx_max):
             continue
         cum_co2, mac_sorted = data
         plotted += 1
@@ -912,7 +930,7 @@ def plot_macc_curves(results_dir='results_baseline', figures_dir='results_figure
         out = f'{figures_dir}/multiple_macc_curves.png'
         fig.savefig(out, dpi=450)  # no tight crop: keep Friends2 panel height
         if debug:
-            print(f"plot_macc_curves: APPLY_LR={APPLY_LR}, key={mac_key}, plotted={plotted}/{n_experiments}, min={idx_min}, max={idx_max}, {out}")
+            print(f"plot_macc_curves: APPLY_LR={APPLY_LR}, key={mac_key}, plotted={plotted}/{len(valid_idx)} (fraction={scenario_fraction}), min={idx_min}, max={idx_max}, {out}")
     return fig
 
 
@@ -921,10 +939,14 @@ def plot_sector_macc_curves(
     figures_dir='results_figures',
     pounds_to_EUR=1.15,
     APPLY_LR=False,
+    scenario_fraction=1.0,
     savefig=True,
     debug=False,
 ):
-    """One panel per sector: MACC curves across experiments, colored by that sector's summed cost."""
+    """One panel per sector: MACC curves across experiments, colored by that sector's summed cost.
+
+    scenario_fraction is the share of scenarios to draw in each panel, from 0 to 1.
+    """
     mac_key = 'plants_MAC' if APPLY_LR else 'plants_MAC0'
     mac = _load_array(results_dir, mac_key)
     stacks = _load_array(results_dir, 'plants_stack')
@@ -969,13 +991,16 @@ def plot_sector_macc_curves(
             continue
         idx_min = valid_idx[np.argmin(summed_costs[valid_idx])]
         idx_max = valid_idx[np.argmax(summed_costs[valid_idx])]
+        keep = set(_macc_keep_indices(summed_costs, scenario_fraction).tolist())
         cost_min = float(summed_costs[idx_min])
         cost_max = float(summed_costs[idx_max])
         norm = colors.Normalize(vmin=cost_min, vmax=cost_max if cost_max > cost_min else cost_min + 1.0)
 
+        plotted = 0
         for i, data in enumerate(scenario_data):
-            if data is None or i in (idx_min, idx_max):
+            if data is None or i not in keep or i in (idx_min, idx_max):
                 continue
+            plotted += 1
             cum, mac_line = data
             ax.step(cum, mac_line, where='post', color=COST_CMAP(norm(summed_costs[i])), alpha=0.45, linewidth=1.0)
         for i in (idx_min, idx_max):
@@ -985,6 +1010,7 @@ def plot_sector_macc_curves(
             cum, mac_line = data
             ax.step(cum, mac_line, where='post', color='black', alpha=1.0, linewidth=2.4)
             ax.step(cum, mac_line, where='post', color=COST_CMAP(norm(summed_costs[i])), alpha=1.0, linewidth=1.6)
+            plotted += 1
 
         ax.axhline(0, color='gray', linestyle='-', linewidth=0.6)
         ax.set_title(SECTOR_LABELS.get(sector, sector), fontsize=15)
@@ -998,7 +1024,7 @@ def plot_sector_macc_curves(
         cbar.set_label('Summed cost [B£ p.a.]', fontsize=11)
         cbar.ax.tick_params(labelsize=10)
         if debug:
-            print(f"plot_sector_macc_curves {sector}: n={len(valid_idx)}, cost {cost_min:.2f}–{cost_max:.2f} B£/y")
+            print(f"plot_sector_macc_curves {sector}: plotted={plotted}/{len(valid_idx)}, cost {cost_min:.2f}–{cost_max:.2f} B£/y")
 
     for ax in axes.ravel()[len(present):]:
         ax.set_visible(False)
@@ -1007,7 +1033,7 @@ def plot_sector_macc_curves(
         out = f'{figures_dir}/multiple_sector_macc_curves.png'
         fig.savefig(out, dpi=450, bbox_inches='tight')
         if debug:
-            print(f"plot_sector_macc_curves: APPLY_LR={APPLY_LR}, key={mac_key}, {out}")
+            print(f"plot_sector_macc_curves: APPLY_LR={APPLY_LR}, key={mac_key}, fraction={scenario_fraction}, {out}")
     return fig
 
 
@@ -1128,6 +1154,7 @@ def plot_cost_breakdown(
 
 if __name__ == "__main__":
     APPLY_LR = False  # False → pre-learning MAC0; True → learned MAC at FID
+    SCENARIO_FRACTION = 0.10  # share of MAC curves to draw (0–1); cheapest and dearest stay in
     selected_results_dir = _select_results_dir(debug=True)
     # plot_carbon_trajectories(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     # plot_plant_NPV(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
@@ -1138,8 +1165,8 @@ if __name__ == "__main__":
     # plot_csu(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     # plot_policy_costs(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     # plot_lr_suppliers(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
-    plot_macc_curves(results_dir=selected_results_dir, figures_dir='results_figures', APPLY_LR=APPLY_LR, debug=True)
-    plot_sector_macc_curves(results_dir=selected_results_dir, figures_dir='results_figures', APPLY_LR=APPLY_LR, debug=True)
+    plot_macc_curves(results_dir=selected_results_dir, figures_dir='results_figures', APPLY_LR=APPLY_LR, scenario_fraction=SCENARIO_FRACTION, debug=True)
+    plot_sector_macc_curves(results_dir=selected_results_dir, figures_dir='results_figures', APPLY_LR=APPLY_LR, scenario_fraction=SCENARIO_FRACTION, debug=True)
     plot_sector_mac(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     plot_cost_breakdown(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     plt.show()

@@ -170,7 +170,7 @@ if __name__ == "__main__":
         for price in price_policies
         for lr in learning_rates
     ]
-    n_scenarios = 50
+    n_scenarios = 500
     
     results = perform_experiments(
         model,
