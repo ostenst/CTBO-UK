@@ -22,7 +22,7 @@ except ImportError:
 
 if __name__ == "__main__":
     ema_logging.log_to_stderr(ema_logging.INFO)
-    PHASEOUT = False
+    PHASEOUT = True
     results_dir = "results_phaseout" if PHASEOUT else "results_baseline"
     figures_dir = "results_figures"
     

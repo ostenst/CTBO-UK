@@ -767,6 +767,73 @@ def plot_policy_costs(
     return fig
 
 
+def plot_policy_cost_column(
+    results_dir='results_baseline',
+    figures_dir='results_figures',
+    policies=None,
+    start_year=2025,
+    end_year=2050,
+    pounds_to_EUR=1.15,
+    emission_factor_gas=0.2027,  # [tCO2/MWh], same constant as simulate_ctbo
+    savefig=True,
+    debug=False,
+):
+    """Two columns through 2050: policy costs, and the gas price implied by supplier costs."""
+    if policies is None:
+        policies = ['ETS', 'CAP-200£', 'CAP-100£', 'CAP-50£']
+    experiments = _load_experiments(results_dir)
+    years_all = _get_years(results_dir, start_year=start_year, key='costs_suppliers')
+    keep = years_all <= end_year
+    years = years_all[keep]
+    scale = 1e-6 / pounds_to_EUR  # k€ -> B£
+    suppliers = _load_array(results_dir, 'costs_suppliers')[:, keep]
+    supply = _load_array(results_dir, 'supply_ktCO2f')[:, keep]
+    embedded = np.divide(suppliers, supply, out=np.full_like(suppliers, np.nan, dtype=float), where=supply > 0)
+    # k€/y over ktCO2/y is €/tCO2; times tCO2/MWh is €/MWh, shown as p/kWh
+    gas_supplier = embedded * emission_factor_gas / pounds_to_EUR * (100.0 / 1000.0)
+    series = [
+        (suppliers, '#41BCAE', 'CSU costs on suppliers'),
+        (_load_array(results_dir, 'costs_emitters')[:, keep], 'black', 'ETS costs on emitters'),
+        (_load_array(results_dir, 'costs_tax')[:, keep], 'gray', 'ETS tax on emitters (optional)'),
+    ]
+    gas_color = '#E75263'
+
+    fig, axes = plt.subplots(len(policies), 2, figsize=(10.8, 12), sharex=True, sharey='col')
+    for row, policy in enumerate(policies):
+        ax_cost, ax_gas = axes[row]
+        mask = experiments['PRICE_POLICY'] == policy
+        label = policy if mask.sum() else f'{policy} (no data)'
+        if mask.sum():
+            for arr, color, name in series:
+                med, p5, p95 = _panel_stats(arr, mask)
+                ax_cost.plot(years, med * scale, lw=2.3, color=color, label=name)
+                ax_cost.fill_between(years, p5 * scale, p95 * scale, color=color, alpha=0.2)
+            med, p5, p95 = _panel_stats(gas_supplier, mask)
+            ax_gas.plot(years, med, lw=2.3, color=gas_color, label='CSU-driven gas price increase')
+            ax_gas.fill_between(years, p5, p95, color=gas_color, alpha=0.2)
+        for ax in (ax_cost, ax_gas):
+            ax.text(0.03, 0.95, label, transform=ax.transAxes, va='top', ha='left', fontsize=14, fontweight='bold')
+            ax.grid(True, linestyle='--', alpha=0.35)
+            ax.tick_params(labelsize=12)
+        if debug and mask.sum():
+            print(f"plot_policy_cost_column {policy}: n={int(mask.sum())}")
+    axes[0, 0].set_title('Policy costs [B£ p.a.] incurred on industry', fontsize=15)
+    axes[0, 1].set_title('Gas increases [p/kWh] incurred on consumers', fontsize=15)
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    gas_handles, gas_labels = axes[0, 1].get_legend_handles_labels()
+    axes[0, 1].legend(handles + gas_handles, labels + gas_labels, fontsize=12, loc='upper right')
+    for ax in axes[-1]:
+        ax.set_xlabel('Year', fontsize=14)
+        _set_sparse_year_ticks(ax, years, end_year=end_year)
+    fig.tight_layout()
+    if savefig:
+        out = f'{figures_dir}/multiple_policy_cost_column.png'
+        fig.savefig(out, dpi=450, bbox_inches='tight')
+        if debug:
+            print(f"plot_policy_cost_column: {out}")
+    return fig
+
+
 def plot_lr_suppliers(
     results_dir='results_baseline',
     figures_dir='results_figures',
@@ -1159,14 +1226,15 @@ if __name__ == "__main__":
     # plot_carbon_trajectories(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     # plot_plant_NPV(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     # plot_carbon_prices(results_dir=selected_results_dir, figures_dir='results_figures', PRICE_POLICY='CAP-100£', debug=True)
-    # plot_cfd(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    # # plot_cfd(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     # plot_tax_and_gas(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
-    # plot_fuel_increases(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    # # plot_fuel_increases(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     # plot_csu(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
-    # plot_policy_costs(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    # # plot_policy_costs(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     # plot_lr_suppliers(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
-    plot_macc_curves(results_dir=selected_results_dir, figures_dir='results_figures', APPLY_LR=APPLY_LR, scenario_fraction=SCENARIO_FRACTION, debug=True)
-    plot_sector_macc_curves(results_dir=selected_results_dir, figures_dir='results_figures', APPLY_LR=APPLY_LR, scenario_fraction=SCENARIO_FRACTION, debug=True)
-    plot_sector_mac(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
-    plot_cost_breakdown(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    # plot_macc_curves(results_dir=selected_results_dir, figures_dir='results_figures', APPLY_LR=APPLY_LR, scenario_fraction=SCENARIO_FRACTION, debug=True)
+    # plot_sector_macc_curves(results_dir=selected_results_dir, figures_dir='results_figures', APPLY_LR=APPLY_LR, scenario_fraction=SCENARIO_FRACTION, debug=True)
+    # plot_sector_mac(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    # plot_cost_breakdown(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    plot_policy_cost_column(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     plt.show()
