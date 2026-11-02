@@ -146,37 +146,19 @@ def plot_carbon_trajectories(results_dir='results_baseline', figures_dir='result
     stored_total = _load_array(results_dir, 'mandate_ktCO2')[:, keep]
     stored_b = _load_array(results_dir, 'stored_ktCO2b')[:, keep]
     stored_d = _load_array(results_dir, 'stored_ktCO2daccs')[:, keep]
-    stored_cdr = stored_b + stored_d
     scale = 1000.0
     magma = plt.cm.magma
 
     fig, ax = _friends_axes(FRIENDS1_FIGSIZE, FRIENDS1_RECT)
-    for arr, color, label in [
-        (supply, magma(0.0), 'Fossil fuel supply (coal, oil, gas)'),
-        (stored_total, magma(0.55), 'Storage capacity (CCS, BECCS, DACCS)'),
-        (stored_cdr, '#41BCAE', 'Storage capacity (BECCS, DACCS)'),
+    for arr, color, label, ls in [
+        (supply, magma(0.0), 'Fossil fuel supply (coal, oil, gas)', '-'),
+        (stored_total, magma(0.55), 'Storage capacity (CCS, BECCS, DACCS)', '-'),
+        (stored_b, '#41BCAE', 'Storage capacity (BECCS)', '-'),
+        (stored_d, 'gray', 'Storage capacity (DACCS)', '--'),
     ]:
         med, p5, p95 = _panel_stats(arr)
-        ax.plot(years, med / scale, lw=2.3, color=color, label=label)
+        ax.plot(years, med / scale, lw=2.3, color=color, ls=ls, label=label)
         ax.fill_between(years, p5 / scale, p95 / scale, color=color, alpha=0.22)
-
-    # Median first year with DACCS > 0; y = median BECCS (ktCO2b) in that year
-    first_daccs_idx = np.full(stored_d.shape[0], np.nan)
-    for i in range(stored_d.shape[0]):
-        hits = np.where(stored_d[i] > 0)[0]
-        if len(hits):
-            first_daccs_idx[i] = hits[0]
-    if np.isfinite(first_daccs_idx).any():
-        med_idx = int(np.nanmedian(first_daccs_idx))
-        med_year = years[med_idx]
-        med_b = np.nanmedian(stored_b[:, med_idx])
-        ax.scatter(
-            [med_year], [med_b / scale],
-            s=70, color='#41BCAE', edgecolors='black', linewidths=1.2, zorder=5,
-            label='DACCS median deployment year',
-        )
-        if debug:
-            print(f"plot_carbon_trajectories DACCS marker: year={med_year}, ktCO2b={med_b:.1f}")
 
     ax.set_ylim(0, 300)
     ax.set_ylabel('Carbon [MtCO₂ p.a.]', fontsize=14)
@@ -282,12 +264,15 @@ def plot_carbon_prices(
     years_all = _get_years(results_dir, start_year=start_year, key='cost_marginal')
     keep = years_all <= end_year
     years = years_all[keep]
+    suppliers = _load_array(results_dir, 'costs_suppliers')[:, keep]
+    supply = _load_array(results_dir, 'supply_ktCO2f')[:, keep]
+    embedded = np.divide(suppliers, supply, out=np.full_like(suppliers, np.nan, dtype=float), where=supply > 0)
     magma = plt.cm.magma
     series = [
         (_load_array(results_dir, 'cost_marginal')[:, keep] / pounds_to_EUR, magma(0.05), 'Marginal cost \nCCS/BECCS/DACCS'),
         (_load_array(results_dir, 'price_ETS')[:, keep] / pounds_to_EUR, magma(0.30), 'ETS price'),
         (_load_array(results_dir, 'price_CSU')[:, keep] / pounds_to_EUR, magma(0.625), 'CSU price'),
-        (_load_array(results_dir, 'cost_fuels')[:, keep] / pounds_to_EUR, '#41BCAE', 'Average embedded \npolicy cost (in fuels)'),
+        (embedded / pounds_to_EUR, '#41BCAE', 'Average embedded \nCSU costs (in fuels)'),
     ]
 
     fig, ax = _friends_axes(FRIENDS2_PRICES_FIGSIZE, FRIENDS2_PRICES_RECT)
@@ -490,18 +475,27 @@ def plot_fuel_increases(
     plot_years=None,
     start_year=2025,
     pounds_to_EUR=1.15,
+    emission_factor_gas=0.2027,  # [tCO2/MWh]
+    emission_factor_petrol=2.339,  # [kgCO2e/L]
+    emission_factor_diesel=2.661,  # [kgCO2e/L]
+    emission_factor_kerosene=2.542,  # [kgCO2e/L]
     savefig=True,
     debug=False,
 ):
-    """Fuel price-increase boxplots: gas vs liquids, repeated for LR=0% and LR=10%."""
+    """Fuel price-increase boxplots from supplier costs only, one row per price policy."""
     if plot_years is None:
         plot_years = [2030, 2035, 2040, 2045, 2050]
+    policies = ['ETS', 'CAP-200£', 'CAP-100£', 'CAP-50£']
     experiments = _load_experiments(results_dir)
-    years = _get_years(results_dir, start_year=start_year, key='gas_increase_abs')
-    gas = _load_array(results_dir, 'gas_increase_abs') / pounds_to_EUR * (100.0 / 1000.0)
-    petrol = _load_array(results_dir, 'petrol_increase_abs')
-    diesel = _load_array(results_dir, 'diesel_increase_abs')
-    kerosene = _load_array(results_dir, 'kerosene_increase_abs')
+    years = _get_years(results_dir, start_year=start_year, key='costs_suppliers')
+    suppliers = _load_array(results_dir, 'costs_suppliers')
+    supply = _load_array(results_dir, 'supply_ktCO2f')
+    embedded = np.divide(suppliers, supply, out=np.full_like(suppliers, np.nan, dtype=float), where=supply > 0)
+    # embedded is €/tCO2 (k€/y over ktCO2/y). Same conversion as simulate_ctbo, using supplier costs only.
+    gas = embedded * emission_factor_gas / pounds_to_EUR * (100.0 / 1000.0)  # [p/kWh]
+    petrol = embedded * (emission_factor_petrol / 1000) / pounds_to_EUR * 100  # [p/L]
+    diesel = embedded * (emission_factor_diesel / 1000) / pounds_to_EUR * 100
+    kerosene = embedded * (emission_factor_kerosene / 1000) / pounds_to_EUR * 100
     magma = plt.cm.magma
     box_alpha = 0.95
     gas_color = magma(0.25)
@@ -512,9 +506,7 @@ def plot_fuel_increases(
     ]
     fuel_gap = 0.35
     year_gap = len(liquid_series) * fuel_gap + 0.40
-    fig, axes = plt.subplots(2, 2, figsize=(11.0, 7.5), sharex=True)
-    axes[0, 0].sharey(axes[1, 0])
-    axes[0, 1].sharey(axes[1, 1])
+    fig, axes = plt.subplots(len(policies), 2, figsize=(10, 12), sharex=True, sharey='col')
 
     def _draw_boxes(ax, series, row_filter):
         box_data, positions, facecolors = [], [], []
@@ -531,6 +523,8 @@ def plot_fuel_increases(
                 box_data.append(arr[mask, year_idx])
                 positions.append(x0)
                 facecolors.append((*colors.to_rgba(color)[:3], box_alpha))
+        if not box_data:
+            return
         bp = ax.boxplot(
             box_data, positions=positions, widths=0.28, patch_artist=True,
             showfliers=False, medianprops=dict(color='black', linewidth=1.5),
@@ -543,27 +537,23 @@ def plot_fuel_increases(
         ax.tick_params(labelsize=12)
         ax.grid(True, axis='y', linestyle='--', alpha=0.35)
 
-    bill_axes = []
-    pence_to_bill = 13600.0 / 100.0  # 13,600 kWh/y → £ p.a. from p/kWh
-    for i_lr, lr in enumerate(['0%', '10%']):
-        row_filter = _lr_mask(experiments, lr)
-        _draw_boxes(axes[i_lr, 0], [(gas, gas_color, 'Gas')], row_filter)
-        _draw_boxes(axes[i_lr, 1], liquid_series, row_filter)
-        axes[i_lr, 0].set_ylabel('Gas price increase [p/kWh]', fontsize=13)
-        axes[i_lr, 1].set_ylabel('Liquid fuel increase [p/L]', fontsize=13)
-        axes[i_lr, 0].set_title(f'LR={lr}', fontsize=14)
-        ax_bill = axes[i_lr, 0].twinx()
-        lo, hi = axes[i_lr, 0].get_ylim()
-        ax_bill.set_ylim(lo * pence_to_bill, hi * pence_to_bill)
-        ax_bill.set_ylabel('Gas bill increase [£ p.a.]', fontsize=13)
-        ax_bill.tick_params(labelsize=12)
-        bill_axes.append(ax_bill)
+    for i_pol, policy in enumerate(policies):
+        row_filter = experiments['PRICE_POLICY'] == policy
+        _draw_boxes(axes[i_pol, 0], [(gas, gas_color, 'Gas')], row_filter)
+        _draw_boxes(axes[i_pol, 1], liquid_series, row_filter)
+        axes[i_pol, 0].text(0.03, 0.95, rf'$\mathbf{{{chr(ord("a") + i_pol)}}}$ {policy}', transform=axes[i_pol, 0].transAxes, va='top', ha='left', fontsize=14)
+        axes[i_pol, 1].text(0.03, 0.95, rf'$\mathbf{{{chr(ord("a") + len(policies) + i_pol)}}}$ {policy}', transform=axes[i_pol, 1].transAxes, va='top', ha='left', fontsize=14)
+        if debug:
+            print(f"plot_fuel_increases {policy}: n={int(row_filter.sum())}")
+
+    axes[0, 0].set_title('Gas price increase [p/kWh]', fontsize=15)
+    axes[0, 1].set_title('Liquid fuel price increase [p/L]', fontsize=15)
 
     year_tick_pos = [
         i_year * year_gap + (len(liquid_series) - 1) * fuel_gap / 2
         for i_year in range(len(plot_years))
     ]
-    for ax in axes[1]:
+    for ax in axes[-1]:
         ax.set_xticks(year_tick_pos)
         ax.set_xticklabels([str(y) for y in plot_years], fontsize=13)
         ax.set_xlabel('Year', fontsize=14)
@@ -575,9 +565,6 @@ def plot_fuel_increases(
     ]
     axes[0, 1].legend(handles=legend_handles, fontsize=11, loc='best')
     fig.tight_layout()
-    for ax_gas, ax_bill in zip((axes[0, 0], axes[1, 0]), bill_axes):
-        lo, hi = ax_gas.get_ylim()
-        ax_bill.set_ylim(lo * pence_to_bill, hi * pence_to_bill)
     if savefig:
         out = f'{figures_dir}/multiple_fuel_increases.png'
         fig.savefig(out, dpi=450, bbox_inches='tight')
@@ -596,7 +583,7 @@ def plot_csu(
     savefig=True,
     debug=False,
 ):
-    """Two stacked CSU boxplot panels split by DIFFUSE_END_FRACTION."""
+    """Three stacked CSU boxplot panels: high diffuse fraction, low diffuse fraction, and low diffuse fraction at 10% learning."""
     if cap_policies is None:
         cap_policies = ['CAP-50£', 'CAP-100£', 'CAP-200£']
     if plot_years is None:
@@ -615,8 +602,7 @@ def plot_csu(
 
     pol_gap = 0.35
     year_gap = len(cap_policies) * pol_gap + 0.40
-    fig, axes = plt.subplots(2, 1, figsize=(8.0, 7.0), sharex=True, sharey=True)
-    ax_high, ax_low = axes
+    fig, axes = plt.subplots(3, 1, figsize=(8.0, 9), sharex=True, sharey=True)
 
     def _collect_boxes(row_filter):
         box_data, positions, facecolors = [], [], []
@@ -634,39 +620,44 @@ def plot_csu(
                 facecolors.append((*color[:3], box_alpha))
         return box_data, positions, facecolors
 
+    low_diffuse = experiments['DIFFUSE_END_FRACTION'] < 0.25
     panels = [
-        (ax_high, experiments['DIFFUSE_END_FRACTION'] > 0.25, 'DIFFUSE_END_FRACTION > 0.25'),
-        (ax_low, experiments['DIFFUSE_END_FRACTION'] < 0.25, 'DIFFUSE_END_FRACTION < 0.25'),
+        (axes[0], experiments['DIFFUSE_END_FRACTION'] > 0.25, 'DIFFUSE_END_FRACTION > 0.25'),
+        (axes[1], low_diffuse, 'DIFFUSE_END_FRACTION < 0.25'),
+        (axes[2], low_diffuse & _lr_mask(experiments, '10%'), 'DIFFUSE_END_FRACTION < 0.25, LR=10%'),
     ]
     for ax, row_filter, title in panels:
         box_data, positions, facecolors = _collect_boxes(row_filter)
-        bp = ax.boxplot(
-            box_data, positions=positions, widths=0.28, patch_artist=True,
-            showfliers=False, medianprops=dict(color='black', linewidth=1.5),
-        )
-        for patch, fc in zip(bp['boxes'], facecolors):
-            patch.set_facecolor(fc)
-            patch.set_edgecolor('black')
-            patch.set_linewidth(1.0)
+        if box_data:
+            bp = ax.boxplot(
+                box_data, positions=positions, widths=0.28, patch_artist=True,
+                showfliers=False, medianprops=dict(color='black', linewidth=1.5),
+            )
+            for patch, fc in zip(bp['boxes'], facecolors):
+                patch.set_facecolor(fc)
+                patch.set_edgecolor('black')
+                patch.set_linewidth(1.0)
         ax.axhline(0, color='black', linewidth=1.0, zorder=1)
-        ax.set_ylabel('CSU demand [B£ p.a.] by fuel suppliers', fontsize=13)
-        ax.set_title(title, fontsize=13)
+        ax.set_ylabel('CSU costs [B£ p.a.] incurred on fuel suppliers', fontsize=13)
+        ax.set_title(title if box_data else f'{title} (no data)', fontsize=13)
         ax.tick_params(labelsize=12)
         ax.grid(True, axis='y', linestyle='--', alpha=0.35)
+        if debug:
+            print(f"plot_csu {title}: n={int(row_filter.sum())}")
 
     year_tick_pos = [
         i_year * year_gap + (len(cap_policies) - 1) * pol_gap / 2
         for i_year in range(len(plot_years))
     ]
-    ax_low.set_xticks(year_tick_pos)
-    ax_low.set_xticklabels([str(y) for y in plot_years], fontsize=13)
+    axes[-1].set_xticks(year_tick_pos)
+    axes[-1].set_xticklabels([str(y) for y in plot_years], fontsize=13)
 
     from matplotlib.patches import Patch
     legend_handles = [
         Patch(facecolor=(*policy_colors[p][:3], box_alpha), edgecolor='black', label=p)
         for p in cap_policies
     ]
-    ax_high.legend(handles=legend_handles, fontsize=11, loc='best')
+    axes[0].legend(handles=legend_handles, fontsize=11, loc='best')
     fig.tight_layout()
     if savefig:
         out = f'{figures_dir}/multiple_csu.png'
@@ -767,7 +758,72 @@ def plot_policy_costs(
     return fig
 
 
-def plot_policy_cost_column(
+def plot_emitter_supplier_costs(
+    results_dir='results_baseline',
+    figures_dir='results_figures',
+    policies=None,
+    start_year=2025,
+    end_year=2050,
+    pounds_to_EUR=1.15,
+    savefig=True,
+    debug=False,
+):
+    """Four policy rows: emitter and tax costs, then supplier costs."""
+    if policies is None:
+        policies = ['ETS', 'CAP-200£', 'CAP-100£', 'CAP-50£']
+    experiments = _load_experiments(results_dir)
+    years_all = _get_years(results_dir, start_year=start_year, key='costs_suppliers')
+    keep = years_all <= end_year
+    years = years_all[keep]
+    scale = 1e-6 / pounds_to_EUR  # k€ -> B£
+    emitter_series = [
+        (_load_array(results_dir, 'costs_emitters')[:, keep], plt.cm.magma(0.15), r'ETS costs and revenues $(i{+}ii)$', '-'),
+        (_load_array(results_dir, 'costs_tax')[:, keep], 'gray', r'Optional ETS tax $(iii)$', '--'),
+    ]
+    suppliers = _load_array(results_dir, 'costs_suppliers')[:, keep]
+    profit = _load_array(results_dir, 'profit_y_policy')[:, keep]
+
+    fig, axes = plt.subplots(len(policies), 2, figsize=(10.8, 12), sharex=True, sharey=True)
+    for row, policy in enumerate(policies):
+        ax_emit, ax_sup = axes[row]
+        mask = experiments['PRICE_POLICY'] == policy
+        label = policy if mask.sum() else f'{policy} (no data)'
+        if mask.sum():
+            for arr, color, name, ls in emitter_series:
+                med, p5, p95 = _panel_stats(arr, mask)
+                ax_emit.plot(years, med * scale, lw=2.3, color=color, ls=ls, label=name)
+                ax_emit.fill_between(years, p5 * scale, p95 * scale, color=color, alpha=0.2)
+            med, p5, p95 = _panel_stats(suppliers, mask)
+            ax_sup.plot(years, med * scale, lw=2.3, color=plt.cm.magma(0.625), label=r'CSU costs and revenues $(iv{+}v)$')
+            ax_sup.fill_between(years, p5 * scale, p95 * scale, color=plt.cm.magma(0.625), alpha=0.2)
+            med, p5, p95 = _panel_stats(profit, mask)
+            ax_sup.plot(years, med * scale, lw=2.3, color='gray', ls='-', label=r'CSU revenue portion $(v)$')
+            ax_sup.fill_between(years, p5 * scale, p95 * scale, color='gray', alpha=0.2)
+        ax_emit.text(0.03, 0.95, rf'$\mathbf{{{chr(ord("a") + row)}}}$ {label}', transform=ax_emit.transAxes, va='top', ha='left', fontsize=14)
+        ax_sup.text(0.03, 0.95, rf'$\mathbf{{{chr(ord("a") + len(policies) + row)}}}$ {label}', transform=ax_sup.transAxes, va='top', ha='left', fontsize=14)
+        for ax in (ax_emit, ax_sup):
+            ax.grid(True, linestyle='--', alpha=0.35)
+            ax.tick_params(labelsize=12)
+        if debug and mask.sum():
+            print(f"plot_emitter_supplier_costs {policy}: n={int(mask.sum())}")
+    axes[0, 0].set_title('Policy costs [B£ p.a.] incurred via ETS', fontsize=15)
+    axes[0, 1].set_title('Policy costs [B£ p.a.] incurred via CSUs', fontsize=15)
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    sup_handles, sup_labels = axes[0, 1].get_legend_handles_labels()
+    axes[0, 1].legend(handles + sup_handles, labels + sup_labels, fontsize=12, loc='upper right')
+    for ax in axes[-1]:
+        ax.set_xlabel('Year', fontsize=14)
+        _set_sparse_year_ticks(ax, years, end_year=end_year)
+    fig.tight_layout()
+    if savefig:
+        out = f'{figures_dir}/multiple_emitter_supplier_costs.png'
+        fig.savefig(out, dpi=450, bbox_inches='tight')
+        if debug:
+            print(f"plot_emitter_supplier_costs: {out}")
+    return fig
+
+
+def plot_emitter_gas_increase(
     results_dir='results_baseline',
     figures_dir='results_figures',
     policies=None,
@@ -778,7 +834,7 @@ def plot_policy_cost_column(
     savefig=True,
     debug=False,
 ):
-    """Two columns through 2050: policy costs, and the gas price implied by supplier costs."""
+    """Four policy rows: emitter and tax costs, then the supplier-driven gas price increase."""
     if policies is None:
         policies = ['ETS', 'CAP-200£', 'CAP-100£', 'CAP-50£']
     experiments = _load_experiments(results_dir)
@@ -791,32 +847,31 @@ def plot_policy_cost_column(
     embedded = np.divide(suppliers, supply, out=np.full_like(suppliers, np.nan, dtype=float), where=supply > 0)
     # k€/y over ktCO2/y is €/tCO2; times tCO2/MWh is €/MWh, shown as p/kWh
     gas_supplier = embedded * emission_factor_gas / pounds_to_EUR * (100.0 / 1000.0)
-    series = [
-        (suppliers, '#41BCAE', 'CSU costs on suppliers'),
+    emitter_series = [
         (_load_array(results_dir, 'costs_emitters')[:, keep], 'black', 'ETS costs on emitters'),
         (_load_array(results_dir, 'costs_tax')[:, keep], 'gray', 'ETS tax on emitters (optional)'),
     ]
-    gas_color = '#E75263'
+    gas_color = '#41BCAE'
 
-    fig, axes = plt.subplots(len(policies), 2, figsize=(10.8, 12), sharex=True, sharey='col')
+    fig, axes = plt.subplots(len(policies), 2, figsize=(10, 12), sharex=True, sharey='col')
     for row, policy in enumerate(policies):
-        ax_cost, ax_gas = axes[row]
+        ax_emit, ax_gas = axes[row]
         mask = experiments['PRICE_POLICY'] == policy
         label = policy if mask.sum() else f'{policy} (no data)'
         if mask.sum():
-            for arr, color, name in series:
+            for arr, color, name in emitter_series:
                 med, p5, p95 = _panel_stats(arr, mask)
-                ax_cost.plot(years, med * scale, lw=2.3, color=color, label=name)
-                ax_cost.fill_between(years, p5 * scale, p95 * scale, color=color, alpha=0.2)
+                ax_emit.plot(years, med * scale, lw=2.3, color=color, label=name)
+                ax_emit.fill_between(years, p5 * scale, p95 * scale, color=color, alpha=0.2)
             med, p5, p95 = _panel_stats(gas_supplier, mask)
             ax_gas.plot(years, med, lw=2.3, color=gas_color, label='CSU-driven gas price increase')
             ax_gas.fill_between(years, p5, p95, color=gas_color, alpha=0.2)
-        for ax in (ax_cost, ax_gas):
+        for ax in (ax_emit, ax_gas):
             ax.text(0.03, 0.95, label, transform=ax.transAxes, va='top', ha='left', fontsize=14, fontweight='bold')
             ax.grid(True, linestyle='--', alpha=0.35)
             ax.tick_params(labelsize=12)
         if debug and mask.sum():
-            print(f"plot_policy_cost_column {policy}: n={int(mask.sum())}")
+            print(f"plot_emitter_gas_increase {policy}: n={int(mask.sum())}")
     axes[0, 0].set_title('Policy costs [B£ p.a.] incurred on industry', fontsize=15)
     axes[0, 1].set_title('Gas increases [p/kWh] incurred on consumers', fontsize=15)
     handles, labels = axes[0, 0].get_legend_handles_labels()
@@ -827,10 +882,10 @@ def plot_policy_cost_column(
         _set_sparse_year_ticks(ax, years, end_year=end_year)
     fig.tight_layout()
     if savefig:
-        out = f'{figures_dir}/multiple_policy_cost_column.png'
+        out = f'{figures_dir}/multiple_emitter_gas_increase.png'
         fig.savefig(out, dpi=450, bbox_inches='tight')
         if debug:
-            print(f"plot_policy_cost_column: {out}")
+            print(f"plot_emitter_gas_increase: {out}")
     return fig
 
 
@@ -1027,7 +1082,7 @@ def plot_sector_macc_curves(
     if len(present) == 0:
         raise ValueError("No sector labels found for MACC curves.")
 
-    ncols = 3
+    ncols = 2
     nrows = int(np.ceil(len(present) / ncols))
     fig, axes = plt.subplots(nrows, ncols, figsize=(5.4 * ncols, 4.8 * nrows), squeeze=False)
     n_experiments = mac.shape[0]
@@ -1226,9 +1281,9 @@ if __name__ == "__main__":
     # plot_carbon_trajectories(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     # plot_plant_NPV(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     # plot_carbon_prices(results_dir=selected_results_dir, figures_dir='results_figures', PRICE_POLICY='CAP-100£', debug=True)
-    # # plot_cfd(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    # plot_cfd(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     # plot_tax_and_gas(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
-    # # plot_fuel_increases(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    # plot_fuel_increases(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     # plot_csu(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     # # plot_policy_costs(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     # plot_lr_suppliers(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
@@ -1236,5 +1291,6 @@ if __name__ == "__main__":
     # plot_sector_macc_curves(results_dir=selected_results_dir, figures_dir='results_figures', APPLY_LR=APPLY_LR, scenario_fraction=SCENARIO_FRACTION, debug=True)
     # plot_sector_mac(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     # plot_cost_breakdown(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
-    plot_policy_cost_column(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    plot_emitter_supplier_costs(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
+    # plot_emitter_gas_increase(results_dir=selected_results_dir, figures_dir='results_figures', debug=True)
     plt.show()
